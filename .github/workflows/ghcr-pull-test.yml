@@ -1,0 +1,51 @@
+
+name: NoizyCologne GHCR Pull Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  pull-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Pull private image on VPS
+        shell: bash
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/deploy_key ~/.ssh/known_hosts
+
+          printf '%s' "$GHCR_TOKEN" | ssh \
+            -i ~/.ssh/deploy_key \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o BatchMode=yes \
+            deploy@tsa.noizycologne.de \
+            'set -eu
+             cfg=$(mktemp -d)
+             trap "rm -rf -- \"$cfg\"" EXIT
+
+             docker --config "$cfg" login ghcr.io \
+               -u thomcgn --password-stdin >/dev/null
+
+             docker --config "$cfg" pull \
+               ghcr.io/thomcgn/noizycologne-smoke:latest
+
+             docker image inspect \
+               ghcr.io/thomcgn/noizycologne-smoke:latest \
+               --format "{{.Id}}"
+            '
