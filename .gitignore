@@ -1,0 +1,37 @@
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+!package-lock.json
+
+# Java / Maven
+target/
+*.class
+.mvn/timing.properties
+
+# Next.js / Node
+node_modules/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.iml
+
+# Operating System
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local data
+data/
+backups/
