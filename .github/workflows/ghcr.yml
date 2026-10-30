@@ -47,6 +47,16 @@ jobs:
           tags: |
             ghcr.io/thomcgn/noizycologne-smoke:latest
             ghcr.io/thomcgn/noizycologne-smoke:${{ github.sha }}
+        
+      - name: Build and push landing
+        uses: docker/build-push-action@v6
+        with:
+          context: ./deploy/landing
+          push: true
+          tags: |
+            ghcr.io/thomcgn/noizycologne-landing:latest
+            ghcr.io/thomcgn/noizycologne-landing:${{ github.sha }}
+
 
   deploy:
     needs: publish
