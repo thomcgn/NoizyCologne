@@ -1,0 +1,22 @@
+
+# Öffentliche Landingpage
+noizycologne.de {
+    encode zstd gzip
+    reverse_proxy landing:80
+}
+
+# www auf Hauptdomain umleiten
+www.noizycologne.de {
+    redir https://noizycologne.de{uri} permanent
+}
+
+# Internes Team-Frontend
+tsa.noizycologne.de {
+    encode zstd gzip
+    reverse_proxy smoke:80
+}
+
+# Backend (später Spring Boot)
+api.noizycologne.de {
+    respond "NoizyCologne API in Vorbereitung" 200
+}
