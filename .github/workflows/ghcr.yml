@@ -98,9 +98,9 @@ jobs:
              docker --config "$cfg" login ghcr.io \
                -u thomcgn --password-stdin >/dev/null
 
-             docker --config "$cfg" compose pull smoke
-             docker --config "$cfg" compose up -d --no-deps smoke
-             docker compose ps smoke
+             docker --config "$cfg" compose pull smoke landing
+             docker --config "$cfg" compose up -d --no-deps smoke landing
+             docker compose ps smoke landing
             '
 
       - name: Verify live deployment
