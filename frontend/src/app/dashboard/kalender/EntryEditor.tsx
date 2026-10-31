@@ -1,8 +1,7 @@
-
 "use client";
 
 import { useState } from "react";
-import { locations, partySeries } from "./catalog";
+import { useCatalog } from "../CatalogProvider";
 
 type EntryType = "event" | "closure";
 
@@ -16,32 +15,57 @@ const inputStyle =
   "focus:border-white/60";
 
 export default function EntryEditor({ date }: EntryEditorProps) {
-  // Eintragstyp
-  const [type, setType] = useState<EntryType>("event");
+  const { venues, parties, actors } = useCatalog();
 
-  // Stammdaten-Auswahl
+  const [type, setType] = useState<EntryType>("event");
   const [locationId, setLocationId] = useState("");
   const [partyId, setPartyId] = useState("");
-
-  // Veranstaltung
   const [startTime, setStartTime] = useState("");
-
-  // Location-Sperre
   const [reason, setReason] = useState("Geschlossen");
-
-  // Gemeinsame Felder
   const [notes, setNotes] = useState("");
 
-  // Ausgewählte Stammdaten
-  const selectedLocation = locations.find(
-    (item) => item.id === locationId
+  // Erst wenn Checkboxen manuell geändert werden, überschreiben sie
+  // die Voreinstellung der aktuell ausgewählten Partyreihe.
+  const [mentionOverride, setMentionOverride] = useState<{
+    partyId: string;
+    djIds: string[];
+  } | null>(null);
+
+  const selectedLocation = venues.find((venue) => venue.id === locationId);
+  const selectedParty = parties.find((party) => party.id === partyId);
+
+  const availableDjs = actors.filter(
+    (actor) =>
+      selectedParty?.residentDjIds.includes(actor.id) ||
+      selectedParty?.otherDjIds.includes(actor.id)
   );
 
-  const selectedParty = partySeries.find(
-    (item) => item.id === partyId
-  );
+  // Residents werden nur bei entsprechend konfigurierten Partyreihen
+  // vorausgewählt. Ohne Instagram-Handle ist keine Mention möglich.
+  const defaultMentionDjIds =
+    selectedParty?.djMentionDefault === "residents"
+      ? selectedParty.residentDjIds.filter((id) =>
+          availableDjs.some((dj) => dj.id === id && dj.instagram)
+        )
+      : [];
 
-  // Datum formatieren
+  const selectedMentionDjIds =
+    mentionOverride?.partyId === partyId
+      ? mentionOverride.djIds
+      : defaultMentionDjIds;
+
+  const selectedDjMentions = availableDjs
+    .filter((dj) => selectedMentionDjIds.includes(dj.id) && dj.instagram)
+    .map((dj) => `@${dj.instagram}`);
+
+  function toggleDjMention(djId: string, checked: boolean) {
+    const nextIds = checked
+      ? [...new Set([...selectedMentionDjIds, djId])]
+      : selectedMentionDjIds.filter((id) => id !== djId);
+
+    setMentionOverride({ partyId, djIds: nextIds });
+  }
+
   const formattedDate = date.toLocaleDateString("de-DE", {
     weekday: "long",
     day: "numeric",
@@ -51,15 +75,9 @@ export default function EntryEditor({ date }: EntryEditorProps) {
 
   return (
     <section className="mt-6 rounded-xl border border-white/10 bg-neutral-950 p-6">
-      {/* Überschrift */}
       <div className="mb-6">
-        <h2 className="text-xl font-semibold">
-          Neuer Kalendereintrag
-        </h2>
-
-        <p className="mt-1 text-sm text-neutral-400">
-          {formattedDate}
-        </p>
+        <h2 className="text-xl font-semibold">Neuer Kalendereintrag</h2>
+        <p className="mt-1 text-sm text-neutral-400">{formattedDate}</p>
       </div>
 
       {/* Eintragstyp */}
@@ -91,24 +109,19 @@ export default function EntryEditor({ date }: EntryEditorProps) {
         </button>
       </div>
 
-      {/* Eingabefelder */}
+      {/* Gemeinsame Eingaben und veranstaltungsspezifische Felder */}
       <div className="grid gap-5 sm:grid-cols-2">
-        {/* Location */}
         <label className="block">
-          <span className="mb-2 block text-sm text-neutral-300">
-            Location
-          </span>
-
+          <span className="mb-2 block text-sm text-neutral-300">Location</span>
           <select
             className={inputStyle}
             value={locationId}
             onChange={(event) => setLocationId(event.target.value)}
           >
             <option value="">Location auswählen</option>
-
-            {locations.map((location) => (
-              <option key={location.id} value={location.id}>
-                {location.name}
+            {venues.map((venue) => (
+              <option key={venue.id} value={venue.id}>
+                {venue.name}
               </option>
             ))}
           </select>
@@ -116,20 +129,20 @@ export default function EntryEditor({ date }: EntryEditorProps) {
 
         {type === "event" ? (
           <>
-            {/* Partyreihe */}
             <label className="block">
               <span className="mb-2 block text-sm text-neutral-300">
                 Partyreihe
               </span>
-
               <select
                 className={inputStyle}
                 value={partyId}
-                onChange={(event) => setPartyId(event.target.value)}
+                onChange={(event) => {
+                  setPartyId(event.target.value);
+                  setMentionOverride(null);
+                }}
               >
                 <option value="">Partyreihe auswählen</option>
-
-                {partySeries.map((party) => (
+                {parties.map((party) => (
                   <option key={party.id} value={party.id}>
                     {party.name}
                   </option>
@@ -137,61 +150,83 @@ export default function EntryEditor({ date }: EntryEditorProps) {
               </select>
             </label>
 
-            {/* Uhrzeit */}
             <label className="block">
               <span className="mb-2 block text-sm text-neutral-300">
                 Beginn (optional)
               </span>
-
               <input
                 className={inputStyle}
                 type="time"
                 value={startTime}
-                onChange={(event) =>
-                  setStartTime(event.target.value)
-                }
+                onChange={(event) => setStartTime(event.target.value)}
               />
             </label>
           </>
         ) : (
-          <>
-            {/* Sperrgrund */}
-            <label className="block">
-              <span className="mb-2 block text-sm text-neutral-300">
-                Grund
-              </span>
-
-              <select
-                className={inputStyle}
-                value={reason}
-                onChange={(event) =>
-                  setReason(event.target.value)
-                }
-              >
-                <option value="Geschlossen">
-                  Geschlossen
-                </option>
-                <option value="Betriebsferien">
-                  Betriebsferien
-                </option>
-                <option value="Privatveranstaltung">
-                  Privatveranstaltung
-                </option>
-                <option value="Sonstige Sperre">
-                  Sonstige Sperre
-                </option>
-              </select>
-            </label>
-          </>
+          <label className="block">
+            <span className="mb-2 block text-sm text-neutral-300">Grund</span>
+            <select
+              className={inputStyle}
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+            >
+              <option value="Geschlossen">Geschlossen</option>
+              <option value="Betriebsferien">Betriebsferien</option>
+              <option value="Privatveranstaltung">Privatveranstaltung</option>
+              <option value="Sonstige Sperre">Sonstige Sperre</option>
+            </select>
+          </label>
         )}
       </div>
+
+      {/* Mentions – unabhängig von der tatsächlichen DJ-Besetzung */}
+      {type === "event" && selectedParty && (
+        <fieldset className="mt-6 rounded-lg border border-white/10 p-4">
+          <legend className="px-2 font-semibold">Instagram-Mentions · DJs</legend>
+          <p className="mb-4 text-sm text-neutral-400">
+            Wähle die DJs aus, die im Beitrag erwähnt werden sollen.
+          </p>
+
+          {availableDjs.length === 0 ? (
+            <p className="text-sm text-neutral-500">
+              Keine DJs mit dieser Partyreihe verknüpft.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {availableDjs.map((dj) => (
+                <label
+                  key={dj.id}
+                  className="flex items-center gap-3 rounded-lg bg-neutral-900 p-3"
+                >
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-white"
+                    checked={selectedMentionDjIds.includes(dj.id)}
+                    disabled={!dj.instagram}
+                    onChange={(event) =>
+                      toggleDjMention(dj.id, event.target.checked)
+                    }
+                  />
+                  <span className="text-sm">
+                    <span className="block font-medium">{dj.name}</span>
+                    <span className="text-neutral-500">
+                      {dj.instagram
+                        ? `@${dj.instagram}`
+                        : "Kein Instagram-Handle hinterlegt"}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+        </fieldset>
+      )}
 
       {/* Bemerkungen */}
       <label className="mt-5 block">
         <span className="mb-2 block text-sm text-neutral-300">
           Bemerkungen (optional)
         </span>
-
         <textarea
           className={inputStyle}
           value={notes}
@@ -206,36 +241,28 @@ export default function EntryEditor({ date }: EntryEditorProps) {
         <p className="mb-3 text-xs uppercase tracking-widest text-neutral-500">
           Vorschau
         </p>
-
-        {/* Partyname oder Sperrgrund */}
         <p className="font-semibold">
           {type === "event"
             ? selectedParty?.name || "Neue Veranstaltung"
             : reason}
         </p>
-
-        {/* Location */}
         <p className="mt-1 text-sm text-neutral-400">
-          {selectedLocation?.name ||
-            "Location noch nicht ausgewählt"}
+          {selectedLocation?.name || "Location noch nicht ausgewählt"}
         </p>
-
-        {/* Instagram der Location */}
         {selectedLocation?.instagram && (
           <p className="mt-1 text-sm text-neutral-500">
             @{selectedLocation.instagram}
           </p>
         )}
-
-        {/* Datum und Uhrzeit */}
+        {type === "event" && selectedDjMentions.length > 0 && (
+          <p className="mt-2 text-sm text-neutral-300">
+            DJs: {selectedDjMentions.join(", ")}
+          </p>
+        )}
         <p className="mt-3 text-sm text-neutral-400">
           {formattedDate}
-          {type === "event" && startTime
-            ? ` · ${startTime} Uhr`
-            : ""}
+          {type === "event" && startTime ? ` · ${startTime} Uhr` : ""}
         </p>
-
-        {/* Bemerkungen */}
         {notes && (
           <p className="mt-3 whitespace-pre-wrap text-sm text-neutral-400">
             {notes}
@@ -243,7 +270,6 @@ export default function EntryEditor({ date }: EntryEditorProps) {
         )}
       </div>
 
-      {/* Hinweis */}
       <p className="mt-4 text-xs text-neutral-500">
         Entwurfsansicht – noch keine Speicherung.
       </p>

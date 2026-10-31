@@ -48,7 +48,14 @@ export default function DashboardPage() {
   Kalender
 </Link>
 
-{["Party-Portfolio", "Redaktion"].map((item) => (
+<Link
+  href="/dashboard/portfolio"
+  className="block rounded-lg px-4 py-3 text-neutral-300 hover:bg-white/10"
+>
+  Party-Portfolio
+</Link>
+
+{["Redaktion"].map((item) => (
   <div
     key={item}
     className="rounded-lg px-4 py-3 text-neutral-500"
