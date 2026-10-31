@@ -5,7 +5,7 @@ Musikveranstaltungen in Köln.
 
 ## Tech Stack
 
-- Java 21 / Spring Boot 4
+- Java 25 (LTS) / Spring Boot 4
 - PostgreSQL / Flyway
 - Next.js 16 / TypeScript
 - Docker / Docker Compose
