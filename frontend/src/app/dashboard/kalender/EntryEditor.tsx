@@ -237,7 +237,19 @@ export default function EntryEditor({ date }: EntryEditorProps) {
       </label>
 
       {/* Live-Vorschau */}
-      <div className="mt-6 rounded-lg border border-white/10 bg-black p-4">
+      
+<div
+  className="mt-6 rounded-lg border border-white/10 bg-black p-4"
+  style={
+    type === "event" && selectedParty
+      ? {
+          borderLeftColor: selectedParty.color,
+          borderLeftWidth: "5px",
+        }
+      : undefined
+  }
+>
+
         <p className="mb-3 text-xs uppercase tracking-widest text-neutral-500">
           Vorschau
         </p>

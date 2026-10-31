@@ -33,6 +33,7 @@ export type Actor = {
 export type DjMentionDefault = "residents" | "manual";
 
 export type PartySeries = CatalogItem & {
+    color: string;
   residentDjIds: string[];
   otherDjIds: string[];
   organizerIds: string[];
@@ -53,6 +54,23 @@ type CatalogContextValue = {
 const CatalogContext =
   createContext<CatalogContextValue | null>(null);
 
+
+export const PARTY_COLORS = [
+  "#E11D48", // Pink
+  "#0891B2", // Türkis
+  "#8B5CF6", // Violett
+  "#EA580C", // Orange
+  "#2563EB", // Blau
+  "#16A34A", // Grün
+  "#DB2777", // Magenta
+  "#CA8A04", // Gold
+  "#4F46E5", // Indigo
+  "#0D9488", // Teal
+  "#DC2626", // Rot
+  "#9333EA", // Lila
+];
+
+
 export function CatalogProvider({
   children,
 }: {
@@ -60,8 +78,9 @@ export function CatalogProvider({
 }) {
   const [parties, setParties] = useState<PartySeries[]>(
     () =>
-      partySeries.map((party) => ({
+      partySeries.map((party, index) => ({
         ...party,
+        color: PARTY_COLORS[index % PARTY_COLORS.length],
         instagram: "",
         residentDjIds: [],
         otherDjIds: [],

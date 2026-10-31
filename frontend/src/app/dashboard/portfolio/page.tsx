@@ -6,6 +6,7 @@ import { useState, type FormEvent } from "react";
 
 import {
   useCatalog,
+  PARTY_COLORS,
   type CatalogItem,
   type PartySeries,
   type DjMentionDefault,
@@ -35,6 +36,7 @@ export default function PortfolioPage() {
 
   const [name, setName] = useState("");
   const [instagram, setInstagram] = useState("");
+  const [color, setColor] = useState<string>(PARTY_COLORS[0]);
   const [error, setError] = useState("");
 
   // Beziehungen einer Partyreihe
@@ -82,6 +84,7 @@ export default function PortfolioPage() {
     setOtherDjIds([]);
     setOrganizerIds([]);
     setDjMentionDefault("manual");
+    setColor(PARTY_COLORS[parties.length % PARTY_COLORS.length]);
     setError("");
   }
 
@@ -108,6 +111,7 @@ export default function PortfolioPage() {
       const party = parties.find((p) => p.id === item.id);
 
       if (party) {
+        setColor(party.color);
         setResidentDjIds([...party.residentDjIds]);
         setOtherDjIds([...party.otherDjIds]);
         setOrganizerIds([...party.organizerIds]);
@@ -189,6 +193,7 @@ export default function PortfolioPage() {
         otherDjIds,
         organizerIds,
         djMentionDefault,
+        color,
       };
 
       setParties((current) =>
@@ -399,6 +404,28 @@ export default function PortfolioPage() {
                 placeholder="username"
               />
             </label>
+
+{category === "parties" && (
+  <label className="mt-5 flex items-center gap-4">
+    <input
+      type="color"
+      value={color}
+      onChange={(event) => setColor(event.target.value)}
+      className="h-11 w-16 cursor-pointer rounded border border-white/20 bg-neutral-900 p-1"
+      aria-label="Kalenderfarbe wählen"
+    />
+
+    <span>
+      <span className="block text-sm font-medium">
+        Kalenderfarbe
+      </span>
+      <span className="text-xs text-neutral-500">
+        Farbe dieser Partyreihe im Kalender
+      </span>
+    </span>
+  </label>
+)}
+
 
             {category === "parties" && (
               <>
