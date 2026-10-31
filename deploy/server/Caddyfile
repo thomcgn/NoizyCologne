@@ -14,12 +14,11 @@ www.noizycologne.de {
 tsa.noizycologne.de {
     encode zstd gzip
 
-    basic_auth {
-        {$TEAM_USER} {$TEAM_PASSWORD_HASH}
-    }
-
     @api path /api/v1/*
     handle @api {
+        forward_auth frontend:3000 {
+            uri /api/auth/verify
+        }
         reverse_proxy api:8080
     }
 

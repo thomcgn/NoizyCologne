@@ -11,8 +11,6 @@ import {
   type SetStateAction,
 } from "react";
 
-import { partySeries } from "./kalender/catalog";
-
 export type CatalogItem = {
   id: string;
   name: string;
@@ -108,18 +106,9 @@ type CatalogContextValue = {
 const CatalogContext = createContext<CatalogContextValue | null>(null);
 
 export function CatalogProvider({ children }: { children: ReactNode }) {
-  const [parties, setParties] = useState<PartySeries[]>(() =>
-    partySeries.map((party, index) => ({
-      ...party,
-      color: PARTY_COLORS[index % PARTY_COLORS.length],
-      instagram: "",
-      residentDjIds: [],
-      otherDjIds: [],
-      organizerIds: [],
-      djMentionDefault: "manual" as const,
-      recurrence: null,
-    }))
-  );
+  // Partyreihen werden nicht aus einem statischen Katalog vorbefüllt.
+  // Ohne persistente Partyreihen-API bleiben sie leer statt Demo-Daten anzuzeigen.
+  const [parties, setParties] = useState<PartySeries[]>([]);
 
   const [venues, setVenues] = useState<CatalogItem[]>([]);
   const [venuesLoading, setVenuesLoading] = useState(true);

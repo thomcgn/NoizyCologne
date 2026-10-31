@@ -2,6 +2,20 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+The team login is server-side and intentionally fails closed when its local
+runtime variables are missing. For local development, copy
+`.env.local.example` to `.env.local` and fill it with the existing team
+username, its bcrypt password hash, and a local random session secret of at
+least 32 characters. In `.env.local`, every `$` in the bcrypt hash must be
+escaped as `\$`, because Next.js expands `$` in environment files. Do not copy
+production passwords into Git or commit `.env.local`.
+
+```bash
+cp .env.local.example .env.local
+openssl rand -hex 32
+npm run dev
+```
+
 First, run the development server:
 
 ```bash

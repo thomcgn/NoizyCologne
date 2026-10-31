@@ -28,7 +28,8 @@ main() {
   local image_tag="${1:?image tag is required}"
   local previous_tag_file=".previous-image-tag"
   local previous_tag="$(cat "$previous_tag_file" 2>/dev/null || true)"
-  local compose=(docker compose -p noizycologne)
+  local server_dir="$PWD"
+  local compose=(docker compose --env-file "$server_dir/.env" -f "$server_dir/compose.yaml" -p noizycologne)
   local legacy_root="$(cd ../.. && pwd)"
   local legacy_compose="$legacy_root/compose.yaml"
 

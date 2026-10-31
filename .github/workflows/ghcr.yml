@@ -57,11 +57,8 @@ jobs:
 
       - name: Validate Caddy configuration
         run: |
-          team_password_hash="$(docker run --rm caddy:2.10-alpine caddy hash-password --plaintext ci)"
           docker run --rm \
             -e ACME_EMAIL=ci@example.invalid \
-            -e TEAM_USER=ci \
-            -e "TEAM_PASSWORD_HASH=$team_password_hash" \
             -v "$PWD/deploy/server/Caddyfile:/etc/caddy/Caddyfile:ro" \
             caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
@@ -182,11 +179,52 @@ jobs:
           TEAM_SMOKE_USER: ${{ secrets.TEAM_SMOKE_USER }}
           TEAM_SMOKE_PASSWORD: ${{ secrets.TEAM_SMOKE_PASSWORD }}
         run: |
+          set -euo pipefail
+          smoke_dir="$(mktemp -d)"
+          trap 'rm -rf -- "$smoke_dir"' EXIT
+          login_payload="$(jq -n \
+            --arg username "$TEAM_SMOKE_USER" \
+            --arg password "$TEAM_SMOKE_PASSWORD" \
+            '{username: $username, password: $password}')"
+
+          login_status="$(curl --silent --show-error \
+            --retry 5 --retry-delay 2 \
+            --output "$smoke_dir/login.json" \
+            --write-out '%{http_code}' \
+            --cookie-jar "$smoke_dir/cookies.txt" \
+            --header 'Origin: https://tsa.noizycologne.de' \
+            --header 'Content-Type: application/json' \
+            --data "$login_payload" \
+            https://tsa.noizycologne.de/api/auth/login)"
+          test "$login_status" = 200
+          grep -q '"ok":true' "$smoke_dir/login.json"
+
           curl --fail --silent --show-error \
             --retry 5 --retry-delay 2 \
-            --user "$TEAM_SMOKE_USER:$TEAM_SMOKE_PASSWORD" \
+            --cookie "$smoke_dir/cookies.txt" \
             https://tsa.noizycologne.de/dashboard \
             | grep -q "NoizyCologne"
+
+          curl --fail --silent --show-error \
+            --retry 5 --retry-delay 2 \
+            --cookie "$smoke_dir/cookies.txt" \
+            https://tsa.noizycologne.de/api/v1/venues >/dev/null
+
+          logout_status="$(curl --silent --show-error \
+            --output "$smoke_dir/logout.json" \
+            --write-out '%{http_code}' \
+            --cookie "$smoke_dir/cookies.txt" \
+            --header 'Origin: https://tsa.noizycologne.de' \
+            --request POST \
+            https://tsa.noizycologne.de/api/auth/logout)"
+          test "$logout_status" = 200
+
+          unauthenticated_status="$(curl --silent --show-error \
+            --output /dev/null \
+            --write-out '%{http_code}' \
+            --cookie "$smoke_dir/cookies.txt" \
+            https://tsa.noizycologne.de/api/v1/venues)"
+          test "$unauthenticated_status" = 401
 
       - name: Remove legacy smoke service after successful cutover
         if: success()

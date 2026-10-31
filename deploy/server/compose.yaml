@@ -41,9 +41,13 @@ services:
   frontend:
     image: ghcr.io/thomcgn/noizycologne-frontend:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    environment:
+      TEAM_USER: ${TEAM_USER:?TEAM_USER is required}
+      TEAM_PASSWORD_HASH: ${TEAM_PASSWORD_HASH:?TEAM_PASSWORD_HASH is required}
+      TEAM_SESSION_SECRET: ${TEAM_SESSION_SECRET:?TEAM_SESSION_SECRET is required}
     expose: ["3000"]
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 10s
       timeout: 5s
       start_period: 20s
@@ -60,8 +64,6 @@ services:
     image: caddy:2.10-alpine
     restart: unless-stopped
     environment:
-      TEAM_USER: ${TEAM_USER:?TEAM_USER is required}
-      TEAM_PASSWORD_HASH: ${TEAM_PASSWORD_HASH:?TEAM_PASSWORD_HASH is required}
       ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required}
     ports:
       - "80:80"

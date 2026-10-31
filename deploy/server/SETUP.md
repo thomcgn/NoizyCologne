@@ -17,7 +17,7 @@ Vorhandene Caddy-Container, deren Compose-Datei und die beiden Caddy-Volume-Name
 
 ## 2. Deployment-Dateien bereitstellen
 
-Die Pipeline kopiert beim Deployment `Caddyfile`, `compose.yaml`, `deploy.sh` und `backup.sh` nach `/opt/noizycologne/deploy/server/`. Für eine manuelle Erstinstallation müssen diese Dateien dort aus dem freigegebenen Commit liegen. Die bestehende Landingpage-Konfiguration darf nicht durch eine alternative Domain-Konfiguration ersetzt werden. Die bisherige `/opt/noizycologne/compose.yaml` und ihr `Caddyfile` bleiben als Rückweg erhalten.
+Die Pipeline kopiert beim Deployment `Caddyfile`, `compose.yaml`, `deploy.sh` und `backup.sh` nach `/opt/noizycologne/deploy/server/`. Für eine manuelle Erstinstallation müssen diese Dateien dort aus dem freigegebenen Commit liegen. Die bestehende Landingpage-Konfiguration darf nicht durch eine alternative Domain-Konfiguration ersetzt werden. Die bisherige `/opt/noizycologne/compose.yaml` und ihr `Caddyfile` bleiben als Rückweg erhalten. Der neue Deploy-Script verwendet `.env` und `compose.yaml` aus diesem Verzeichnis explizit.
 
 ```bash
 cd /opt/noizycologne/deploy/server
@@ -33,19 +33,21 @@ docker volume create <postgres-volume-name>
 
 Für Caddy werden ausschließlich die bereits inventarisierten Volumes verwendet. Fehlt eines davon, abbrechen und nicht mit einem geratenen Namen fortfahren.
 
-## 3. Caddy-Hash erzeugen und Konfiguration prüfen
+## 3. Team-Session konfigurieren und Konfiguration prüfen
 
 ```bash
-docker run --rm caddy:2.10-alpine caddy hash-password --plaintext
+openssl rand -hex 32
 ```
 
-Das Ergebnis kommt als `TEAM_PASSWORD_HASH` in die VPS-`.env`; das Klartextpasswort wird nicht in Shell-History, Repository oder GitHub-Logs geschrieben. Danach nur prüfen:
+Der zufällig erzeugte Wert kommt als `TEAM_SESSION_SECRET` in die VPS-`.env`. `TEAM_USER` und `TEAM_PASSWORD_HASH` bleiben die bestehenden Team-Zugangsdaten; der bcrypt-Hash wird nicht geändert. Weder das Klartextpasswort noch der Session-Schlüssel werden in Repository, Shell-History oder GitHub-Logs geschrieben. Danach nur prüfen:
 
 ```bash
 cd /opt/noizycologne/deploy/server
 docker compose config >/dev/null
 docker compose run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 ```
+
+Die neue Team-Domain verwendet keine Browser-Basic-Auth mehr. Die Login-Seite prüft die vorhandenen Zugangsdaten serverseitig und setzt eine signierte, `HttpOnly`-, `Secure`- und `SameSite=Lax`-Session. Caddy leitet `/api/v1/*` nur nach erfolgreicher Session-Prüfung an das interne Backend weiter.
 
 ## 4. Erster Rollout
 
