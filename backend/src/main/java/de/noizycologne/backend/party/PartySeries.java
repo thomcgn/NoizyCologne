@@ -50,6 +50,9 @@ public class PartySeries {
     @Column(name = "recurrence_description")
     private String recurrenceDescription;
 
+    @Column(name = "default_flyer_media_id", length = 100)
+    private String defaultFlyerMediaId;
+
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "party_djs", joinColumns = @JoinColumn(name = "party_id"))
     private Set<PartyDjAssignment> djAssignments = new LinkedHashSet<>();
@@ -121,6 +124,14 @@ public class PartySeries {
 
     public String getRecurrenceDescription() {
         return recurrenceDescription;
+    }
+
+    public String getDefaultFlyerMediaId() {
+        return defaultFlyerMediaId;
+    }
+
+    public void setDefaultFlyerMediaId(String defaultFlyerMediaId) {
+        this.defaultFlyerMediaId = defaultFlyerMediaId;
     }
 
     public Set<PartyDjAssignment> getDjAssignments() {

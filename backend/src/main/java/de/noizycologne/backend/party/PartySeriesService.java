@@ -2,6 +2,8 @@ package de.noizycologne.backend.party;
 
 import de.noizycologne.backend.actor.Actor;
 import de.noizycologne.backend.actor.ActorRepository;
+import de.noizycologne.backend.media.MediaAssetRepository;
+import de.noizycologne.backend.media.PartyFlyerResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,16 +24,19 @@ public class PartySeriesService {
 
     private final PartySeriesRepository partySeriesRepository;
     private final ActorRepository actorRepository;
+    private final MediaAssetRepository mediaAssetRepository;
 
-    public PartySeriesService(PartySeriesRepository partySeriesRepository, ActorRepository actorRepository) {
+    public PartySeriesService(PartySeriesRepository partySeriesRepository, ActorRepository actorRepository,
+                              MediaAssetRepository mediaAssetRepository) {
         this.partySeriesRepository = partySeriesRepository;
         this.actorRepository = actorRepository;
+        this.mediaAssetRepository = mediaAssetRepository;
     }
 
     @Transactional(readOnly = true)
     public List<PartySeriesResponse> getParties() {
         return partySeriesRepository.findAll().stream()
-                .map(PartySeriesResponse::from)
+                .map(this::toResponse)
                 .toList();
     }
 
@@ -53,7 +58,7 @@ public class PartySeriesService {
                 djAssignments(request),
                 request.organizerIds()
         );
-        return PartySeriesResponse.from(partySeriesRepository.save(party));
+        return toResponse(partySeriesRepository.save(party));
     }
 
     @Transactional
@@ -76,7 +81,17 @@ public class PartySeriesService {
                 djAssignments(request),
                 request.organizerIds()
         );
-        return PartySeriesResponse.from(partySeriesRepository.save(party));
+        return toResponse(partySeriesRepository.save(party));
+    }
+
+    private PartySeriesResponse toResponse(PartySeries party) {
+        PartyFlyerResponse flyer = party.getDefaultFlyerMediaId() == null ? null
+                : mediaAssetRepository.findById(party.getDefaultFlyerMediaId())
+                .map(asset -> new PartyFlyerResponse(asset.getId(), asset.getOriginalFilename(),
+                        asset.getMediaType(), asset.getFileSize(),
+                        "/api/v1/parties/" + party.getId() + "/default-flyer"))
+                .orElse(null);
+        return PartySeriesResponse.from(party, flyer);
     }
 
     private void validateRequest(PartySeriesRequest request) {

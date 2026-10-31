@@ -34,6 +34,14 @@ export type RecurrenceRule =
   | { kind: "monthly_weekday"; weekday: number; occurrence: number }
   | { kind: "other"; description: string };
 
+export type PartyFlyer = {
+  id: string;
+  originalFilename: string;
+  mediaType: "image/jpeg" | "image/png";
+  fileSize: number;
+  url: string;
+};
+
 export const PARTY_COLORS = [
   "#E11D48",
   "#0891B2",
@@ -56,6 +64,7 @@ export type PartySeries = CatalogItem & {
   organizerIds: string[];
   djMentionDefault: DjMentionDefault;
   recurrence: RecurrenceRule | null;
+  defaultFlyer: PartyFlyer | null;
 };
 
 type EntryBase = {
@@ -107,6 +116,8 @@ type CatalogContextValue = {
   reloadParties: () => Promise<void>;
   createParty: (party: Omit<PartySeries, "id">) => Promise<PartySeries>;
   updateParty: (party: PartySeries) => Promise<PartySeries>;
+  uploadPartyFlyer: (partyId: string, file: File) => Promise<PartyFlyer>;
+  deletePartyFlyer: (partyId: string) => Promise<void>;
   venues: CatalogItem[];
   venuesLoading: boolean;
   venuesError: string | null;
@@ -156,6 +167,30 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     return `Die Partyreihen-API antwortete mit HTTP ${response.status}.`;
   }
 
+  function parsePartyFlyer(body: unknown): PartyFlyer {
+    if (typeof body !== "object" || body === null) {
+      throw new Error("Die Flyer-API lieferte ungültige Metadaten.");
+    }
+    const flyer = body as Record<string, unknown>;
+    if (
+      typeof flyer.id !== "string" ||
+      typeof flyer.originalFilename !== "string" ||
+      (flyer.mediaType !== "image/jpeg" && flyer.mediaType !== "image/png") ||
+      typeof flyer.fileSize !== "number" ||
+      !Number.isSafeInteger(flyer.fileSize) ||
+      typeof flyer.url !== "string"
+    ) {
+      throw new Error("Die Flyer-API lieferte ungültige Metadaten.");
+    }
+    return {
+      id: flyer.id,
+      originalFilename: flyer.originalFilename,
+      mediaType: flyer.mediaType,
+      fileSize: flyer.fileSize,
+      url: flyer.url,
+    };
+  }
+
   function parsePartyResponse(body: unknown): PartySeries {
     if (typeof body !== "object" || body === null) {
       throw new Error("Die Partyreihen-API lieferte ein unerwartetes Antwortformat.");
@@ -164,6 +199,11 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     const party = body as Record<string, unknown>;
     const validIds = (value: unknown): value is string[] =>
       Array.isArray(value) && value.every((id) => typeof id === "string");
+
+    let defaultFlyer: PartyFlyer | null = null;
+    if (party.defaultFlyer !== null && party.defaultFlyer !== undefined) {
+      defaultFlyer = parsePartyFlyer(party.defaultFlyer);
+    }
 
     if (
       typeof party.id !== "string" ||
@@ -223,6 +263,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       organizerIds: party.organizerIds,
       djMentionDefault: party.djMentionDefault,
       recurrence,
+      defaultFlyer,
     };
   }
 
@@ -311,6 +352,40 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       current.map((item) => (item.id === updated.id ? updated : item))
     );
     return updated;
+  }
+
+  async function uploadPartyFlyer(partyId: string, file: File) {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await fetch(
+      `/api/v1/parties/${encodeURIComponent(partyId)}/default-flyer`,
+      {
+        method: "POST",
+        credentials: "same-origin",
+        body: formData,
+      }
+    );
+    if (!response.ok) {
+      throw new Error(await readPartyError(response));
+    }
+    const updated = parsePartyFlyer(await response.json());
+    setParties((current) => current.map((party) =>
+      party.id === partyId ? { ...party, defaultFlyer: updated } : party
+    ));
+    return updated;
+  }
+
+  async function deletePartyFlyer(partyId: string) {
+    const response = await fetch(
+      `/api/v1/parties/${encodeURIComponent(partyId)}/default-flyer`,
+      { method: "DELETE", credentials: "same-origin" }
+    );
+    if (!response.ok) {
+      throw new Error(await readPartyError(response));
+    }
+    setParties((current) => current.map((party) =>
+      party.id === partyId ? { ...party, defaultFlyer: null } : party
+    ));
   }
 
   const [venues, setVenues] = useState<CatalogItem[]>([]);
@@ -752,6 +827,8 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         reloadParties,
         createParty,
         updateParty,
+        uploadPartyFlyer,
+        deletePartyFlyer,
         venues,
         venuesLoading,
         venuesError,

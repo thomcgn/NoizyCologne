@@ -26,10 +26,13 @@ services:
       DB_USER: ${POSTGRES_USER}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       NOIZY_PUBLISH_ENABLED: "false"
+      MEDIA_ROOT: /app/uploads
     depends_on:
       db:
         condition: service_healthy
     expose: ["8080"]
+    volumes:
+      - media_data:/app/uploads
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/actuator/health/readiness | grep -q 'UP'"]
       interval: 10s
@@ -101,4 +104,7 @@ volumes:
     external: true
   caddy_config:
     name: ${CADDY_CONFIG_VOLUME:?CADDY_CONFIG_VOLUME is required}
+    external: true
+  media_data:
+    name: ${MEDIA_DATA_VOLUME:?MEDIA_DATA_VOLUME is required}
     external: true

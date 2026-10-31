@@ -33,6 +33,14 @@ docker volume create <postgres-volume-name>
 
 Für Caddy werden ausschließlich die bereits inventarisierten Volumes verwendet. Fehlt eines davon, abbrechen und nicht mit einem geratenen Namen fortfahren.
 
+Für die privaten Standardflyer wird zusätzlich ein eigenes externes Volume benötigt. Es enthält keine öffentlich gelisteten Dateien und darf nicht mit dem Datenbank- oder Caddy-Volume geteilt werden:
+
+```bash
+docker volume create <media-volume-name>
+```
+
+Der exakt verwendete Name wird als `MEDIA_DATA_VOLUME` in der VPS-`.env` eingetragen. Die Pipeline legt dieses Volume nicht automatisch an, damit kein Tippfehler versehentlich ein neues, leeres Persistenzziel erzeugt.
+
 ## 3. Team-Session konfigurieren und Konfiguration prüfen
 
 ```bash

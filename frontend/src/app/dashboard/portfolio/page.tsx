@@ -51,6 +51,8 @@ export default function PortfolioPage() {
     reloadParties,
     createParty,
     updateParty,
+    uploadPartyFlyer,
+    deletePartyFlyer,
     venues,
     venuesLoading,
     venuesError,
@@ -70,6 +72,8 @@ export default function PortfolioPage() {
   const [color, setColor] = useState<string>(PARTY_COLORS[0]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [flyerFile, setFlyerFile] = useState<File | null>(null);
+  const [removeFlyer, setRemoveFlyer] = useState(false);
 
   // Beziehungen einer Partyreihe
   const [residentDjIds, setResidentDjIds] = useState<string[]>([]);
@@ -130,6 +134,8 @@ export default function PortfolioPage() {
     setOrganizerIds([]);
     setDjMentionDefault("manual");
     setColor(PARTY_COLORS[parties.length % PARTY_COLORS.length]);
+    setFlyerFile(null);
+    setRemoveFlyer(false);
     setError("");
   }
 
@@ -266,14 +272,24 @@ export default function PortfolioPage() {
         djMentionDefault,
         color,
         recurrence,
+        defaultFlyer: parties.find((party) => party.id === editingId)?.defaultFlyer ?? null,
       };
 
       setSaving(true);
       try {
+        let savedParty: PartySeries;
         if (editingId) {
-          await updateParty({ id: editingId, ...partyData });
+          savedParty = await updateParty({ id: editingId, ...partyData });
         } else {
-          await createParty(partyData);
+          savedParty = await createParty(partyData);
+          // Bei einem nachgelagerten Flyer-Fehler muss ein erneuter Speicherversuch
+          // die gerade angelegte Partyreihe aktualisieren statt ein Duplikat anzulegen.
+          setEditingId(savedParty.id);
+        }
+        if (flyerFile) {
+          await uploadPartyFlyer(savedParty.id, flyerFile);
+        } else if (removeFlyer && savedParty.defaultFlyer) {
+          await deletePartyFlyer(savedParty.id);
         }
       } catch (cause) {
         setError(
@@ -531,8 +547,77 @@ export default function PortfolioPage() {
               />
             </label>
 
-{category === "parties" && (
+            {category === "parties" && (
               <>
+                <section className="mt-8 border-t border-white/10 pt-6">
+                  <h3 className="text-lg font-semibold">Standardflyer</h3>
+                  <p className="mt-1 text-sm text-neutral-400">
+                    Optionales JPEG- oder PNG-Bild für diese Partyreihe, maximal 10 MB.
+                    Es wird noch nicht veröffentlicht.
+                  </p>
+                  {(() => {
+                    const currentFlyer = parties.find((party) => party.id === editingId)?.defaultFlyer;
+                    return currentFlyer && !removeFlyer && !flyerFile ? (
+                      <div className="mt-4 flex flex-wrap items-start gap-4">
+                        {/* Flyer wird über die geschützte Same-Origin-API geladen; Next/Image würde die Session nicht automatisch weiterreichen. */}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={currentFlyer.url}
+                          alt={`Standardflyer ${name}`}
+                          className="h-32 w-24 rounded-lg border border-white/10 object-cover"
+                        />
+                        <div className="text-sm">
+                          <p className="text-neutral-300">{currentFlyer.originalFilename}</p>
+                          <button
+                            type="button"
+                            onClick={() => setRemoveFlyer(true)}
+                            className="mt-3 rounded-lg border border-red-400/40 px-3 py-2 text-red-300 hover:bg-red-950/30"
+                          >
+                            Standardflyer entfernen
+                          </button>
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
+                  <label className="mt-4 block">
+                    <span className="mb-2 block text-sm text-neutral-300">
+                      {flyerFile ? "Neuen Standardflyer ausgewählt" : "Bild auswählen"}
+                    </span>
+                    <input
+                      className="block w-full text-sm text-neutral-300 file:mr-4 file:rounded-lg file:border-0 file:bg-white file:px-4 file:py-2 file:font-semibold file:text-black"
+                      type="file"
+                      accept="image/jpeg,image/png"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0] ?? null;
+                        if (!file) return;
+                        if (!["image/jpeg", "image/png"].includes(file.type)) {
+                          setError("Bitte einen JPEG- oder PNG-Flyer auswählen.");
+                          event.target.value = "";
+                          return;
+                        }
+                        if (file.size > 10 * 1024 * 1024) {
+                          setError("Der Flyer darf höchstens 10 MB groß sein.");
+                          event.target.value = "";
+                          return;
+                        }
+                        setError("");
+                        setFlyerFile(file);
+                        setRemoveFlyer(false);
+                      }}
+                    />
+                  </label>
+                  {flyerFile && (
+                    <p className="mt-2 text-xs text-neutral-400">
+                      {flyerFile.name} wird beim Speichern hochgeladen und ersetzt den bisherigen Standardflyer.
+                    </p>
+                  )}
+                  {removeFlyer && !flyerFile && (
+                    <p className="mt-2 text-xs text-red-300">
+                      Der Standardflyer wird beim Speichern entfernt.
+                    </p>
+                  )}
+                </section>
+
                 {/* Farbe der Partyreihe */}
                 <label className="mt-5 flex items-center gap-4">
                   <input

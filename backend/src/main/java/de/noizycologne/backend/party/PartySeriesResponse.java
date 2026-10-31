@@ -1,5 +1,6 @@
 package de.noizycologne.backend.party;
 
+import de.noizycologne.backend.media.PartyFlyerResponse;
 import java.util.List;
 
 public record PartySeriesResponse(
@@ -11,7 +12,8 @@ public record PartySeriesResponse(
         List<String> otherDjIds,
         List<String> organizerIds,
         String djMentionDefault,
-        PartyRecurrenceResponse recurrence
+        PartyRecurrenceResponse recurrence,
+        PartyFlyerResponse defaultFlyer
 ) {
 
     public static PartySeriesResponse from(PartySeries party) {
@@ -32,7 +34,16 @@ public record PartySeriesResponse(
                         .toList(),
                 party.getOrganizerIds().stream().sorted().toList(),
                 party.getDjMentionDefault(),
-                PartyRecurrenceResponse.from(party)
+                PartyRecurrenceResponse.from(party),
+                null
         );
+    }
+
+    public static PartySeriesResponse from(PartySeries party, PartyFlyerResponse defaultFlyer) {
+        PartySeriesResponse response = from(party);
+        return new PartySeriesResponse(response.id(), response.name(), response.instagram(),
+                response.color(), response.residentDjIds(), response.otherDjIds(),
+                response.organizerIds(), response.djMentionDefault(), response.recurrence(),
+                defaultFlyer);
     }
 }
