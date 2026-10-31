@@ -46,7 +46,11 @@ const inputStyle =
 export default function PortfolioPage() {
   const {
     parties,
-    setParties,
+    partiesLoading,
+    partiesError,
+    reloadParties,
+    createParty,
+    updateParty,
     venues,
     venuesLoading,
     venuesError,
@@ -252,31 +256,38 @@ export default function PortfolioPage() {
       }
     }
 
-    const id = editingId ?? crypto.randomUUID();
-
     if (category === "parties") {
-      const updatedParty: PartySeries = {
-        id,
+      const partyData: Omit<PartySeries, "id"> = {
         name: cleanName,
         instagram: cleanInstagram,
-        residentDjIds,
-        otherDjIds,
-        organizerIds,
+        residentDjIds: [...residentDjIds],
+        otherDjIds: [...otherDjIds],
+        organizerIds: [...organizerIds],
         djMentionDefault,
         color,
         recurrence,
       };
 
-      setParties((current) =>
-        editingId
-          ? current.map((party) =>
-              party.id === editingId ? updatedParty : party
-            )
-          : [...current, updatedParty]
-      );
+      setSaving(true);
+      try {
+        if (editingId) {
+          await updateParty({ id: editingId, ...partyData });
+        } else {
+          await createParty(partyData);
+        }
+      } catch (cause) {
+        setError(
+          cause instanceof Error
+            ? `Partyreihe konnte nicht gespeichert werden: ${cause.message}`
+            : "Partyreihe konnte wegen eines unbekannten Netzwerkfehlers nicht gespeichert werden."
+        );
+        setSaving(false);
+        return;
+      }
+      setSaving(false);
     } else {
       const updatedVenue: CatalogItem = {
-        id,
+        id: editingId ?? "",
         name: cleanName,
         instagram: cleanInstagram,
       };
@@ -386,7 +397,22 @@ export default function PortfolioPage() {
           </div>
 
           <div className="mt-6 divide-y divide-white/10">
-            {category === "locations" && venuesLoading ? (
+            {category === "parties" && partiesLoading ? (
+              <p className="py-6 text-sm text-neutral-400" role="status">
+                Partyreihen werden aus PostgreSQL geladen ...
+              </p>
+            ) : category === "parties" && partiesError ? (
+              <div className="py-6 text-sm" role="alert">
+                <p className="text-red-400">{partiesError}</p>
+                <button
+                  type="button"
+                  onClick={() => void reloadParties()}
+                  className="mt-3 rounded-lg border border-white/20 px-4 py-2 text-white hover:bg-white/10"
+                >
+                  Erneut versuchen
+                </button>
+              </div>
+            ) : category === "locations" && venuesLoading ? (
               <p className="py-6 text-sm text-neutral-400" role="status">
                 Locations werden aus PostgreSQL geladen ...
               </p>
@@ -799,10 +825,6 @@ export default function PortfolioPage() {
           </form>
         )}
 
-        <p className="mt-6 text-xs text-neutral-500">
-          Entwicklungsstand: Änderungen werden noch nicht
-          dauerhaft gespeichert.
-        </p>
       </div>
     </main>
   );
