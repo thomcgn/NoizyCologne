@@ -16,11 +16,21 @@ function sameDay(a: Date, b: Date) {
 }
 
 export default function CalendarPage() {
-  const { entries, setEntries, parties, venues } = useCatalog();
+  const {
+    entries,
+    entriesLoading,
+    entriesError,
+    reloadEntries,
+    deleteEntry: deleteCalendarEntry,
+    parties,
+    venues,
+  } = useCatalog();
   const [month, setMonth] = useState(new Date(2027, 0, 1));
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const days = useMemo(() => {
     const year = month.getFullYear();
@@ -88,14 +98,27 @@ export default function CalendarPage() {
     selectDay(new Date());
   }
 
-  function deleteEntry(entry: CalendarEntry) {
+  async function deleteEntry(entry: CalendarEntry) {
     if (!window.confirm(`„${getEntryName(entry)}“ wirklich löschen?`)) {
       return;
     }
-    setEntries((current) => current.filter((item) => item.id !== entry.id));
-    if (editingId === entry.id) {
-      setEditingId(null);
-      setEditorOpen(false);
+
+    setActionError("");
+    setDeletingId(entry.id);
+    try {
+      await deleteCalendarEntry(entry.id);
+      if (editingId === entry.id) {
+        setEditingId(null);
+        setEditorOpen(false);
+      }
+    } catch (cause) {
+      setActionError(
+        cause instanceof Error
+          ? `Kalendereintrag konnte nicht gelöscht werden: ${cause.message}`
+          : "Kalendereintrag konnte wegen eines unbekannten Netzwerkfehlers nicht gelöscht werden."
+      );
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -116,7 +139,7 @@ export default function CalendarPage() {
             </p>
             <h1 className="mt-2 text-3xl font-bold">Veranstaltungskalender</h1>
             <p className="mt-2 text-sm text-neutral-400">
-              Einträge werden vorläufig im React-State gespeichert.
+              Veranstaltungen und Location-Sperren werden dauerhaft gespeichert.
             </p>
           </div>
           <button
@@ -127,6 +150,29 @@ export default function CalendarPage() {
             Heute
           </button>
         </header>
+
+        {entriesLoading && (
+          <p className="mt-6 text-sm text-neutral-400" role="status">
+            Kalendereinträge werden aus PostgreSQL geladen ...
+          </p>
+        )}
+        {entriesError && (
+          <div className="mt-6 rounded-xl border border-red-500/30 bg-red-950/20 p-4" role="alert">
+            <p className="text-sm text-red-300">{entriesError}</p>
+            <button
+              type="button"
+              onClick={() => void reloadEntries()}
+              className="mt-3 rounded-lg border border-white/20 px-4 py-2 text-sm hover:bg-white/10"
+            >
+              Erneut versuchen
+            </button>
+          </div>
+        )}
+        {actionError && (
+          <p className="mt-6 text-sm text-red-400" role="alert">
+            {actionError}
+          </p>
+        )}
 
         <section className="mt-8 rounded-2xl border border-white/10 bg-neutral-950 p-3 sm:p-6">
           <div className="mb-6 flex items-center justify-between gap-3">
@@ -247,7 +293,9 @@ export default function CalendarPage() {
                   </h2>
                   <p className="mt-1 text-sm text-neutral-400">
                     {selectedEntries.length === 0
-                      ? "Noch keine Einträge für diesen Tag."
+                      ? entriesError
+                        ? "Kalendereinträge sind derzeit nicht verfügbar."
+                        : "Noch keine Einträge für diesen Tag."
                       : `${selectedEntries.length} Eintrag/Einträge`}
                   </p>
                 </div>
@@ -294,10 +342,11 @@ export default function CalendarPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => deleteEntry(entry)}
+                          onClick={() => void deleteEntry(entry)}
+                          disabled={deletingId === entry.id}
                           className="rounded-lg border border-white/20 px-3 py-2 text-xs hover:bg-white/10"
                         >
-                          Löschen
+                          {deletingId === entry.id ? "Löschen ..." : "Löschen"}
                         </button>
                       </div>
                     </div>
@@ -331,9 +380,7 @@ export default function CalendarPage() {
         )}
 
         <p className="mt-6 text-xs text-neutral-500">
-          Noch keine Datenbankanbindung: Alle Kalendereinträge gehen beim
-          Neuladen der Seite verloren. Automatische Termine aus dem Turnus
-          werden noch nicht erzeugt.
+          Automatische Termine aus dem Turnus werden nicht erzeugt.
         </p>
       </div>
     </main>

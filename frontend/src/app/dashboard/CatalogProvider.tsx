@@ -6,9 +6,7 @@ import {
   useEffect,
   useCallback,
   useState,
-  type Dispatch,
   type ReactNode,
-  type SetStateAction,
 } from "react";
 
 export type CatalogItem = {
@@ -81,6 +79,20 @@ export type CalendarEntry = EntryBase &
       }
   );
 
+export type CalendarEntryPayload = Omit<EntryBase, "id"> &
+  (
+    | {
+        type: "event";
+        partyId: string;
+        startTime: string;
+        mentionDjIds: string[];
+      }
+    | {
+        type: "closure";
+        reason: string;
+      }
+  );
+
 export function toDateKey(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -90,7 +102,11 @@ export function toDateKey(date: Date): string {
 
 type CatalogContextValue = {
   parties: PartySeries[];
-  setParties: Dispatch<SetStateAction<PartySeries[]>>;
+  partiesLoading: boolean;
+  partiesError: string | null;
+  reloadParties: () => Promise<void>;
+  createParty: (party: Omit<PartySeries, "id">) => Promise<PartySeries>;
+  updateParty: (party: PartySeries) => Promise<PartySeries>;
   venues: CatalogItem[];
   venuesLoading: boolean;
   venuesError: string | null;
@@ -98,17 +114,204 @@ type CatalogContextValue = {
   createVenue: (venue: Omit<CatalogItem, "id">) => Promise<CatalogItem>;
   updateVenue: (venue: CatalogItem) => Promise<CatalogItem>;
   actors: Actor[];
-  setActors: Dispatch<SetStateAction<Actor[]>>;
+  actorsLoading: boolean;
+  actorsError: string | null;
+  reloadActors: () => Promise<void>;
+  createActor: (actor: Omit<Actor, "id">) => Promise<Actor>;
+  updateActor: (actor: Actor) => Promise<Actor>;
   entries: CalendarEntry[];
-  setEntries: Dispatch<SetStateAction<CalendarEntry[]>>;
+  entriesLoading: boolean;
+  entriesError: string | null;
+  reloadEntries: () => Promise<void>;
+  createEntry: (entry: CalendarEntryPayload) => Promise<CalendarEntry>;
+  updateEntry: (entry: CalendarEntry) => Promise<CalendarEntry>;
+  deleteEntry: (id: string) => Promise<void>;
 };
 
 const CatalogContext = createContext<CatalogContextValue | null>(null);
 
 export function CatalogProvider({ children }: { children: ReactNode }) {
-  // Partyreihen werden nicht aus einem statischen Katalog vorbefüllt.
-  // Ohne persistente Partyreihen-API bleiben sie leer statt Demo-Daten anzuzeigen.
   const [parties, setParties] = useState<PartySeries[]>([]);
+  const [partiesLoading, setPartiesLoading] = useState(true);
+  const [partiesError, setPartiesError] = useState<string | null>(null);
+
+  async function readPartyError(response: Response): Promise<string> {
+    try {
+      const body: unknown = await response.json();
+      if (typeof body === "object" && body !== null) {
+        const errorBody = body as Record<string, unknown>;
+        const message = [errorBody.message, errorBody.detail, errorBody.title]
+          .find((value): value is string =>
+            typeof value === "string" && value.trim().length > 0
+          );
+        if (message) return message;
+      }
+    } catch {
+      // Die Statusmeldung darunter bleibt verständlich, auch wenn kein JSON vorliegt.
+    }
+
+    if (response.status === 401) {
+      return "Die Anmeldung ist abgelaufen. Bitte erneut anmelden.";
+    }
+    return `Die Partyreihen-API antwortete mit HTTP ${response.status}.`;
+  }
+
+  function parsePartyResponse(body: unknown): PartySeries {
+    if (typeof body !== "object" || body === null) {
+      throw new Error("Die Partyreihen-API lieferte ein unerwartetes Antwortformat.");
+    }
+
+    const party = body as Record<string, unknown>;
+    const validIds = (value: unknown): value is string[] =>
+      Array.isArray(value) && value.every((id) => typeof id === "string");
+
+    if (
+      typeof party.id !== "string" ||
+      typeof party.name !== "string" ||
+      typeof party.instagram !== "string" ||
+      typeof party.color !== "string" ||
+      !validIds(party.residentDjIds) ||
+      !validIds(party.otherDjIds) ||
+      !validIds(party.organizerIds) ||
+      (party.djMentionDefault !== "residents" && party.djMentionDefault !== "manual")
+    ) {
+      throw new Error("Die Partyreihen-API lieferte ein unerwartetes Antwortformat.");
+    }
+
+    let recurrence: RecurrenceRule | null = null;
+    if (party.recurrence !== null) {
+      if (typeof party.recurrence !== "object" || party.recurrence === null) {
+        throw new Error("Die Partyreihen-API lieferte einen ungültigen Turnus.");
+      }
+      const rule = party.recurrence as Record<string, unknown>;
+      if (
+        (rule.kind === "weekly" || rule.kind === "monthly_weekday") &&
+        typeof rule.weekday === "number" &&
+        Number.isInteger(rule.weekday) &&
+        rule.weekday >= 0 &&
+        rule.weekday <= 6
+      ) {
+        if (rule.kind === "weekly") {
+          recurrence = { kind: "weekly", weekday: rule.weekday };
+        } else if (
+          typeof rule.occurrence === "number" &&
+          Number.isInteger(rule.occurrence) &&
+          (rule.occurrence === -1 || (rule.occurrence >= 1 && rule.occurrence <= 4))
+        ) {
+          recurrence = {
+            kind: "monthly_weekday",
+            weekday: rule.weekday,
+            occurrence: rule.occurrence,
+          };
+        }
+      } else if (rule.kind === "other" && typeof rule.description === "string" && rule.description.trim()) {
+        recurrence = { kind: "other", description: rule.description };
+      }
+
+      if (!recurrence) {
+        throw new Error("Die Partyreihen-API lieferte einen ungültigen Turnus.");
+      }
+    }
+
+    return {
+      id: party.id,
+      name: party.name,
+      instagram: party.instagram,
+      color: party.color,
+      residentDjIds: party.residentDjIds,
+      otherDjIds: party.otherDjIds,
+      organizerIds: party.organizerIds,
+      djMentionDefault: party.djMentionDefault,
+      recurrence,
+    };
+  }
+
+  const reloadParties = useCallback(async () => {
+    setPartiesLoading(true);
+    setPartiesError(null);
+
+    try {
+      const response = await fetch("/api/v1/parties", {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      if (!response.ok) {
+        throw new Error(await readPartyError(response));
+      }
+
+      const body: unknown = await response.json();
+      if (!Array.isArray(body)) {
+        throw new Error("Die Partyreihen-API lieferte kein gültiges Listenformat.");
+      }
+
+      setParties(body.map(parsePartyResponse));
+    } catch (cause) {
+      setParties([]);
+      setPartiesError(
+        cause instanceof Error
+          ? `Partyreihen konnten nicht geladen werden: ${cause.message}`
+          : "Partyreihen konnten wegen eines unbekannten Netzwerkfehlers nicht geladen werden."
+      );
+    } finally {
+      setPartiesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const loadTimer = window.setTimeout(() => {
+      void reloadParties();
+    }, 0);
+
+    return () => window.clearTimeout(loadTimer);
+  }, [reloadParties]);
+
+  async function createParty(party: Omit<PartySeries, "id">) {
+    const response = await fetch("/api/v1/parties", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(party),
+    });
+
+    if (!response.ok) {
+      throw new Error(await readPartyError(response));
+    }
+
+    const created = parsePartyResponse(await response.json());
+    setParties((current) => [...current, created]);
+    return created;
+  }
+
+  async function updateParty(party: PartySeries) {
+    const response = await fetch(
+      `/api/v1/parties/${encodeURIComponent(party.id)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          name: party.name,
+          instagram: party.instagram,
+          color: party.color,
+          residentDjIds: party.residentDjIds,
+          otherDjIds: party.otherDjIds,
+          organizerIds: party.organizerIds,
+          djMentionDefault: party.djMentionDefault,
+          recurrence: party.recurrence,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(await readPartyError(response));
+    }
+
+    const updated = parsePartyResponse(await response.json());
+    setParties((current) =>
+      current.map((item) => (item.id === updated.id ? updated : item))
+    );
+    return updated;
+  }
 
   const [venues, setVenues] = useState<CatalogItem[]>([]);
   const [venuesLoading, setVenuesLoading] = useState(true);
@@ -231,13 +434,324 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   }
 
   const [actors, setActors] = useState<Actor[]>([]);
+  const [actorsLoading, setActorsLoading] = useState(true);
+  const [actorsError, setActorsError] = useState<string | null>(null);
+
+  async function readActorError(response: Response): Promise<string> {
+    try {
+      const body: unknown = await response.json();
+      if (typeof body === "object" && body !== null) {
+        const errorBody = body as Record<string, unknown>;
+        const message = [errorBody.message, errorBody.detail, errorBody.title]
+          .find((value): value is string =>
+            typeof value === "string" && value.trim().length > 0
+          );
+        if (message) return message;
+      }
+    } catch {
+      // Die Statusmeldung darunter bleibt verständlich, auch wenn kein JSON vorliegt.
+    }
+
+    if (response.status === 401) {
+      return "Die Anmeldung ist abgelaufen. Bitte erneut anmelden.";
+    }
+    return `Die Akteur-API antwortete mit HTTP ${response.status}.`;
+  }
+
+  function parseActorResponse(body: unknown): Actor {
+    if (typeof body !== "object" || body === null) {
+      throw new Error("Die Akteur-API lieferte ein unerwartetes Antwortformat.");
+    }
+
+    const actor = body as Record<string, unknown>;
+    if (
+      typeof actor.id !== "string" ||
+      typeof actor.name !== "string" ||
+      (actor.kind !== "person" && actor.kind !== "collective") ||
+      typeof actor.instagram !== "string" ||
+      !Array.isArray(actor.roles) ||
+      !actor.roles.every((role) => role === "dj" || role === "organizer") ||
+      !Array.isArray(actor.collectiveIds) ||
+      !actor.collectiveIds.every((id) => typeof id === "string")
+    ) {
+      throw new Error("Die Akteur-API lieferte ein unerwartetes Antwortformat.");
+    }
+
+    return {
+      id: actor.id,
+      name: actor.name,
+      kind: actor.kind,
+      roles: actor.roles,
+      instagram: actor.instagram,
+      collectiveIds: actor.collectiveIds,
+    };
+  }
+
+  const reloadActors = useCallback(async () => {
+    setActorsLoading(true);
+    setActorsError(null);
+
+    try {
+      const response = await fetch("/api/v1/actors", {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      if (!response.ok) {
+        throw new Error(await readActorError(response));
+      }
+
+      const body: unknown = await response.json();
+      if (!Array.isArray(body)) {
+        throw new Error("Die Akteur-API lieferte kein gültiges Listenformat.");
+      }
+
+      setActors(body.map(parseActorResponse));
+    } catch (cause) {
+      setActors([]);
+      setActorsError(
+        cause instanceof Error
+          ? `Akteure konnten nicht geladen werden: ${cause.message}`
+          : "Akteure konnten wegen eines unbekannten Netzwerkfehlers nicht geladen werden."
+      );
+    } finally {
+      setActorsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const loadTimer = window.setTimeout(() => {
+      void reloadActors();
+    }, 0);
+
+    return () => window.clearTimeout(loadTimer);
+  }, [reloadActors]);
+
+  async function createActor(actor: Omit<Actor, "id">) {
+    const response = await fetch("/api/v1/actors", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(actor),
+    });
+
+    if (!response.ok) {
+      throw new Error(await readActorError(response));
+    }
+
+    const created = parseActorResponse(await response.json());
+    setActors((current) => [...current, created]);
+    return created;
+  }
+
+  async function updateActor(actor: Actor) {
+    const response = await fetch(
+      `/api/v1/actors/${encodeURIComponent(actor.id)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          name: actor.name,
+          kind: actor.kind,
+          roles: actor.roles,
+          instagram: actor.instagram,
+          collectiveIds: actor.collectiveIds,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(await readActorError(response));
+    }
+
+    const updated = parseActorResponse(await response.json());
+    setActors((current) =>
+      current.map((item) => (item.id === updated.id ? updated : item))
+    );
+    return updated;
+  }
+
   const [entries, setEntries] = useState<CalendarEntry[]>([]);
+  const [entriesLoading, setEntriesLoading] = useState(true);
+  const [entriesError, setEntriesError] = useState<string | null>(null);
+
+  async function readCalendarError(response: Response): Promise<string> {
+    try {
+      const body: unknown = await response.json();
+      if (typeof body === "object" && body !== null) {
+        const errorBody = body as Record<string, unknown>;
+        const message = [errorBody.message, errorBody.detail, errorBody.title]
+          .find((value): value is string =>
+            typeof value === "string" && value.trim().length > 0
+          );
+        if (message) return message;
+      }
+    } catch {
+      // Die Statusmeldung darunter bleibt verständlich, auch wenn kein JSON vorliegt.
+    }
+
+    if (response.status === 401) {
+      return "Die Anmeldung ist abgelaufen. Bitte erneut anmelden.";
+    }
+    return `Die Kalender-API antwortete mit HTTP ${response.status}.`;
+  }
+
+  function parseCalendarEntry(body: unknown): CalendarEntry {
+    if (typeof body !== "object" || body === null) {
+      throw new Error("Die Kalender-API lieferte ein unerwartetes Antwortformat.");
+    }
+
+    const value = body as Record<string, unknown>;
+    if (
+      typeof value.id !== "string" ||
+      typeof value.date !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(value.date) ||
+      typeof value.locationId !== "string" ||
+      typeof value.type !== "string" ||
+      typeof value.notes !== "string" ||
+      !Array.isArray(value.mentionDjIds) ||
+      !value.mentionDjIds.every((id) => typeof id === "string")
+    ) {
+      throw new Error("Die Kalender-API lieferte ein unerwartetes Antwortformat.");
+    }
+
+    if (value.type === "event") {
+      if (
+        typeof value.partyId !== "string" ||
+        (value.startTime !== null && typeof value.startTime !== "string")
+      ) {
+        throw new Error("Die Kalender-API lieferte ein ungültiges Event.");
+      }
+      return {
+        id: value.id,
+        date: value.date,
+        locationId: value.locationId,
+        notes: value.notes,
+        type: "event",
+        partyId: value.partyId,
+        startTime: value.startTime ?? "",
+        mentionDjIds: value.mentionDjIds,
+      };
+    }
+
+    if (value.type === "closure" && typeof value.reason === "string") {
+      return {
+        id: value.id,
+        date: value.date,
+        locationId: value.locationId,
+        notes: value.notes,
+        type: "closure",
+        reason: value.reason,
+      };
+    }
+
+    throw new Error("Die Kalender-API lieferte einen ungültigen Eintragstyp.");
+  }
+
+  const reloadEntries = useCallback(async () => {
+    setEntriesLoading(true);
+    setEntriesError(null);
+
+    try {
+      const response = await fetch("/api/v1/calendar-entries", {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      if (!response.ok) {
+        throw new Error(await readCalendarError(response));
+      }
+
+      const body: unknown = await response.json();
+      if (!Array.isArray(body)) {
+        throw new Error("Die Kalender-API lieferte kein gültiges Listenformat.");
+      }
+
+      setEntries(body.map(parseCalendarEntry));
+    } catch (cause) {
+      setEntries([]);
+      setEntriesError(
+        cause instanceof Error
+          ? `Kalendereinträge konnten nicht geladen werden: ${cause.message}`
+          : "Kalendereinträge konnten wegen eines unbekannten Netzwerkfehlers nicht geladen werden."
+      );
+    } finally {
+      setEntriesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const loadTimer = window.setTimeout(() => {
+      void reloadEntries();
+    }, 0);
+
+    return () => window.clearTimeout(loadTimer);
+  }, [reloadEntries]);
+
+  async function createEntry(entry: CalendarEntryPayload) {
+    const response = await fetch("/api/v1/calendar-entries", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(entry),
+    });
+
+    if (!response.ok) {
+      throw new Error(await readCalendarError(response));
+    }
+
+    const created = parseCalendarEntry(await response.json());
+    setEntries((current) => [...current, created]);
+    return created;
+  }
+
+  async function updateEntry(entry: CalendarEntry) {
+    const { id, ...payload } = entry;
+    const response = await fetch(
+      `/api/v1/calendar-entries/${encodeURIComponent(id)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(payload),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(await readCalendarError(response));
+    }
+
+    const updated = parseCalendarEntry(await response.json());
+    setEntries((current) =>
+      current.map((item) => (item.id === updated.id ? updated : item))
+    );
+    return updated;
+  }
+
+  async function deleteEntry(id: string) {
+    const response = await fetch(
+      `/api/v1/calendar-entries/${encodeURIComponent(id)}`,
+      {
+        method: "DELETE",
+        credentials: "same-origin",
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(await readCalendarError(response));
+    }
+
+    setEntries((current) => current.filter((item) => item.id !== id));
+  }
 
   return (
     <CatalogContext.Provider
       value={{
         parties,
-        setParties,
+        partiesLoading,
+        partiesError,
+        reloadParties,
+        createParty,
+        updateParty,
         venues,
         venuesLoading,
         venuesError,
@@ -245,9 +759,18 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         createVenue,
         updateVenue,
         actors,
-        setActors,
+        actorsLoading,
+        actorsError,
+        reloadActors,
+        createActor,
+        updateActor,
         entries,
-        setEntries,
+        entriesLoading,
+        entriesError,
+        reloadEntries,
+        createEntry,
+        updateEntry,
+        deleteEntry,
       }}
     >
       {children}

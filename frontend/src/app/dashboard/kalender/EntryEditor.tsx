@@ -5,6 +5,7 @@ import {
   toDateKey,
   useCatalog,
   type CalendarEntry,
+  type CalendarEntryPayload,
 } from "../CatalogProvider";
 
 type EntryType = "event" | "closure";
@@ -27,7 +28,13 @@ export default function EntryEditor({
   onSaved,
   onCancel,
 }: EntryEditorProps) {
-  const { venues, parties, actors, setEntries } = useCatalog();
+  const {
+    venues,
+    parties,
+    actors,
+    createEntry,
+    updateEntry,
+  } = useCatalog();
 
   const [type, setType] = useState<EntryType>(entry?.type ?? "event");
   const [locationId, setLocationId] = useState(entry?.locationId ?? "");
@@ -42,6 +49,7 @@ export default function EntryEditor({
   );
   const [notes, setNotes] = useState(entry?.notes ?? "");
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   // Beim Bearbeiten die bereits gespeicherte Auswahl behalten.
   // Bei neuen Einträgen gelten die Resident-Vorgaben der Partyreihe.
@@ -86,7 +94,7 @@ export default function EntryEditor({
     setMentionOverride({ partyId, djIds: nextIds });
   }
 
-  function saveEntry(event: FormEvent<HTMLFormElement>) {
+  async function saveEntry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
 
@@ -101,13 +109,12 @@ export default function EntryEditor({
     }
 
     const base = {
-      id: entry?.id ?? crypto.randomUUID(),
       date: toDateKey(date),
       locationId,
       notes: notes.trim(),
     };
 
-    let updated: CalendarEntry;
+    let updated: CalendarEntryPayload;
     if (type === "event") {
       updated = {
         ...base,
@@ -126,12 +133,23 @@ export default function EntryEditor({
       };
     }
 
-    setEntries((current) =>
-      entry
-        ? current.map((item) => (item.id === entry.id ? updated : item))
-        : [...current, updated]
-    );
-    onSaved();
+    setSaving(true);
+    try {
+      if (entry) {
+        await updateEntry({ id: entry.id, ...updated });
+      } else {
+        await createEntry(updated);
+      }
+      onSaved();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? `Kalendereintrag konnte nicht gespeichert werden: ${cause.message}`
+          : "Kalendereintrag konnte wegen eines unbekannten Netzwerkfehlers nicht gespeichert werden."
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   const formattedDate = date.toLocaleDateString("de-DE", {
@@ -353,9 +371,14 @@ export default function EntryEditor({
       <div className="mt-6 flex flex-wrap gap-3">
         <button
           type="submit"
+          disabled={saving}
           className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black"
         >
-          {entry ? "Änderungen übernehmen" : "Eintrag speichern"}
+          {saving
+            ? "Speichern ..."
+            : entry
+              ? "Änderungen übernehmen"
+              : "Eintrag speichern"}
         </button>
         <button
           type="button"
