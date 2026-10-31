@@ -1,4 +1,3 @@
-
 "use client";
 
 import {
@@ -32,72 +31,99 @@ export type Actor = {
 
 export type DjMentionDefault = "residents" | "manual";
 
+export type RecurrenceRule =
+  | { kind: "weekly"; weekday: number }
+  | { kind: "monthly_weekday"; weekday: number; occurrence: number }
+  | { kind: "other"; description: string };
+
+export const PARTY_COLORS = [
+  "#E11D48",
+  "#0891B2",
+  "#8B5CF6",
+  "#EA580C",
+  "#2563EB",
+  "#16A34A",
+  "#DB2777",
+  "#CA8A04",
+  "#4F46E5",
+  "#0D9488",
+  "#DC2626",
+  "#9333EA",
+];
+
 export type PartySeries = CatalogItem & {
-    color: string;
+  color: string;
   residentDjIds: string[];
   otherDjIds: string[];
   organizerIds: string[];
   djMentionDefault: DjMentionDefault;
+  recurrence: RecurrenceRule | null;
 };
+
+type EntryBase = {
+  id: string;
+  date: string; // Lokales Kalenderdatum: YYYY-MM-DD (ohne Zeitzonen-Verschiebung)
+  locationId: string;
+  notes: string;
+};
+
+export type CalendarEntry = EntryBase &
+  (
+    | {
+        type: "event";
+        partyId: string;
+        startTime: string;
+        mentionDjIds: string[];
+      }
+    | {
+        type: "closure";
+        reason: string;
+      }
+  );
+
+export function toDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 type CatalogContextValue = {
   parties: PartySeries[];
   setParties: Dispatch<SetStateAction<PartySeries[]>>;
-
   venues: CatalogItem[];
   setVenues: Dispatch<SetStateAction<CatalogItem[]>>;
-
   actors: Actor[];
   setActors: Dispatch<SetStateAction<Actor[]>>;
+  entries: CalendarEntry[];
+  setEntries: Dispatch<SetStateAction<CalendarEntry[]>>;
 };
 
-const CatalogContext =
-  createContext<CatalogContextValue | null>(null);
+const CatalogContext = createContext<CatalogContextValue | null>(null);
 
-
-export const PARTY_COLORS = [
-  "#E11D48", // Pink
-  "#0891B2", // Türkis
-  "#8B5CF6", // Violett
-  "#EA580C", // Orange
-  "#2563EB", // Blau
-  "#16A34A", // Grün
-  "#DB2777", // Magenta
-  "#CA8A04", // Gold
-  "#4F46E5", // Indigo
-  "#0D9488", // Teal
-  "#DC2626", // Rot
-  "#9333EA", // Lila
-];
-
-
-export function CatalogProvider({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  const [parties, setParties] = useState<PartySeries[]>(
-    () =>
-      partySeries.map((party, index) => ({
-        ...party,
-        color: PARTY_COLORS[index % PARTY_COLORS.length],
-        instagram: "",
-        residentDjIds: [],
-        otherDjIds: [],
-        organizerIds: [],
-        djMentionDefault: "manual" as const,
-      }))
+export function CatalogProvider({ children }: { children: ReactNode }) {
+  const [parties, setParties] = useState<PartySeries[]>(() =>
+    partySeries.map((party, index) => ({
+      ...party,
+      color: PARTY_COLORS[index % PARTY_COLORS.length],
+      instagram: "",
+      residentDjIds: [],
+      otherDjIds: [],
+      organizerIds: [],
+      djMentionDefault: "manual" as const,
+      recurrence: null,
+    }))
   );
 
-  const [venues, setVenues] = useState<CatalogItem[]>(
-    () =>
-      locations.map((location) => ({
-        ...location,
-        instagram: location.instagram ?? "",
-      }))
+  const [venues, setVenues] = useState<CatalogItem[]>(() =>
+    locations.map((location) => ({
+      ...location,
+      instagram: location.instagram ?? "",
+    }))
   );
 
   const [actors, setActors] = useState<Actor[]>([]);
+  const [entries, setEntries] = useState<CalendarEntry[]>([]);
 
   return (
     <CatalogContext.Provider
@@ -108,6 +134,8 @@ export function CatalogProvider({
         setVenues,
         actors,
         setActors,
+        entries,
+        setEntries,
       }}
     >
       {children}
@@ -117,12 +145,10 @@ export function CatalogProvider({
 
 export function useCatalog() {
   const context = useContext(CatalogContext);
-
   if (!context) {
     throw new Error(
       "useCatalog muss innerhalb des CatalogProvider verwendet werden."
     );
   }
-
   return context;
 }

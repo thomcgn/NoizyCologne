@@ -1,12 +1,19 @@
 "use client";
 
-import { useState } from "react";
-import { useCatalog } from "../CatalogProvider";
+import { useState, type FormEvent } from "react";
+import {
+  toDateKey,
+  useCatalog,
+  type CalendarEntry,
+} from "../CatalogProvider";
 
 type EntryType = "event" | "closure";
 
 interface EntryEditorProps {
   date: Date;
+  entry?: CalendarEntry | null;
+  onSaved: () => void;
+  onCancel: () => void;
 }
 
 const inputStyle =
@@ -14,22 +21,38 @@ const inputStyle =
   "px-3 py-2.5 text-sm text-white outline-none " +
   "focus:border-white/60";
 
-export default function EntryEditor({ date }: EntryEditorProps) {
-  const { venues, parties, actors } = useCatalog();
+export default function EntryEditor({
+  date,
+  entry = null,
+  onSaved,
+  onCancel,
+}: EntryEditorProps) {
+  const { venues, parties, actors, setEntries } = useCatalog();
 
-  const [type, setType] = useState<EntryType>("event");
-  const [locationId, setLocationId] = useState("");
-  const [partyId, setPartyId] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [reason, setReason] = useState("Geschlossen");
-  const [notes, setNotes] = useState("");
+  const [type, setType] = useState<EntryType>(entry?.type ?? "event");
+  const [locationId, setLocationId] = useState(entry?.locationId ?? "");
+  const [partyId, setPartyId] = useState(
+    entry?.type === "event" ? entry.partyId : ""
+  );
+  const [startTime, setStartTime] = useState(
+    entry?.type === "event" ? entry.startTime : ""
+  );
+  const [reason, setReason] = useState(
+    entry?.type === "closure" ? entry.reason : "Geschlossen"
+  );
+  const [notes, setNotes] = useState(entry?.notes ?? "");
+  const [error, setError] = useState("");
 
-  // Erst wenn Checkboxen manuell geändert werden, überschreiben sie
-  // die Voreinstellung der aktuell ausgewählten Partyreihe.
+  // Beim Bearbeiten die bereits gespeicherte Auswahl behalten.
+  // Bei neuen Einträgen gelten die Resident-Vorgaben der Partyreihe.
   const [mentionOverride, setMentionOverride] = useState<{
     partyId: string;
     djIds: string[];
-  } | null>(null);
+  } | null>(
+    entry?.type === "event"
+      ? { partyId: entry.partyId, djIds: [...entry.mentionDjIds] }
+      : null
+  );
 
   const selectedLocation = venues.find((venue) => venue.id === locationId);
   const selectedParty = parties.find((party) => party.id === partyId);
@@ -40,8 +63,6 @@ export default function EntryEditor({ date }: EntryEditorProps) {
       selectedParty?.otherDjIds.includes(actor.id)
   );
 
-  // Residents werden nur bei entsprechend konfigurierten Partyreihen
-  // vorausgewählt. Ohne Instagram-Handle ist keine Mention möglich.
   const defaultMentionDjIds =
     selectedParty?.djMentionDefault === "residents"
       ? selectedParty.residentDjIds.filter((id) =>
@@ -56,14 +77,61 @@ export default function EntryEditor({ date }: EntryEditorProps) {
 
   const selectedDjMentions = availableDjs
     .filter((dj) => selectedMentionDjIds.includes(dj.id) && dj.instagram)
-    .map((dj) => `@${dj.instagram}`);
+    .map((dj) => `@${dj.instagram.replace(/^@/, "")}`);
 
   function toggleDjMention(djId: string, checked: boolean) {
     const nextIds = checked
       ? [...new Set([...selectedMentionDjIds, djId])]
       : selectedMentionDjIds.filter((id) => id !== djId);
-
     setMentionOverride({ partyId, djIds: nextIds });
+  }
+
+  function saveEntry(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+
+    if (!locationId || !venues.some((venue) => venue.id === locationId)) {
+      setError("Bitte eine Location auswählen.");
+      return;
+    }
+
+    if (type === "event" && (!partyId || !selectedParty)) {
+      setError("Bitte eine Partyreihe auswählen.");
+      return;
+    }
+
+    const base = {
+      id: entry?.id ?? crypto.randomUUID(),
+      date: toDateKey(date),
+      locationId,
+      notes: notes.trim(),
+    };
+
+    let updated: CalendarEntry;
+    if (type === "event") {
+      updated = {
+        ...base,
+        type: "event",
+        partyId,
+        startTime,
+        mentionDjIds: availableDjs
+          .filter((dj) => dj.instagram && selectedMentionDjIds.includes(dj.id))
+          .map((dj) => dj.id),
+      };
+    } else {
+      updated = {
+        ...base,
+        type: "closure",
+        reason,
+      };
+    }
+
+    setEntries((current) =>
+      entry
+        ? current.map((item) => (item.id === entry.id ? updated : item))
+        : [...current, updated]
+    );
+    onSaved();
   }
 
   const formattedDate = date.toLocaleDateString("de-DE", {
@@ -74,13 +142,17 @@ export default function EntryEditor({ date }: EntryEditorProps) {
   });
 
   return (
-    <section className="mt-6 rounded-xl border border-white/10 bg-neutral-950 p-6">
+    <form
+      onSubmit={saveEntry}
+      className="mt-6 rounded-xl border border-white/10 bg-neutral-950 p-6"
+    >
       <div className="mb-6">
-        <h2 className="text-xl font-semibold">Neuer Kalendereintrag</h2>
+        <h2 className="text-xl font-semibold">
+          {entry ? "Kalendereintrag bearbeiten" : "Neuer Kalendereintrag"}
+        </h2>
         <p className="mt-1 text-sm text-neutral-400">{formattedDate}</p>
       </div>
 
-      {/* Eintragstyp */}
       <div className="mb-6 grid grid-cols-2 gap-2">
         <button
           type="button"
@@ -94,7 +166,6 @@ export default function EntryEditor({ date }: EntryEditorProps) {
         >
           Veranstaltung
         </button>
-
         <button
           type="button"
           onClick={() => setType("closure")}
@@ -109,7 +180,6 @@ export default function EntryEditor({ date }: EntryEditorProps) {
         </button>
       </div>
 
-      {/* Gemeinsame Eingaben und veranstaltungsspezifische Felder */}
       <div className="grid gap-5 sm:grid-cols-2">
         <label className="block">
           <span className="mb-2 block text-sm text-neutral-300">Location</span>
@@ -179,7 +249,6 @@ export default function EntryEditor({ date }: EntryEditorProps) {
         )}
       </div>
 
-      {/* Mentions – unabhängig von der tatsächlichen DJ-Besetzung */}
       {type === "event" && selectedParty && (
         <fieldset className="mt-6 rounded-lg border border-white/10 p-4">
           <legend className="px-2 font-semibold">Instagram-Mentions · DJs</legend>
@@ -211,7 +280,7 @@ export default function EntryEditor({ date }: EntryEditorProps) {
                     <span className="block font-medium">{dj.name}</span>
                     <span className="text-neutral-500">
                       {dj.instagram
-                        ? `@${dj.instagram}`
+                        ? `@${dj.instagram.replace(/^@/, "")}`
                         : "Kein Instagram-Handle hinterlegt"}
                     </span>
                   </span>
@@ -222,7 +291,6 @@ export default function EntryEditor({ date }: EntryEditorProps) {
         </fieldset>
       )}
 
-      {/* Bemerkungen */}
       <label className="mt-5 block">
         <span className="mb-2 block text-sm text-neutral-300">
           Bemerkungen (optional)
@@ -236,20 +304,14 @@ export default function EntryEditor({ date }: EntryEditorProps) {
         />
       </label>
 
-      {/* Live-Vorschau */}
-      
-<div
-  className="mt-6 rounded-lg border border-white/10 bg-black p-4"
-  style={
-    type === "event" && selectedParty
-      ? {
-          borderLeftColor: selectedParty.color,
-          borderLeftWidth: "5px",
+      <div
+        className="mt-6 rounded-lg border border-white/10 bg-black p-4"
+        style={
+          type === "event" && selectedParty
+            ? { borderLeftColor: selectedParty.color, borderLeftWidth: "5px" }
+            : undefined
         }
-      : undefined
-  }
->
-
+      >
         <p className="mb-3 text-xs uppercase tracking-widest text-neutral-500">
           Vorschau
         </p>
@@ -282,9 +344,31 @@ export default function EntryEditor({ date }: EntryEditorProps) {
         )}
       </div>
 
+      {error && (
+        <p role="alert" className="mt-4 text-sm text-red-400">
+          {error}
+        </p>
+      )}
+
+      <div className="mt-6 flex flex-wrap gap-3">
+        <button
+          type="submit"
+          className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black"
+        >
+          {entry ? "Änderungen übernehmen" : "Eintrag speichern"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-lg border border-white/15 px-5 py-3 text-sm hover:bg-white/10"
+        >
+          Abbrechen
+        </button>
+      </div>
       <p className="mt-4 text-xs text-neutral-500">
-        Entwurfsansicht – noch keine Speicherung.
+        Nur vorläufig gespeichert (React-State) – beim Neuladen gehen alle
+        Kalendereinträge verloren.
       </p>
-    </section>
+    </form>
   );
 }

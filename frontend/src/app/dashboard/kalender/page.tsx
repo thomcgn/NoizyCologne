@@ -1,77 +1,107 @@
-
 "use client";
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import {
+  toDateKey,
+  useCatalog,
+  type CalendarEntry,
+} from "../CatalogProvider";
 import EntryEditor from "./EntryEditor";
 
 const weekdays = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 
 function sameDay(a: Date, b: Date) {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
+  return toDateKey(a) === toDateKey(b);
 }
 
 export default function CalendarPage() {
+  const { entries, setEntries, parties, venues } = useCatalog();
   const [month, setMonth] = useState(new Date(2027, 0, 1));
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
 
   const days = useMemo(() => {
     const year = month.getFullYear();
     const monthIndex = month.getMonth();
-
-    // Montag = 0, Sonntag = 6
-    const offset = (
-      new Date(year, monthIndex, 1).getDay() + 6
-    ) % 7;
-
-    const daysInMonth = new Date(
-      year,
-      monthIndex + 1,
-      0
-    ).getDate();
-
-    const totalCells =
-      Math.ceil((offset + daysInMonth) / 7) * 7;
+    const offset = (new Date(year, monthIndex, 1).getDay() + 6) % 7;
+    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+    const totalCells = Math.ceil((offset + daysInMonth) / 7) * 7;
 
     return Array.from({ length: totalCells }, (_, index) =>
       new Date(year, monthIndex, index - offset + 1)
     );
   }, [month]);
 
-  function changeMonth(amount: number) {
-    setMonth((current) =>
-      new Date(
-        current.getFullYear(),
-        current.getMonth() + amount,
-        1
-      )
-    );
-    setSelectedDate(null);
+  const entriesByDate = useMemo(() => {
+    const result = new Map<string, CalendarEntry[]>();
+    for (const entry of entries) {
+      const existing = result.get(entry.date) ?? [];
+      existing.push(entry);
+      result.set(entry.date, existing);
+    }
+    return result;
+  }, [entries]);
+
+  const selectedKey = selectedDate ? toDateKey(selectedDate) : null;
+  const selectedEntries = selectedKey
+    ? (entriesByDate.get(selectedKey) ?? [])
+    : [];
+  const editingEntry = entries.find((item) => item.id === editingId) ?? null;
+
+  function getEntryName(entry: CalendarEntry) {
+    if (entry.type === "closure") return entry.reason;
+    return parties.find((party) => party.id === entry.partyId)?.name ??
+      "Unbekannte Partyreihe";
   }
 
-  function goToToday() {
-    const today = new Date();
-    setMonth(new Date(today.getFullYear(), today.getMonth(), 1));
-    setSelectedDate(today);
+  function getEntryColor(entry: CalendarEntry) {
+    if (entry.type === "closure") return "#9CA3AF";
+    return parties.find((party) => party.id === entry.partyId)?.color ??
+      "#9CA3AF";
+  }
+
+  function changeMonth(amount: number) {
+    setMonth((current) =>
+      new Date(current.getFullYear(), current.getMonth() + amount, 1)
+    );
+    setSelectedDate(null);
+    setEditorOpen(false);
+    setEditingId(null);
   }
 
   function selectDay(date: Date) {
     setSelectedDate(date);
+    setEditingId(null);
+    setEditorOpen(true);
 
-    if (date.getMonth() !== month.getMonth() ||
-        date.getFullYear() !== month.getFullYear()) {
+    if (
+      date.getMonth() !== month.getMonth() ||
+      date.getFullYear() !== month.getFullYear()
+    ) {
       setMonth(new Date(date.getFullYear(), date.getMonth(), 1));
+    }
+  }
+
+  function goToToday() {
+    selectDay(new Date());
+  }
+
+  function deleteEntry(entry: CalendarEntry) {
+    if (!window.confirm(`„${getEntryName(entry)}“ wirklich löschen?`)) {
+      return;
+    }
+    setEntries((current) => current.filter((item) => item.id !== entry.id));
+    if (editingId === entry.id) {
+      setEditingId(null);
+      setEditorOpen(false);
     }
   }
 
   return (
     <main className="min-h-dvh bg-black px-4 py-8 text-white md:px-10">
       <div className="mx-auto max-w-6xl">
-
         <Link
           href="/dashboard"
           className="text-sm text-neutral-400 hover:text-white"
@@ -84,11 +114,11 @@ export default function CalendarPage() {
             <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">
               NoizyCologne / Kalender
             </p>
-            <h1 className="mt-2 text-3xl font-bold">
-              Veranstaltungskalender
-            </h1>
+            <h1 className="mt-2 text-3xl font-bold">Veranstaltungskalender</h1>
+            <p className="mt-2 text-sm text-neutral-400">
+              Einträge werden vorläufig im React-State gespeichert.
+            </p>
           </div>
-
           <button
             type="button"
             onClick={goToToday}
@@ -99,8 +129,6 @@ export default function CalendarPage() {
         </header>
 
         <section className="mt-8 rounded-2xl border border-white/10 bg-neutral-950 p-3 sm:p-6">
-
-          {/* Monatsnavigation */}
           <div className="mb-6 flex items-center justify-between gap-3">
             <h2 className="text-xl font-semibold capitalize sm:text-2xl">
               {month.toLocaleDateString("de-DE", {
@@ -108,7 +136,6 @@ export default function CalendarPage() {
                 year: "numeric",
               })}
             </h2>
-
             <div className="flex gap-2">
               <button
                 type="button"
@@ -129,7 +156,6 @@ export default function CalendarPage() {
             </div>
           </div>
 
-          {/* Wochentage */}
           <div className="mb-2 grid grid-cols-7 text-center">
             {weekdays.map((day) => (
               <div
@@ -141,34 +167,28 @@ export default function CalendarPage() {
             ))}
           </div>
 
-          {/* Kalenderraster */}
           <div className="grid grid-cols-7 gap-px overflow-hidden rounded-xl border border-white/10 bg-white/10">
             {days.map((date) => {
               const inMonth = date.getMonth() === month.getMonth();
-              const isWeekend = [5, 6].includes(date.getDay());
+              const isWeekend = [0, 6].includes(date.getDay());
               const isSelected =
                 selectedDate !== null && sameDay(date, selectedDate);
-
-              const key = [
-                date.getFullYear(),
-                date.getMonth(),
-                date.getDate(),
-              ].join("-");
+              const dayEntries = entriesByDate.get(toDateKey(date)) ?? [];
 
               return (
                 <button
-                  key={key}
+                  key={toDateKey(date)}
                   type="button"
                   onClick={() => selectDay(date)}
                   aria-pressed={isSelected}
-                  aria-label={date.toLocaleDateString("de-DE", {
+                  aria-label={`${date.toLocaleDateString("de-DE", {
                     weekday: "long",
                     day: "numeric",
                     month: "long",
                     year: "numeric",
-                  })}
+                  })}, ${dayEntries.length} Einträge`}
                   className={[
-                    "min-h-16 p-2 text-left transition-colors sm:min-h-24 sm:p-3",
+                    "min-h-20 min-w-0 p-1 text-left transition-colors sm:min-h-28 sm:p-2",
                     inMonth
                       ? isWeekend
                         ? "bg-neutral-900"
@@ -179,8 +199,32 @@ export default function CalendarPage() {
                       : "hover:bg-neutral-800",
                   ].join(" ")}
                 >
-                  <span className="text-sm font-medium">
+                  <span className="block text-sm font-medium">
                     {date.getDate()}
+                  </span>
+
+                  <span className="mt-1 block space-y-1">
+                    {dayEntries.slice(0, 2).map((entry) => (
+                      <span
+                        key={entry.id}
+                        className="block truncate rounded-sm border-l-[3px] bg-white/5 px-1 py-1 text-[10px] leading-tight text-white sm:text-xs"
+                        style={{
+                          borderLeftColor: getEntryColor(entry),
+                          backgroundColor: `${getEntryColor(entry)}22`,
+                        }}
+                        title={getEntryName(entry)}
+                      >
+                        {entry.type === "event" && entry.startTime
+                          ? `${entry.startTime} `
+                          : ""}
+                        {getEntryName(entry)}
+                      </span>
+                    ))}
+                    {dayEntries.length > 2 && (
+                      <span className="block text-[10px] text-neutral-400 sm:text-xs">
+                        +{dayEntries.length - 2} weitere
+                      </span>
+                    )}
                   </span>
                 </button>
               );
@@ -188,22 +232,109 @@ export default function CalendarPage() {
           </div>
         </section>
 
+        {selectedDate ? (
+          <>
+            <section className="mt-6 rounded-xl border border-white/10 bg-neutral-950 p-5 sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold">
+                    {selectedDate.toLocaleDateString("de-DE", {
+                      weekday: "long",
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </h2>
+                  <p className="mt-1 text-sm text-neutral-400">
+                    {selectedEntries.length === 0
+                      ? "Noch keine Einträge für diesen Tag."
+                      : `${selectedEntries.length} Eintrag/Einträge`}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingId(null);
+                    setEditorOpen(true);
+                  }}
+                  className="rounded-lg border border-white/20 px-4 py-2 text-sm hover:bg-white/10"
+                >
+                  + Neuer Eintrag
+                </button>
+              </div>
 
-{/* Editor für ausgewählten Tag */}
-{selectedDate ? (
-  <EntryEditor
-    key={`${selectedDate.getFullYear()}-${selectedDate.getMonth()}-${selectedDate.getDate()}`}
-    date={selectedDate}
-  />
-) : (
-  <section className="mt-6 rounded-xl border border-white/10 bg-neutral-950 p-6">
-    <p className="text-sm text-neutral-400">
-      Wähle einen Tag aus, um einen Kalendereintrag anzulegen.
-    </p>
-  </section>
-)}
+              {selectedEntries.length > 0 && (
+                <div className="mt-4 space-y-3">
+                  {selectedEntries.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 bg-neutral-900 p-3"
+                      style={{ borderLeftColor: getEntryColor(entry), borderLeftWidth: 4 }}
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium">{getEntryName(entry)}</p>
+                        <p className="mt-1 text-xs text-neutral-400">
+                          {venues.find((venue) => venue.id === entry.locationId)
+                            ?.name ?? "Unbekannte Location"}
+                          {entry.type === "event" && entry.startTime
+                            ? ` · ${entry.startTime} Uhr`
+                            : ""}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingId(entry.id);
+                            setEditorOpen(true);
+                          }}
+                          className="rounded-lg border border-white/20 px-3 py-2 text-xs hover:bg-white/10"
+                        >
+                          Bearbeiten
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteEntry(entry)}
+                          className="rounded-lg border border-white/20 px-3 py-2 text-xs hover:bg-white/10"
+                        >
+                          Löschen
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
 
+            {editorOpen && (
+              <EntryEditor
+                key={`${toDateKey(selectedDate)}-${editingId ?? "new"}`}
+                date={selectedDate}
+                entry={editingEntry}
+                onSaved={() => {
+                  setEditorOpen(false);
+                  setEditingId(null);
+                }}
+                onCancel={() => {
+                  setEditorOpen(false);
+                  setEditingId(null);
+                }}
+              />
+            )}
+          </>
+        ) : (
+          <section className="mt-6 rounded-xl border border-white/10 bg-neutral-950 p-6">
+            <p className="text-sm text-neutral-400">
+              Wähle einen Tag aus, um Kalendereinträge anzulegen oder zu bearbeiten.
+            </p>
+          </section>
+        )}
 
+        <p className="mt-6 text-xs text-neutral-500">
+          Noch keine Datenbankanbindung: Alle Kalendereinträge gehen beim
+          Neuladen der Seite verloren. Automatische Termine aus dem Turnus
+          werden noch nicht erzeugt.
+        </p>
       </div>
     </main>
   );

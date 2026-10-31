@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -10,10 +9,34 @@ import {
   type CatalogItem,
   type PartySeries,
   type DjMentionDefault,
+  type RecurrenceRule,
 } from "../CatalogProvider";
 
 type Category = "parties" | "locations";
 type DjAssignment = "none" | "resident" | "other";
+type RecurrenceChoice = "none" | "weekly" | "monthly_weekday" | "other";
+
+const weekdayNames = [
+  "Sonntag",
+  "Montag",
+  "Dienstag",
+  "Mittwoch",
+  "Donnerstag",
+  "Freitag",
+  "Samstag",
+];
+
+function describeRecurrence(rule: RecurrenceRule | null): string {
+  if (!rule) return "Kein fester Turnus";
+  if (rule.kind === "weekly") {
+    return `Jeden ${weekdayNames[rule.weekday]}`;
+  }
+  if (rule.kind === "monthly_weekday") {
+    const occurrence = rule.occurrence === -1 ? "Letzter" : `${rule.occurrence}.`;
+    return `${occurrence} ${weekdayNames[rule.weekday]} im Monat`;
+  }
+  return `Turnus unklar: ${rule.description}`;
+}
 
 const inputStyle =
   "w-full rounded-lg border border-white/15 bg-neutral-900 " +
@@ -47,6 +70,15 @@ export default function PortfolioPage() {
   const [djMentionDefault, setDjMentionDefault] =
     useState<DjMentionDefault>("manual");
 
+
+  // Optionaler Turnus: Mo=1 ... Sa=6, So=0 (wie Date.getDay())
+  const [recurrenceKind, setRecurrenceKind] =
+    useState<RecurrenceChoice>("none");
+  const [weekday, setWeekday] = useState(5);
+  const [occurrence, setOccurrence] = useState(3);
+  const [recurrenceNote, setRecurrenceNote] = useState("");
+
+
   const items: CatalogItem[] =
     category === "parties" ? parties : venues;
 
@@ -77,6 +109,10 @@ export default function PortfolioPage() {
   }
 
   function resetForm() {
+    setRecurrenceKind("none");
+    setWeekday(5);
+    setOccurrence(3);
+    setRecurrenceNote("");
     setEditingId(null);
     setName("");
     setInstagram("");
@@ -116,6 +152,17 @@ export default function PortfolioPage() {
         setOtherDjIds([...party.otherDjIds]);
         setOrganizerIds([...party.organizerIds]);
         setDjMentionDefault(party.djMentionDefault);
+
+        const rule = party.recurrence;
+        setRecurrenceKind(rule?.kind ?? "none");
+
+        if (rule?.kind === "weekly" || rule?.kind === "monthly_weekday") {
+          setWeekday(rule.weekday);
+        }
+        if (rule?.kind === "monthly_weekday") {
+          setOccurrence(rule.occurrence);
+        }
+        setRecurrenceNote(rule?.kind === "other" ? rule.description : "");
       }
     }
 
@@ -182,6 +229,23 @@ export default function PortfolioPage() {
       return;
     }
 
+    // Eine unklare Regel bleibt nur ein Hinweis: Sie erzeugt keine Termine.
+    let recurrence: RecurrenceRule | null = null;
+    if (category === "parties") {
+      if (recurrenceKind === "weekly") {
+        recurrence = { kind: "weekly", weekday };
+      } else if (recurrenceKind === "monthly_weekday") {
+        recurrence = { kind: "monthly_weekday", weekday, occurrence };
+      } else if (recurrenceKind === "other") {
+        const description = recurrenceNote.trim();
+        if (!description) {
+          setError("Bitte den unklaren Turnus beschreiben.");
+          return;
+        }
+        recurrence = { kind: "other", description };
+      }
+    }
+
     const id = editingId ?? crypto.randomUUID();
 
     if (category === "parties") {
@@ -194,6 +258,7 @@ export default function PortfolioPage() {
         organizerIds,
         djMentionDefault,
         color,
+        recurrence,
       };
 
       setParties((current) =>
@@ -329,6 +394,7 @@ export default function PortfolioPage() {
 
                       {party && (
                         <div className="mt-2 space-y-1 text-xs text-neutral-400">
+                          <p>Turnus: {describeRecurrence(party.recurrence)}</p>
                           {party.residentDjIds.length > 0 && (
                             <p>
                               Residents:{" "}
@@ -406,26 +472,117 @@ export default function PortfolioPage() {
             </label>
 
 {category === "parties" && (
-  <label className="mt-5 flex items-center gap-4">
-    <input
-      type="color"
-      value={color}
-      onChange={(event) => setColor(event.target.value)}
-      className="h-11 w-16 cursor-pointer rounded border border-white/20 bg-neutral-900 p-1"
-      aria-label="Kalenderfarbe wählen"
-    />
+              <>
+                {/* Farbe der Partyreihe */}
+                <label className="mt-5 flex items-center gap-4">
+                  <input
+                    type="color"
+                    value={color}
+                    onChange={(event) => setColor(event.target.value)}
+                    className="h-11 w-16 cursor-pointer rounded border border-white/20 bg-neutral-900 p-1"
+                    aria-label="Kalenderfarbe wählen"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium">Kalenderfarbe</span>
+                    <span className="text-xs text-neutral-500">
+                      Farbe dieser Partyreihe im Kalender
+                    </span>
+                  </span>
+                </label>
 
-    <span>
-      <span className="block text-sm font-medium">
-        Kalenderfarbe
-      </span>
-      <span className="text-xs text-neutral-500">
-        Farbe dieser Partyreihe im Kalender
-      </span>
-    </span>
-  </label>
-)}
+                {/* Optionaler Turnus */}
+                <div className="mt-6 rounded-xl border border-white/10 p-5">
+                  <h3 className="text-lg font-semibold">Turnus</h3>
+                  <p className="mt-1 text-sm text-neutral-400">
+                    Optional. Feste Regeln können später Kalenderentwürfe erzeugen.
+                  </p>
 
+                  <label className="mt-4 block">
+                    <span className="mb-2 block text-sm text-neutral-300">
+                      Wiederholung
+                    </span>
+                    <select
+                      className={inputStyle}
+                      value={recurrenceKind}
+                      onChange={(event) =>
+                        setRecurrenceKind(event.target.value as RecurrenceChoice)
+                      }
+                    >
+                      <option value="none">Kein fester Turnus</option>
+                      <option value="weekly">Wöchentlich</option>
+                      <option value="monthly_weekday">
+                        Monatlich nach Wochentag
+                      </option>
+                      <option value="other">Andere / noch unklare Regel</option>
+                    </select>
+                  </label>
+
+                  {(recurrenceKind === "weekly" ||
+                    recurrenceKind === "monthly_weekday") && (
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                      {recurrenceKind === "monthly_weekday" && (
+                        <label className="block">
+                          <span className="mb-2 block text-sm text-neutral-300">
+                            Woche im Monat
+                          </span>
+                          <select
+                            className={inputStyle}
+                            value={occurrence}
+                            onChange={(event) =>
+                              setOccurrence(Number(event.target.value))
+                            }
+                          >
+                            <option value={1}>1. Woche</option>
+                            <option value={2}>2. Woche</option>
+                            <option value={3}>3. Woche</option>
+                            <option value={4}>4. Woche</option>
+                            <option value={-1}>Letzte Woche</option>
+                          </select>
+                        </label>
+                      )}
+
+                      <label className="block">
+                        <span className="mb-2 block text-sm text-neutral-300">
+                          Wochentag
+                        </span>
+                        <select
+                          className={inputStyle}
+                          value={weekday}
+                          onChange={(event) =>
+                            setWeekday(Number(event.target.value))
+                          }
+                        >
+                          <option value={1}>Montag</option>
+                          <option value={2}>Dienstag</option>
+                          <option value={3}>Mittwoch</option>
+                          <option value={4}>Donnerstag</option>
+                          <option value={5}>Freitag</option>
+                          <option value={6}>Samstag</option>
+                          <option value={0}>Sonntag</option>
+                        </select>
+                      </label>
+                    </div>
+                  )}
+
+                  {recurrenceKind === "other" && (
+                    <label className="mt-4 block">
+                      <span className="mb-2 block text-sm text-neutral-300">
+                        Regel beschreiben
+                      </span>
+                      <input
+                        className={inputStyle}
+                        value={recurrenceNote}
+                        onChange={(event) => setRecurrenceNote(event.target.value)}
+                        placeholder="z. B. ungefähr alle zwei Monate"
+                      />
+                      <span className="mt-2 block text-xs text-neutral-500">
+                        Eine unklare Regel erzeugt keine automatischen Termine.
+                      </span>
+                    </label>
+                  )}
+                </div>
+              </>
+            )}
 
             {category === "parties" && (
               <>
