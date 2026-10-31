@@ -16,7 +16,14 @@ const inputStyle =
   "focus:border-white/60";
 
 export default function ActorsPage() {
-  const { actors, setActors } = useCatalog();
+  const {
+    actors,
+    actorsLoading,
+    actorsError,
+    reloadActors,
+    createActor,
+    updateActor,
+  } = useCatalog();
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -27,6 +34,7 @@ export default function ActorsPage() {
   const [instagram, setInstagram] = useState("");
   const [collectiveIds, setCollectiveIds] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const collectives = actors.filter(
     (actor) => actor.kind === "collective"
@@ -70,7 +78,7 @@ export default function ActorsPage() {
     );
   }
 
-  function saveActor(event: FormEvent<HTMLFormElement>) {
+  async function saveActor(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const cleanName = name.trim();
@@ -101,23 +109,34 @@ export default function ActorsPage() {
       return;
     }
 
-    const updatedActor: Actor = {
-      id: editingId ?? crypto.randomUUID(),
+    const actorData = {
       name: cleanName,
       kind,
-      roles,
+      roles: [...roles],
       instagram: cleanInstagram,
       collectiveIds: kind === "person" ? collectiveIds : [],
     };
 
-    setActors((current) =>
-      editingId
-        ? current.map((actor) =>
-            actor.id === editingId ? updatedActor : actor
-          )
-        : [...current, updatedActor]
-    );
+    setSaving(true);
+    setError("");
 
+    try {
+      if (editingId) {
+        await updateActor({ id: editingId, ...actorData });
+      } else {
+        await createActor(actorData);
+      }
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? `Akteur konnte nicht gespeichert werden: ${cause.message}`
+          : "Akteur konnte wegen eines unbekannten Netzwerkfehlers nicht gespeichert werden."
+      );
+      setSaving(false);
+      return;
+    }
+
+    setSaving(false);
     setEditorOpen(false);
     setEditingId(null);
     setError("");
@@ -159,7 +178,22 @@ export default function ActorsPage() {
 
         {/* Akteursliste */}
         <section className="mt-8 rounded-xl border border-white/10 bg-neutral-950 p-5">
-          {actors.length === 0 ? (
+          {actorsLoading ? (
+            <p className="py-6 text-center text-sm text-neutral-400" role="status">
+              Akteure werden aus PostgreSQL geladen ...
+            </p>
+          ) : actorsError ? (
+            <div className="py-6 text-sm" role="alert">
+              <p className="text-red-400">{actorsError}</p>
+              <button
+                type="button"
+                onClick={() => void reloadActors()}
+                className="mt-3 rounded-lg border border-white/20 px-4 py-2 text-white hover:bg-white/10"
+              >
+                Erneut versuchen
+              </button>
+            </div>
+          ) : actors.length === 0 ? (
             <p className="py-6 text-center text-sm text-neutral-500">
               Noch keine DJs oder Kollektive erfasst.
             </p>
@@ -333,9 +367,10 @@ export default function ActorsPage() {
             <div className="mt-6 flex gap-3">
               <button
                 type="submit"
-                className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black"
+                disabled={saving}
+                className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Übernehmen
+                {saving ? "Speichern ..." : "Übernehmen"}
               </button>
 
               <button
@@ -350,8 +385,7 @@ export default function ActorsPage() {
         )}
 
         <p className="mt-6 text-xs text-neutral-500">
-          Entwicklungsstand: Änderungen bleiben nur während der
-          aktuellen Sitzung erhalten. Keine Datenbankspeicherung.
+          Akteure werden dauerhaft in PostgreSQL gespeichert.
         </p>
       </div>
     </main>
