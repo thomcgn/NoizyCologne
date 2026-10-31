@@ -3,13 +3,15 @@
 import {
   createContext,
   useContext,
+  useEffect,
+  useCallback,
   useState,
   type Dispatch,
   type ReactNode,
   type SetStateAction,
 } from "react";
 
-import { locations, partySeries } from "./kalender/catalog";
+import { partySeries } from "./kalender/catalog";
 
 export type CatalogItem = {
   id: string;
@@ -92,7 +94,11 @@ type CatalogContextValue = {
   parties: PartySeries[];
   setParties: Dispatch<SetStateAction<PartySeries[]>>;
   venues: CatalogItem[];
-  setVenues: Dispatch<SetStateAction<CatalogItem[]>>;
+  venuesLoading: boolean;
+  venuesError: string | null;
+  reloadVenues: () => Promise<void>;
+  createVenue: (venue: Omit<CatalogItem, "id">) => Promise<CatalogItem>;
+  updateVenue: (venue: CatalogItem) => Promise<CatalogItem>;
   actors: Actor[];
   setActors: Dispatch<SetStateAction<Actor[]>>;
   entries: CalendarEntry[];
@@ -115,12 +121,125 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     }))
   );
 
-  const [venues, setVenues] = useState<CatalogItem[]>(() =>
-    locations.map((location) => ({
-      ...location,
-      instagram: location.instagram ?? "",
-    }))
-  );
+  const [venues, setVenues] = useState<CatalogItem[]>([]);
+  const [venuesLoading, setVenuesLoading] = useState(true);
+  const [venuesError, setVenuesError] = useState<string | null>(null);
+
+  async function readVenueError(response: Response): Promise<string> {
+    try {
+      const body: unknown = await response.json();
+      if (
+        typeof body === "object" &&
+        body !== null &&
+        "message" in body &&
+        typeof body.message === "string" &&
+        body.message.trim()
+      ) {
+        return body.message;
+      }
+    } catch {
+      // Die Statusmeldung darunter bleibt verständlich, auch wenn kein JSON vorliegt.
+    }
+
+    return `Die Location-API antwortete mit HTTP ${response.status}.`;
+  }
+
+  function parseVenueResponse(body: unknown): CatalogItem {
+    if (
+      typeof body !== "object" ||
+      body === null
+    ) {
+      throw new Error("Die Location-API lieferte ein unerwartetes Antwortformat.");
+    }
+
+    const venue = body as Record<string, unknown>;
+    if (
+      typeof venue.id !== "string" ||
+      typeof venue.name !== "string" ||
+      typeof venue.instagram !== "string"
+    ) {
+      throw new Error("Die Location-API lieferte ein unerwartetes Antwortformat.");
+    }
+
+    return {
+      id: venue.id,
+      name: venue.name,
+      instagram: venue.instagram,
+    };
+  }
+
+  const reloadVenues = useCallback(async () => {
+    setVenuesLoading(true);
+    setVenuesError(null);
+
+    try {
+      const response = await fetch("/api/v1/venues", { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(await readVenueError(response));
+      }
+
+      const body: unknown = await response.json();
+      if (!Array.isArray(body)) {
+        throw new Error("Die Location-API lieferte kein gültiges Listenformat.");
+      }
+
+      setVenues(body.map(parseVenueResponse));
+    } catch (cause) {
+      setVenues([]);
+      setVenuesError(
+        cause instanceof Error
+          ? `Locations konnten nicht geladen werden: ${cause.message}`
+          : "Locations konnten wegen eines unbekannten Netzwerkfehlers nicht geladen werden."
+      );
+    } finally {
+      setVenuesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const loadTimer = window.setTimeout(() => {
+      void reloadVenues();
+    }, 0);
+
+    return () => window.clearTimeout(loadTimer);
+  }, [reloadVenues]);
+
+  async function createVenue(venue: Omit<CatalogItem, "id">) {
+    const response = await fetch("/api/v1/venues", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(venue),
+    });
+
+    if (!response.ok) {
+      throw new Error(await readVenueError(response));
+    }
+
+    const created = parseVenueResponse(await response.json());
+    setVenues((current) => [...current, created]);
+    return created;
+  }
+
+  async function updateVenue(venue: CatalogItem) {
+    const response = await fetch(
+      `/api/v1/venues/${encodeURIComponent(venue.id)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: venue.name, instagram: venue.instagram }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(await readVenueError(response));
+    }
+
+    const updated = parseVenueResponse(await response.json());
+    setVenues((current) =>
+      current.map((item) => (item.id === updated.id ? updated : item))
+    );
+    return updated;
+  }
 
   const [actors, setActors] = useState<Actor[]>([]);
   const [entries, setEntries] = useState<CalendarEntry[]>([]);
@@ -131,7 +250,11 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         parties,
         setParties,
         venues,
-        setVenues,
+        venuesLoading,
+        venuesError,
+        reloadVenues,
+        createVenue,
+        updateVenue,
         actors,
         setActors,
         entries,

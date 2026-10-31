@@ -1,8 +1,68 @@
+name: noizycologne
 
 services:
-  caddy:
-    image: caddy:2
+  db:
+    image: postgres:17-alpine
     restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+
+  api:
+    image: ghcr.io/thomcgn/noizycologne-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: staging
+      DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      NOIZY_PUBLISH_ENABLED: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    expose: ["8080"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/actuator/health/readiness | grep -q 'UP'"]
+      interval: 10s
+      timeout: 5s
+      start_period: 40s
+      retries: 12
+    networks: [internal]
+
+  frontend:
+    image: ghcr.io/thomcgn/noizycologne-frontend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    expose: ["3000"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 12
+    networks: [internal]
+
+  landing:
+    image: ghcr.io/thomcgn/noizycologne-landing:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    expose: ["80"]
+    networks: [internal]
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      TEAM_USER: ${TEAM_USER:?TEAM_USER is required}
+      TEAM_PASSWORD_HASH: ${TEAM_PASSWORD_HASH:?TEAM_PASSWORD_HASH is required}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required}
     ports:
       - "80:80"
       - "443:443"
@@ -11,19 +71,32 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+      landing:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks: [internal]
 
-  landing:
-    image: ghcr.io/thomcgn/noizycologne-landing:latest
-    restart: unless-stopped
-    expose:
-      - "80"
-
-  smoke:
-    image: ghcr.io/thomcgn/noizycologne-smoke:latest
-    restart: unless-stopped
-    expose:
-      - "80"
+networks:
+  internal:
+    name: noizycologne_default
+    external: true
 
 volumes:
+  postgres_data:
+    name: ${POSTGRES_DATA_VOLUME:?POSTGRES_DATA_VOLUME is required}
+    external: true
   caddy_data:
+    name: ${CADDY_DATA_VOLUME:?CADDY_DATA_VOLUME is required}
+    external: true
   caddy_config:
+    name: ${CADDY_CONFIG_VOLUME:?CADDY_CONFIG_VOLUME is required}
+    external: true

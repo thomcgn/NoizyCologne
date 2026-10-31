@@ -43,9 +43,11 @@ jobs:
                -u thomcgn --password-stdin >/dev/null
 
              docker --config "$cfg" pull \
-               ghcr.io/thomcgn/noizycologne-smoke:latest
+               ghcr.io/thomcgn/noizycologne-backend:latest
+             docker --config "$cfg" pull \
+               ghcr.io/thomcgn/noizycologne-frontend:latest
 
              docker image inspect \
-               ghcr.io/thomcgn/noizycologne-smoke:latest \
+               ghcr.io/thomcgn/noizycologne-backend:latest \
                --format "{{.Id}}"
             '

@@ -16,11 +16,52 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check project
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Start PostgreSQL
+        run: docker compose -f backend/compose.yaml up -d
+
+      - name: Run backend tests
+        working-directory: backend
+        run: ./mvnw -B test
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: TypeScript check
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Lint frontend
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Validate Caddy configuration
         run: |
-          test -f deploy/smoke/Dockerfile
-          test -f README.md
-          echo "Project structure OK"
+          team_password_hash="$(docker run --rm caddy:2.10-alpine caddy hash-password --plaintext ci)"
+          docker run --rm \
+            -e ACME_EMAIL=ci@example.invalid \
+            -e TEAM_USER=ci \
+            -e "TEAM_PASSWORD_HASH=$team_password_hash" \
+            -v "$PWD/deploy/server/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
   publish:
     needs: verify
@@ -39,14 +80,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push backend
         uses: docker/build-push-action@v6
         with:
-          context: ./deploy/smoke
+          context: ./backend
           push: true
           tags: |
-            ghcr.io/thomcgn/noizycologne-smoke:latest
-            ghcr.io/thomcgn/noizycologne-smoke:${{ github.sha }}
+            ghcr.io/thomcgn/noizycologne-backend:latest
+            ghcr.io/thomcgn/noizycologne-backend:${{ github.sha }}
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ghcr.io/thomcgn/noizycologne-frontend:latest
+            ghcr.io/thomcgn/noizycologne-frontend:${{ github.sha }}
         
       - name: Build and push landing
         uses: docker/build-push-action@v6
@@ -83,6 +133,25 @@ jobs:
         run: |
           set -euo pipefail
 
+          ssh \
+            -i ~/.ssh/deploy_key \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o BatchMode=yes \
+            deploy@tsa.noizycologne.de \
+            'mkdir -p /opt/noizycologne/deploy/server'
+
+          scp \
+            -i ~/.ssh/deploy_key \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o BatchMode=yes \
+            deploy/server/Caddyfile \
+            deploy/server/compose.yaml \
+            deploy/server/deploy.sh \
+            deploy/server/backup.sh \
+            deploy@tsa.noizycologne.de:/opt/noizycologne/deploy/server/
+
           printf '%s\n' "$GHCR_TOKEN" | ssh \
             -i ~/.ssh/deploy_key \
             -o IdentitiesOnly=yes \
@@ -95,17 +164,46 @@ jobs:
              cfg=$(mktemp -d)
              trap "rm -rf -- \"$cfg\"" EXIT
 
+             chmod 0755 deploy/server/deploy.sh deploy/server/backup.sh
+
              docker --config "$cfg" login ghcr.io \
                -u thomcgn --password-stdin >/dev/null
 
-             docker --config "$cfg" compose pull smoke landing
-             docker --config "$cfg" compose up -d --no-deps smoke landing
-             docker compose ps smoke landing
+             DOCKER_CONFIG="$cfg" ./deploy/server/deploy.sh '${{ github.sha }}'
             '
 
       - name: Verify live deployment
+        env:
+          TEAM_SMOKE_USER: ${{ secrets.TEAM_SMOKE_USER }}
+          TEAM_SMOKE_PASSWORD: ${{ secrets.TEAM_SMOKE_PASSWORD }}
         run: |
           curl --fail --silent --show-error \
             --retry 5 --retry-delay 2 \
-            https://tsa.noizycologne.de/ \
+            --user "$TEAM_SMOKE_USER:$TEAM_SMOKE_PASSWORD" \
+            https://tsa.noizycologne.de/dashboard \
             | grep -q "NoizyCologne"
+
+      - name: Remove legacy smoke service after successful cutover
+        if: success()
+        run: |
+          ssh \
+            -i ~/.ssh/deploy_key \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o BatchMode=yes \
+            deploy@tsa.noizycologne.de \
+            'docker compose -p noizycologne -f /opt/noizycologne/compose.yaml rm -sf smoke'
+
+      - name: Restore legacy stack after failed deployment
+        if: failure()
+        run: |
+          ssh \
+            -i ~/.ssh/deploy_key \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o BatchMode=yes \
+            deploy@tsa.noizycologne.de \
+            'set -eu
+             docker compose -p noizycologne -f /opt/noizycologne/compose.yaml up -d caddy landing smoke
+             rm -f /opt/noizycologne/deploy/server/.previous-image-tag
+            '

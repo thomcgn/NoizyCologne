@@ -1,0 +1,72 @@
+# Einmalige VPS-Einrichtung
+
+Diese Anleitung verändert keinen laufenden Dienst, bis der Prüfpunkt ausdrücklich bestanden ist. Die produktive `.env` bleibt ausschließlich auf dem VPS unter `/opt/noizycologne/deploy/server/.env` und wird nicht aus GitHub Actions übertragen.
+
+## 1. Bestehenden Zustand nur lesen
+
+```bash
+ssh deploy@tsa.noizycologne.de
+cd /opt/noizycologne
+docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}\t{{.Status}}'
+docker volume ls
+docker compose ps 2>/dev/null || true
+find /opt/noizycologne -maxdepth 3 -type f -printf '%p\n' | sort
+```
+
+Vorhandene Caddy-Container, deren Compose-Datei und die beiden Caddy-Volume-Namen müssen dokumentiert werden. Die tatsächlichen Namen werden nicht angenommen. Insbesondere niemals `docker compose down -v` und niemals `docker volume rm` verwenden.
+
+## 2. Deployment-Dateien bereitstellen
+
+Die Pipeline kopiert beim Deployment `Caddyfile`, `compose.yaml`, `deploy.sh` und `backup.sh` nach `/opt/noizycologne/deploy/server/`. Für eine manuelle Erstinstallation müssen diese Dateien dort aus dem freigegebenen Commit liegen. Die bestehende Landingpage-Konfiguration darf nicht durch eine alternative Domain-Konfiguration ersetzt werden. Die bisherige `/opt/noizycologne/compose.yaml` und ihr `Caddyfile` bleiben als Rückweg erhalten.
+
+```bash
+cd /opt/noizycologne/deploy/server
+install -m 0600 /dev/null .env
+${EDITOR:-vi} .env
+```
+
+Die Datei wird anhand `.env.example` ausgefüllt. Zusätzlich werden die exakten Volume-Namen aus Schritt 1 eingetragen. Falls PostgreSQL bisher noch kein Volume besitzt, wird nur für `POSTGRES_DATA_VOLUME` ein neuer eindeutiger Name festgelegt und danach einmalig erstellt:
+
+```bash
+docker volume create <postgres-volume-name>
+```
+
+Für Caddy werden ausschließlich die bereits inventarisierten Volumes verwendet. Fehlt eines davon, abbrechen und nicht mit einem geratenen Namen fortfahren.
+
+## 3. Caddy-Hash erzeugen und Konfiguration prüfen
+
+```bash
+docker run --rm caddy:2.10-alpine caddy hash-password --plaintext
+```
+
+Das Ergebnis kommt als `TEAM_PASSWORD_HASH` in die VPS-`.env`; das Klartextpasswort wird nicht in Shell-History, Repository oder GitHub-Logs geschrieben. Danach nur prüfen:
+
+```bash
+cd /opt/noizycologne/deploy/server
+docker compose config >/dev/null
+docker compose run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+```
+
+## 4. Erster Rollout
+
+Vorher müssen DNS für `tsa.noizycologne.de` und `noizycologne.de` auf den richtigen VPS zeigen, und nur TCP/UDP 80/443 dürfen von außen erreichbar sein. Die Pipeline übernimmt anschließend den Rollout:
+
+```bash
+cd /opt/noizycologne
+DOCKER_CONFIG=<temporäres-docker-config-verzeichnis> ./deploy/server/deploy.sh <freigegebener-commit-sha>
+```
+
+Der normale GitHub-Actions-Weg ist vorzuziehen. Der Compose-Projektname bleibt `noizycologne`; der bestehende Caddy-Service wird aktualisiert. `deploy.sh` validiert zuerst Compose und Caddy, zieht die Images, wartet auf PostgreSQL/Backend/Frontend und aktualisiert erst danach Caddy. Bei Fehlern wird der vorherige Image-Tag wieder gestartet; beim ersten Cutover wird, sofern die alte Compose-Datei vorhanden ist, der bisherige Caddy-/Landing-/Smoke-Stack wieder gestartet. Es gibt keinen `down -v`-Schritt. Der alte Smoke-Service wird erst nach erfolgreichem authentifiziertem Live-Smoke-Test entfernt.
+
+## 5. Backups und Abnahme
+
+Einen Cronjob für `backup.sh` einrichten und das erzeugte Verzeichnis außerhalb des Docker-Volumes regelmäßig auf ein unabhängiges Ziel kopieren. Vor der Freigabe prüfen:
+
+```bash
+docker compose ps
+curl --fail --silent --show-error https://noizycologne.de/
+curl --head --fail --silent https://tsa.noizycologne.de/
+curl --fail --silent https://api.noizycologne.de/ | grep -q 'Not found'
+```
+
+Der Team-Host muss ohne Basic-Auth mit `401` antworten; `/api/v1/*` ist nur über denselben authentifizierten Team-Host erreichbar. Backend und PostgreSQL dürfen in `docker compose ps` keine veröffentlichten Host-Ports besitzen.

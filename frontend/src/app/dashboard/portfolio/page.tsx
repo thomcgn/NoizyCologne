@@ -48,7 +48,11 @@ export default function PortfolioPage() {
     parties,
     setParties,
     venues,
-    setVenues,
+    venuesLoading,
+    venuesError,
+    reloadVenues,
+    createVenue,
+    updateVenue,
     actors,
   } = useCatalog();
 
@@ -61,6 +65,7 @@ export default function PortfolioPage() {
   const [instagram, setInstagram] = useState("");
   const [color, setColor] = useState<string>(PARTY_COLORS[0]);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   // Beziehungen einer Partyreihe
   const [residentDjIds, setResidentDjIds] = useState<string[]>([]);
@@ -198,8 +203,9 @@ export default function PortfolioPage() {
     );
   }
 
-  function saveItem(event: FormEvent<HTMLFormElement>) {
+  async function saveItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setError("");
 
     const cleanName = name.trim();
     const cleanInstagram = instagram.trim().replace(/^@/, "");
@@ -275,13 +281,26 @@ export default function PortfolioPage() {
         instagram: cleanInstagram,
       };
 
-      setVenues((current) =>
-        editingId
-          ? current.map((venue) =>
-              venue.id === editingId ? updatedVenue : venue
-            )
-          : [...current, updatedVenue]
-      );
+      setSaving(true);
+      try {
+        if (editingId) {
+          await updateVenue(updatedVenue);
+        } else {
+          await createVenue({
+            name: updatedVenue.name,
+            instagram: updatedVenue.instagram,
+          });
+        }
+      } catch (cause) {
+        setError(
+          cause instanceof Error
+            ? `Location konnte nicht gespeichert werden: ${cause.message}`
+            : "Location konnte wegen eines unbekannten Netzwerkfehlers nicht gespeichert werden."
+        );
+        setSaving(false);
+        return;
+      }
+      setSaving(false);
     }
 
     setEditorOpen(false);
@@ -367,7 +386,22 @@ export default function PortfolioPage() {
           </div>
 
           <div className="mt-6 divide-y divide-white/10">
-            {filteredItems.length === 0 ? (
+            {category === "locations" && venuesLoading ? (
+              <p className="py-6 text-sm text-neutral-400" role="status">
+                Locations werden aus PostgreSQL geladen ...
+              </p>
+            ) : category === "locations" && venuesError ? (
+              <div className="py-6 text-sm" role="alert">
+                <p className="text-red-400">{venuesError}</p>
+                <button
+                  type="button"
+                  onClick={() => void reloadVenues()}
+                  className="mt-3 rounded-lg border border-white/20 px-4 py-2 text-white hover:bg-white/10"
+                >
+                  Erneut versuchen
+                </button>
+              </div>
+            ) : filteredItems.length === 0 ? (
               <p className="py-6 text-sm text-neutral-500">
                 Keine Einträge gefunden.
               </p>
@@ -745,9 +779,10 @@ export default function PortfolioPage() {
             <div className="mt-8 flex gap-3">
               <button
                 type="submit"
+                disabled={saving}
                 className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black"
               >
-                Übernehmen
+                {saving ? "Speichern ..." : "Übernehmen"}
               </button>
 
               <button
