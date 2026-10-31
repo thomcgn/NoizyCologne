@@ -43,8 +43,10 @@ jobs:
 
       - name: TypeScript check
         working-directory: frontend
-        run: npx tsc --noEmit
-
+        run: |
+             npx next typegen
+             npx tsc --noEmit
+      
       - name: Lint frontend
         working-directory: frontend
         run: npm run lint
