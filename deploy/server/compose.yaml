@@ -106,5 +106,6 @@ volumes:
     name: ${CADDY_CONFIG_VOLUME:?CADDY_CONFIG_VOLUME is required}
     external: true
   media_data:
-    name: ${MEDIA_DATA_VOLUME:?MEDIA_DATA_VOLUME is required}
+    # Backward-compatible for existing VPS installations; deploy.sh creates only this new volume if absent.
+    name: ${MEDIA_DATA_VOLUME:-noizycologne_media_data}
     external: true

@@ -39,7 +39,7 @@ Für die privaten Standardflyer wird zusätzlich ein eigenes externes Volume ben
 docker volume create <media-volume-name>
 ```
 
-Der exakt verwendete Name wird als `MEDIA_DATA_VOLUME` in der VPS-`.env` eingetragen. Die Pipeline legt dieses Volume nicht automatisch an, damit kein Tippfehler versehentlich ein neues, leeres Persistenzziel erzeugt.
+Der exakt verwendete Name kann als `MEDIA_DATA_VOLUME` in der VPS-`.env` eingetragen werden. Fehlt die Variable beim ersten Rollout, verwendet `deploy.sh` ausschließlich für dieses neue Flyer-Volume den festen Namen `noizycologne_media_data` und legt es nur an, wenn es noch nicht existiert. PostgreSQL- und Caddy-Volumes bleiben weiterhin zwingend konfiguriert und werden niemals automatisch ersetzt.
 
 ## 3. Team-Session konfigurieren und Konfiguration prüfen
 

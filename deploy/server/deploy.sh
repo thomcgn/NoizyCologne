@@ -22,6 +22,25 @@ check_host_port_conflicts() {
   fi
 }
 
+ensure_media_volume() {
+  local media_volume="${MEDIA_DATA_VOLUME:-}"
+
+  if [[ -z "$media_volume" && -f .env ]]; then
+    media_volume="$(awk -F= '$1 == "MEDIA_DATA_VOLUME" { print substr($0, index($0, "=") + 1); exit }' .env)"
+  fi
+  media_volume="${media_volume:-noizycologne_media_data}"
+
+  if [[ ! "$media_volume" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then
+    echo "Deployment aborted: invalid MEDIA_DATA_VOLUME name." >&2
+    return 1
+  fi
+
+  if ! docker volume inspect "$media_volume" >/dev/null 2>&1; then
+    echo "Creating missing persistent media volume $media_volume"
+    docker volume create "$media_volume" >/dev/null
+  fi
+}
+
 main() {
   cd "$(dirname "${BASH_SOURCE[0]}")"
 
@@ -49,6 +68,7 @@ main() {
     fi
   }
 
+  ensure_media_volume
   "${compose[@]}" config >/dev/null
   IMAGE_TAG="$image_tag" "${compose[@]}" pull api frontend landing
   "${compose[@]}" run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
