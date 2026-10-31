@@ -388,10 +388,6 @@ export default function EntryEditor({
           Abbrechen
         </button>
       </div>
-      <p className="mt-4 text-xs text-neutral-500">
-        Nur vorläufig gespeichert (React-State) – beim Neuladen gehen alle
-        Kalendereinträge verloren.
-      </p>
     </form>
   );
 }
