@@ -42,6 +42,13 @@ type DraftState = {
   mentionIds: string[];
 };
 
+type GateState = {
+  captionReviewed: boolean;
+  hashtagsReviewed: boolean;
+  mentionsReviewed: boolean;
+  feedOrderReviewed: boolean;
+};
+
 export default function RedaktionPage() {
   const { entries, entriesLoading, entriesError, reloadEntries, parties, venues, actors } = useCatalog();
   const eventEntries = useMemo(
@@ -52,6 +59,7 @@ export default function RedaktionPage() {
   );
   const [selectedId, setSelectedId] = useState("");
   const [drafts, setDrafts] = useState<Record<string, DraftState>>({});
+  const [gateStates, setGateStates] = useState<Record<string, GateState>>({});
   const activeId = selectedId && eventEntries.some((entry) => entry.id === selectedId)
     ? selectedId
     : eventEntries[0]?.id ?? "";
@@ -80,6 +88,15 @@ export default function RedaktionPage() {
       }
     : { caption: "", hashtags: "", mentionIds: [] };
   const draft = drafts[activeId] ?? defaultDraft;
+  const gates = gateStates[activeId] ?? {
+    captionReviewed: false,
+    hashtagsReviewed: false,
+    mentionsReviewed: false,
+    feedOrderReviewed: false,
+  };
+  const automaticGates = Boolean(selectedEntry && selectedParty && selectedVenue && flyerUrl);
+  const manualGates = Object.values(gates).every(Boolean);
+  const allGatesPassed = automaticGates && manualGates;
 
   function updateDraft(patch: Partial<DraftState>) {
     if (!activeId) return;
@@ -95,6 +112,14 @@ export default function RedaktionPage() {
         ? draft.mentionIds.filter((item) => item !== id)
         : [...draft.mentionIds, id],
     });
+  }
+
+  function toggleGate(gate: keyof GateState) {
+    if (!activeId) return;
+    setGateStates((current) => ({
+      ...current,
+      [activeId]: { ...gates, [gate]: !gates[gate] },
+    }));
   }
 
   return (
@@ -276,9 +301,57 @@ export default function RedaktionPage() {
                   ))}
                 </div>
               </fieldset>
-              <p className="mt-6 rounded-lg border border-white/10 p-3 text-xs leading-5 text-neutral-500">
-                Speichern und Veröffentlichung werden erst nach den fachlichen Pre-Publishing-Gates ergänzt.
-              </p>
+              <fieldset className="mt-6 rounded-lg border border-white/10 p-4">
+                <legend className="px-2 text-sm font-semibold">Pre-Publishing-Gates</legend>
+                <p className="mb-3 text-xs leading-5 text-neutral-500">
+                  Diese Prüfung ist lokal. Sie veröffentlicht nichts und ersetzt noch keine serverseitige Freigabe.
+                </p>
+                <div className="space-y-2 text-sm">
+                  <label className="flex items-start gap-3">
+                    <input type="checkbox" className="mt-1 size-4 accent-white" checked={Boolean(flyerUrl)} disabled readOnly />
+                    <span className={flyerUrl ? "text-neutral-200" : "text-amber-300"}>
+                      Bild vorhanden{flyerUrl ? "" : " – Dauerflyer fehlt"}
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-3">
+                    <input type="checkbox" className="mt-1 size-4 accent-white" checked={Boolean(selectedEntry && selectedParty && selectedVenue)} disabled readOnly />
+                    <span className={selectedEntry && selectedParty && selectedVenue ? "text-neutral-200" : "text-amber-300"}>
+                      Datum, Location und Partyreihe geprüft
+                    </span>
+                  </label>
+                  {([
+                    ["captionReviewed", "Caption geprüft"],
+                    ["hashtagsReviewed", "Hashtags geprüft"],
+                    ["mentionsReviewed", "Mentions geprüft"],
+                    ["feedOrderReviewed", "Feed-Reihenfolge geprüft"],
+                  ] as const).map(([gate, label]) => (
+                    <label key={gate} className="flex min-h-11 items-start gap-3">
+                      <input
+                        type="checkbox"
+                        className="mt-1 size-4 accent-white"
+                        checked={gates[gate]}
+                        onChange={() => toggleGate(gate)}
+                      />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="mt-4 border-t border-white/10 pt-4">
+                  <button
+                    type="button"
+                    disabled
+                    className="min-h-11 w-full rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-50"
+                    title="Serverseitige Freigabe ist noch nicht implementiert"
+                  >
+                    {allGatesPassed ? "Freigabe technisch vorbereitet" : "Freigabe noch blockiert"}
+                  </button>
+                  <p className="mt-2 text-xs text-neutral-500">
+                    {allGatesPassed
+                      ? "Alle lokalen Checks sind erfüllt. Eine serverseitige Freigabe ist noch erforderlich."
+                      : "Alle Checks müssen erfüllt sein; ohne Bild bleibt die Freigabe blockiert."}
+                  </p>
+                </div>
+              </fieldset>
             </section>
           </div>
         )}
