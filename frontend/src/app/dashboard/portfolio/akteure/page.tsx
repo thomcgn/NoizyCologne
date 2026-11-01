@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import {
   useCatalog,
   type Actor,
@@ -34,10 +34,31 @@ export default function ActorsPage() {
   const [collectiveIds, setCollectiveIds] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
 
   const collectives = actors.filter(
     (actor) => actor.kind === "collective"
   );
+  const filteredActors = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase("de-DE");
+    return actors
+      .filter((actor) => {
+        if (!query) return true;
+        const collectiveNames = actor.collectiveIds
+          .map((id) => collectives.find((collective) => collective.id === id)?.name ?? "")
+          .join(" ");
+        return [
+          actor.name,
+          actor.instagram,
+          actor.kind === "person" ? "person dj act veranstalter" : "kollektiv",
+          collectiveNames,
+        ]
+          .join(" ")
+          .toLocaleLowerCase("de-DE")
+          .includes(query);
+      })
+      .sort((first, second) => first.name.localeCompare(second.name, "de-DE"));
+  }, [actors, collectives, search]);
 
   function createNew() {
     setEditingId(null);
@@ -159,17 +180,28 @@ export default function ActorsPage() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={createNew}
-            className="min-h-12 rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black"
-          >
-            + Akteur anlegen
-          </button>
         </header>
 
         {/* Akteursliste */}
         <section className="mt-8 rounded-xl border border-white/10 bg-neutral-950 p-5">
+          <div className="flex flex-wrap gap-3">
+            <input
+              aria-label="DJs und Kollektive durchsuchen"
+              className={`${inputStyle} min-w-0 flex-1`}
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Nach DJs, Kollektiven oder Handles suchen ..."
+            />
+            <button
+              type="button"
+              onClick={createNew}
+              className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black"
+            >
+              + Neu anlegen
+            </button>
+          </div>
+
+          <div className="mt-6">
           {actorsLoading ? (
             <p className="py-6 text-center text-sm text-neutral-400" role="status">
               Akteure werden aus PostgreSQL geladen ...
@@ -185,13 +217,15 @@ export default function ActorsPage() {
                 Erneut versuchen
               </button>
             </div>
-          ) : actors.length === 0 ? (
+          ) : filteredActors.length === 0 ? (
             <p className="py-6 text-center text-sm text-neutral-500">
-              Noch keine DJs oder Kollektive erfasst.
+              {search.trim()
+                ? "Keine passenden DJs oder Kollektive gefunden."
+                : "Noch keine DJs oder Kollektive erfasst."}
             </p>
           ) : (
             <div className="divide-y divide-white/10">
-              {actors.map((actor) => (
+              {filteredActors.map((actor) => (
                 <div
                   key={actor.id}
                   className="flex flex-col items-stretch gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
@@ -242,6 +276,7 @@ export default function ActorsPage() {
               ))}
             </div>
           )}
+          </div>
         </section>
 
         {/* Akteur-Editor */}
