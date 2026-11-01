@@ -186,7 +186,7 @@ export default function GenresPage() {
             {captionPreTextSaved ? "Gespeichert" : "Pre-Text speichern"}
           </button>
         </div>
-        <p className="mt-3 text-xs text-neutral-500">Beispiel: {captionPreText.trim() || DEFAULT_CAPTION_PRETEXT} 14.11.2026 Punk, Emo mit @dj im @location</p>
+        <p className="mt-3 text-xs text-neutral-500">Beispiel: {captionPreText.trim() || DEFAULT_CAPTION_PRETEXT} Samstag 31.10.26 Garage, Punk, Doom mit @dj im @location</p>
       </section>
       <div className="mt-8 flex flex-col gap-3 sm:flex-row"><input className={inputStyle} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Genres und Aliase durchsuchen" aria-label="Genres durchsuchen" /><button type="button" onClick={() => void loadGenres()} className="min-h-11 rounded-lg border border-white/15 px-4 py-2 text-sm">Neu laden</button></div>
       {error && <p role="alert" className="mt-4 rounded-lg border border-red-400/40 bg-red-950/30 p-3 text-sm text-red-300">{error}</p>}

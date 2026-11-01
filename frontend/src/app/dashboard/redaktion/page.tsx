@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useMemo, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import {
   useCatalog,
   type Actor,
@@ -31,7 +31,11 @@ function displayHandle(actor: Actor) {
 
 function formatCaptionDate(date: string) {
   const [year, month, day] = date.split("-");
-  return `${day}.${month}.${year}`;
+  const weekday = new Intl.DateTimeFormat("de-DE", {
+    weekday: "long",
+    timeZone: "UTC",
+  }).format(new Date(`${date}T00:00:00Z`));
+  return `${weekday} ${day}.${month}.${year.slice(-2)}`;
 }
 
 function buildCaption(
@@ -68,13 +72,12 @@ type DraftState = {
   status: EditorialDraftStatus;
 };
 
-const GENRE_OPTIONS = [
-  "Rock", "Alternative", "Indie", "Punk", "Punkrock", "Garage Rock",
-  "Rock’n’Roll", "Emo", "Hardcore", "Metal", "Metalcore", "Heavy Metal",
-  "Thrash Metal", "Death Metal", "Black Metal", "Doom", "Hard Rock",
-  "Psych", "Ska", "Soul", "Post-Punk", "Darkwave", "Gothic", "Britpop",
-  "Singer-Songwriter", "Folk", "Pop", "Sonstiges",
-] as const;
+type ActiveGenre = {
+  id: string;
+  canonicalName: string;
+  displayName: string;
+  active: boolean;
+};
 
 type GateState = {
   captionReviewed: boolean;
@@ -120,6 +123,9 @@ export default function RedaktionPage() {
   const [genreAnalysisError, setGenreAnalysisError] = useState("");
   const [draftSaving, setDraftSaving] = useState(false);
   const [draftError, setDraftError] = useState("");
+  const [availableGenres, setAvailableGenres] = useState<ActiveGenre[]>([]);
+  const [genresLoading, setGenresLoading] = useState(true);
+  const [genresError, setGenresError] = useState("");
   const [captionPreText] = useState(() => {
     if (typeof window === "undefined") return DEFAULT_CAPTION_PRETEXT;
     return window.localStorage.getItem(CAPTION_PRETEXT_STORAGE_KEY)?.trim() || DEFAULT_CAPTION_PRETEXT;
@@ -130,6 +136,34 @@ export default function RedaktionPage() {
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef<{ id: string; x: number; y: number; pointerId: number } | null>(null);
   const dragMovedRef = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    async function loadGenres() {
+      setGenresLoading(true);
+      setGenresError("");
+      try {
+        const response = await fetch("/api/v1/genres", { credentials: "same-origin" });
+        if (!response.ok) throw new Error(`Die Genreverwaltung antwortete mit HTTP ${response.status}.`);
+        const body: unknown = await response.json();
+        if (!Array.isArray(body)) throw new Error("Die Genreverwaltung lieferte kein gültiges Listenformat.");
+        const genres = body.filter((item): item is ActiveGenre => {
+          if (typeof item !== "object" || item === null) return false;
+          const genre = item as Record<string, unknown>;
+          return typeof genre.id === "string"
+            && typeof genre.canonicalName === "string"
+            && typeof genre.displayName === "string"
+            && genre.active === true;
+        });
+        if (!cancelled) setAvailableGenres(genres);
+      } catch (cause) {
+        if (!cancelled) setGenresError(cause instanceof Error ? cause.message : "Genres konnten nicht geladen werden.");
+      } finally {
+        if (!cancelled) setGenresLoading(false);
+      }
+    }
+    void loadGenres();
+    return () => { cancelled = true; };
+  }, []);
   const orderedEventEntries = useMemo(() => {
     const byId = new Map(eventEntries.map((entry) => [entry.id, entry]));
     const knownIds = feedOrder.filter((id) => byId.has(id));
@@ -759,16 +793,19 @@ export default function RedaktionPage() {
                   Bitte die Genres vom Flyer redaktionell auswählen. Die Auswahl wird gespeichert und in die Caption übernommen.
                 </p>
                 <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  {GENRE_OPTIONS.map((genre) => (
-                    <label key={genre} className="flex min-h-11 items-center gap-2 rounded-lg bg-neutral-900 px-3 py-2 text-sm">
+                  {genresLoading && <p className="col-span-full text-sm text-neutral-500" role="status">Genres werden aus der Datenbank geladen ...</p>}
+                  {genresError && <p className="col-span-full text-sm text-red-300" role="alert">{genresError}</p>}
+                  {!genresLoading && !genresError && availableGenres.length === 0 && <p className="col-span-full text-sm text-neutral-500">Keine aktiven Genres in den Einstellungen vorhanden.</p>}
+                  {availableGenres.map((genre) => (
+                    <label key={genre.id} className="flex min-h-11 items-center gap-2 rounded-lg bg-neutral-900 px-3 py-2 text-sm">
                       <input
                         type="checkbox"
                         className="size-4 accent-white"
-                        checked={draft.genres.includes(genre)}
-                        onChange={() => toggleGenre(genre)}
+                        checked={draft.genres.includes(genre.displayName)}
+                        onChange={() => toggleGenre(genre.displayName)}
                         disabled={draftSaving}
                       />
-                      <span>{genre}</span>
+                      <span>{genre.displayName}</span>
                     </label>
                   ))}
                 </div>
