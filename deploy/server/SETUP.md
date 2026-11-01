@@ -49,6 +49,8 @@ openssl rand -hex 32
 
 Der zufällig erzeugte Wert kommt als `TEAM_SESSION_SECRET` in die VPS-`.env`. `TEAM_USER` und `TEAM_PASSWORD_HASH` bleiben die bestehenden Team-Zugangsdaten; der bcrypt-Hash wird nicht geändert. Weder das Klartextpasswort noch der Session-Schlüssel werden in Repository, Shell-History oder GitHub-Logs geschrieben. Danach nur prüfen:
 
+Die optionale Flyer-Genreanalyse verwendet ausschließlich den Backend-Container. Trage den OpenAI-Schlüssel nur in der VPS-Datei `.env` als `OPENAI_API_KEY` ein; er wird nicht an den Browser weitergegeben und nicht in GitHub-Logs ausgegeben. Ohne diesen Wert bleibt die Analyse deaktiviert und die manuelle Genre-Auswahl funktioniert unverändert. `OPENAI_VISION_MODEL` kann bei Bedarf angepasst werden.
+
 ```bash
 cd /opt/noizycologne/deploy/server
 docker compose config >/dev/null

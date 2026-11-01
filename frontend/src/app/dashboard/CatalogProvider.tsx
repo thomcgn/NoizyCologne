@@ -42,6 +42,11 @@ export type PartyFlyer = {
   url: string;
 };
 
+export type GenreSuggestion = {
+  genre: string;
+  confidence: number;
+};
+
 export const PARTY_COLORS = [
   "#E11D48",
   "#0891B2",
@@ -133,6 +138,7 @@ type CatalogContextValue = {
   uploadPartyFlyer: (partyId: string, file: File) => Promise<PartyFlyer>;
   deletePartyFlyer: (partyId: string) => Promise<void>;
   uploadEventFlyer: (entryId: string, file: File) => Promise<PartyFlyer>;
+  analyzeEventFlyerGenres: (entryId: string) => Promise<GenreSuggestion[]>;
   deleteEventFlyer: (entryId: string) => Promise<void>;
   drafts: EditorialPostDraft[];
   draftsLoading: boolean;
@@ -952,6 +958,30 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     return flyer;
   }
 
+  async function analyzeEventFlyerGenres(entryId: string) {
+    const response = await fetch(
+      `/api/v1/calendar-entries/${encodeURIComponent(entryId)}/flyer/analysis`,
+      { method: "POST", credentials: "same-origin" }
+    );
+    if (!response.ok) throw new Error(await readCalendarError(response));
+    const body: unknown = await response.json();
+    if (typeof body !== "object" || body === null || !Array.isArray((body as Record<string, unknown>).genres)) {
+      throw new Error("Die Flyer-Analyse lieferte kein gültiges Ergebnis.");
+    }
+    const genres = (body as Record<string, unknown>).genres as unknown[];
+    if (!genres.every((item) => {
+      if (typeof item !== "object" || item === null) return false;
+      const suggestion = item as Record<string, unknown>;
+      return typeof suggestion.genre === "string"
+        && typeof suggestion.confidence === "number"
+        && suggestion.confidence >= 0
+        && suggestion.confidence <= 1;
+    })) {
+      throw new Error("Die Flyer-Analyse lieferte ungültige Genre-Vorschläge.");
+    }
+    return genres as GenreSuggestion[];
+  }
+
   async function deleteEventFlyer(entryId: string) {
     const response = await fetch(
       `/api/v1/calendar-entries/${encodeURIComponent(entryId)}/flyer`,
@@ -975,6 +1005,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         uploadPartyFlyer,
         deletePartyFlyer,
         uploadEventFlyer,
+        analyzeEventFlyerGenres,
         deleteEventFlyer,
         drafts,
         draftsLoading,

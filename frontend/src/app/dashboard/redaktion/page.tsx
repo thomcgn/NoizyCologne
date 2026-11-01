@@ -8,6 +8,7 @@ import {
   type Actor,
   type CalendarEntry,
   type EditorialDraftStatus,
+  type GenreSuggestion,
   type PartySeries,
 } from "../CatalogProvider";
 
@@ -89,6 +90,7 @@ export default function RedaktionPage() {
     updateDraft: updatePersistedDraft,
   } = useCatalog();
   const { uploadEventFlyer, deleteEventFlyer } = useCatalog();
+  const { analyzeEventFlyerGenres } = useCatalog();
   const eventEntries = useMemo(
     () => entries
       .filter((entry): entry is Extract<CalendarEntry, { type: "event" }> => entry.type === "event")
@@ -100,6 +102,9 @@ export default function RedaktionPage() {
   const [gateStates, setGateStates] = useState<Record<string, GateState>>({});
   const [eventFlyerSaving, setEventFlyerSaving] = useState(false);
   const [eventFlyerError, setEventFlyerError] = useState("");
+  const [genreAnalysis, setGenreAnalysis] = useState<Record<string, GenreSuggestion[]>>({});
+  const [genreAnalysisLoading, setGenreAnalysisLoading] = useState(false);
+  const [genreAnalysisError, setGenreAnalysisError] = useState("");
   const [draftSaving, setDraftSaving] = useState(false);
   const [draftError, setDraftError] = useState("");
   const [feedOrder, setFeedOrder] = useState<string[]>([]);
@@ -134,6 +139,7 @@ export default function RedaktionPage() {
     : [];
   const eventFlyer = selectedEntry?.eventFlyer ?? null;
   const flyerUrl = eventFlyer?.url ?? selectedParty?.defaultFlyer?.url ?? null;
+  const currentGenreSuggestions = selectedEntry ? genreAnalysis[selectedEntry.id] ?? [] : [];
 
   const defaultDraft: DraftState = selectedEntry && selectedParty
     ? {
@@ -173,6 +179,25 @@ export default function RedaktionPage() {
       genres,
       caption: syncCaptionGenres(draft.caption, genres),
     });
+  }
+
+  function applyGenreSuggestions() {
+    const genres = currentGenreSuggestions.map((suggestion) => suggestion.genre);
+    updateDraft({ genres, caption: syncCaptionGenres(draft.caption, genres) });
+  }
+
+  async function analyzeGenres() {
+    if (!selectedEntry || selectedEntry.type !== "event" || !eventFlyer) return;
+    setGenreAnalysisLoading(true);
+    setGenreAnalysisError("");
+    try {
+      const suggestions = await analyzeEventFlyerGenres(selectedEntry.id);
+      setGenreAnalysis((current) => ({ ...current, [selectedEntry.id]: suggestions }));
+    } catch (cause) {
+      setGenreAnalysisError(cause instanceof Error ? cause.message : "Die Genres konnten nicht aus dem Flyer erkannt werden.");
+    } finally {
+      setGenreAnalysisLoading(false);
+    }
   }
 
   async function saveDraft() {
@@ -537,6 +562,40 @@ export default function RedaktionPage() {
                 )}
                 {eventFlyerSaving && <p className="mt-2 text-xs text-neutral-400" role="status">Event-Flyer wird gespeichert ...</p>}
                 {eventFlyerError && <p className="mt-2 text-xs text-red-300" role="alert">{eventFlyerError}</p>}
+                {eventFlyer && (
+                  <div className="mt-4 rounded-lg border border-white/10 bg-neutral-900/60 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h4 className="text-sm font-semibold">Genres aus Flyer erkennen</h4>
+                        <p className="mt-1 text-xs leading-5 text-neutral-500">
+                          KI-Vorschläge werden nur nach deiner Prüfung übernommen.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void analyzeGenres()}
+                        disabled={genreAnalysisLoading || eventFlyerSaving}
+                        className="min-h-10 rounded-lg border border-white/20 px-3 py-2 text-sm hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {genreAnalysisLoading ? "Flyer wird analysiert ..." : "Genres erkennen"}
+                      </button>
+                    </div>
+                    {genreAnalysisError && <p className="mt-3 text-sm text-red-300" role="alert">{genreAnalysisError}</p>}
+                    {currentGenreSuggestions.length > 0 && (
+                      <div className="mt-3 border-t border-white/10 pt-3">
+                        <p className="text-xs text-neutral-400">Vorschläge: {currentGenreSuggestions.map((suggestion) => `${suggestion.genre} (${Math.round(suggestion.confidence * 100)}%)`).join(", ")}</p>
+                        <button
+                          type="button"
+                          onClick={applyGenreSuggestions}
+                          disabled={draftSaving}
+                          className="mt-3 min-h-10 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Vorschläge übernehmen
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </section>
               <label className="mt-5 block">
                 <span className="mb-2 block text-sm text-neutral-300">Caption</span>

@@ -23,15 +23,23 @@ import org.springframework.http.HttpStatus;
 public class CalendarEntryFlyerController {
 
     private final CalendarEntryFlyerService flyerService;
+    private final FlyerGenreAnalysisService genreAnalysisService;
 
-    public CalendarEntryFlyerController(CalendarEntryFlyerService flyerService) {
+    public CalendarEntryFlyerController(CalendarEntryFlyerService flyerService,
+                                        FlyerGenreAnalysisService genreAnalysisService) {
         this.flyerService = flyerService;
+        this.genreAnalysisService = genreAnalysisService;
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public PartyFlyerResponse upload(@PathVariable String entryId,
                                      @RequestPart("file") MultipartFile file) {
         return flyerService.upload(entryId, file);
+    }
+
+    @PostMapping("/analysis")
+    public FlyerGenreAnalysisResponse analyzeGenres(@PathVariable String entryId) {
+        return genreAnalysisService.analyze(entryId);
     }
 
     @GetMapping
