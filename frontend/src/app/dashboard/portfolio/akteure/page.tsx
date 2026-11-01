@@ -143,7 +143,7 @@ export default function ActorsPage() {
   }
 
   return (
-    <main className="min-h-dvh bg-black px-4 py-8 text-white md:px-10">
+    <main className="app-page min-h-dvh bg-black px-4 py-6 text-white sm:py-8 md:px-10">
       <div className="mx-auto max-w-5xl">
         <Link
           href="/dashboard/portfolio"
@@ -152,7 +152,7 @@ export default function ActorsPage() {
           ← Party-Portfolio
         </Link>
 
-        <header className="mt-6 flex flex-wrap items-end justify-between gap-4">
+        <header className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">
               NoizyCologne / Stammdaten
@@ -170,7 +170,7 @@ export default function ActorsPage() {
           <button
             type="button"
             onClick={createNew}
-            className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black"
+            className="min-h-12 rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black"
           >
             + Akteur anlegen
           </button>
@@ -202,7 +202,7 @@ export default function ActorsPage() {
               {actors.map((actor) => (
                 <div
                   key={actor.id}
-                  className="flex flex-wrap items-center justify-between gap-4 py-4"
+                  className="flex flex-col items-stretch gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div>
                     <p className="font-semibold">{actor.name}</p>
@@ -242,7 +242,7 @@ export default function ActorsPage() {
                   <button
                     type="button"
                     onClick={() => editActor(actor)}
-                    className="rounded-lg border border-white/15 px-4 py-2 text-sm hover:bg-white/10"
+                    className="min-h-11 rounded-lg border border-white/15 px-4 py-2 text-sm hover:bg-white/10"
                   >
                     Bearbeiten
                   </button>
@@ -256,7 +256,7 @@ export default function ActorsPage() {
         {editorOpen && (
           <form
             onSubmit={saveActor}
-            className="mt-6 rounded-xl border border-white/20 bg-neutral-950 p-6"
+            className="mt-6 rounded-xl border border-white/20 bg-neutral-950 p-4 sm:p-6"
           >
             <h2 className="text-xl font-semibold">
               {editingId ? "Akteur bearbeiten" : "Neuer Akteur"}
@@ -364,7 +364,7 @@ export default function ActorsPage() {
               </p>
             )}
 
-            <div className="mt-6 flex gap-3">
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:flex">
               <button
                 type="submit"
                 disabled={saving}

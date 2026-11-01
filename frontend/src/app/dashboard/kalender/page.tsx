@@ -123,7 +123,7 @@ export default function CalendarPage() {
   }
 
   return (
-    <main className="min-h-dvh bg-black px-4 py-8 text-white md:px-10">
+    <main className="app-page min-h-dvh bg-black px-4 py-6 text-white sm:py-8 md:px-10">
       <div className="mx-auto max-w-6xl">
         <Link
           href="/dashboard"
@@ -182,7 +182,7 @@ export default function CalendarPage() {
                 year: "numeric",
               })}
             </h2>
-            <div className="flex gap-2">
+            <div className="flex gap-1.5 sm:gap-2">
               <button
                 type="button"
                 onClick={() => changeMonth(-1)}
@@ -234,7 +234,7 @@ export default function CalendarPage() {
                     year: "numeric",
                   })}, ${dayEntries.length} Einträge`}
                   className={[
-                    "min-h-20 min-w-0 p-1 text-left transition-colors sm:min-h-28 sm:p-2",
+                    "min-h-16 min-w-0 p-1 text-left transition-colors sm:min-h-28 sm:p-2",
                     inMonth
                       ? isWeekend
                         ? "bg-neutral-900"

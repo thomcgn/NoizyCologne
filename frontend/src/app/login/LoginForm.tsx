@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import ThemeToggle from "../ThemeToggle";
 
 export default function LoginForm() {
   const router = useRouter();
@@ -41,17 +42,22 @@ export default function LoginForm() {
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-[#050505] px-5 py-10 text-white">
+    <main className="app-page flex min-h-dvh items-center justify-center bg-[#050505] px-5 py-10 text-white">
+      <div className="fixed right-4 top-4 sm:right-8 sm:top-8">
+        <ThemeToggle />
+      </div>
       <section className="w-full max-w-md rounded-2xl border border-white/10 bg-neutral-950/80 p-7 shadow-2xl shadow-black/40 sm:p-10">
         <div className="mb-10 text-center">
-          <Image
-            src="/noizy-logo-white.png"
-            alt="NoizyCologne"
-            width={240}
-            height={80}
-            className="mx-auto h-auto w-52"
-            priority
-          />
+          <div className="theme-brand mx-auto w-fit rounded-2xl bg-black px-6 py-4">
+            <Image
+              src="/noizy-logo-white.png"
+              alt="NoizyCologne"
+              width={240}
+              height={80}
+              className="h-auto w-52"
+              priority
+            />
+          </div>
           <p className="mt-6 text-xs font-medium uppercase tracking-[0.28em] text-neutral-500">
             Team Dashboard
           </p>

@@ -5,6 +5,14 @@
   --foreground: #171717;
 }
 
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -23,4 +31,55 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* The existing screens use Tailwind's dark palette. These token overrides keep
+   the theme switch small and consistent without changing application logic. */
+[data-theme="light"] body,
+[data-theme="light"] .app-page {
+  background: #f4f4f1 !important;
+  color: #171717;
+}
+
+[data-theme="light"] [class~="bg-[#050505]"] { background-color: #f4f4f1 !important; }
+
+[data-theme="light"] [class~="bg-black"] { background-color: #f4f4f1; }
+[data-theme="light"] [class~="bg-neutral-950"] { background-color: #ffffff; }
+[data-theme="light"] [class~="bg-neutral-900"] { background-color: #ecece8; }
+[data-theme="light"] [class~="bg-white/5"] { background-color: rgb(23 23 23 / 0.04); }
+[data-theme="light"] [class~="bg-white/10"] { background-color: rgb(23 23 23 / 0.08); }
+[data-theme="light"] [class~="text-white"] { color: #171717; }
+[data-theme="light"] [class~="text-black"] { color: #ffffff; }
+[data-theme="light"] [class~="text-neutral-200"] { color: #262626; }
+[data-theme="light"] [class~="text-neutral-300"] { color: #404040; }
+[data-theme="light"] [class~="text-neutral-400"] { color: #525252; }
+[data-theme="light"] [class~="text-neutral-500"] { color: #737373; }
+[data-theme="light"] [class~="text-neutral-600"] { color: #a3a3a3; }
+[data-theme="light"] [class~="border-white/10"] { border-color: rgb(23 23 23 / 0.12); }
+[data-theme="light"] [class~="border-white/15"] { border-color: rgb(23 23 23 / 0.18); }
+[data-theme="light"] [class~="border-white/20"] { border-color: rgb(23 23 23 / 0.25); }
+[data-theme="light"] [class~="divide-white/10"] > :not([hidden]) ~ :not([hidden]) { border-color: rgb(23 23 23 / 0.12); }
+[data-theme="light"] [class~="placeholder:text-neutral-600"]::placeholder { color: #a3a3a3; }
+[data-theme="light"] .theme-brand { background-color: #050505 !important; }
+
+@media (max-width: 640px) {
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button,
+  a {
+    touch-action: manipulation;
+  }
+
+  button,
+  select,
+  textarea,
+  input:not([type="checkbox"]):not([type="color"]):not([type="file"]) {
+    min-height: 44px;
+  }
 }

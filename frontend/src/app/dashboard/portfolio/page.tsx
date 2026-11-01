@@ -335,7 +335,7 @@ export default function PortfolioPage() {
   }
 
   return (
-    <main className="min-h-dvh bg-black px-4 py-8 text-white md:px-10">
+    <main className="app-page min-h-dvh bg-black px-4 py-6 text-white sm:py-8 md:px-10">
       <div className="mx-auto max-w-6xl">
         <Link
           href="/dashboard"
@@ -360,13 +360,13 @@ export default function PortfolioPage() {
 
         <Link
           href="/dashboard/portfolio/akteure"
-          className="mt-5 inline-block rounded-lg border border-white/20 px-5 py-3 text-sm hover:bg-white/10"
+          className="mt-5 inline-flex min-h-12 items-center rounded-lg border border-white/20 px-5 py-3 text-sm hover:bg-white/10"
         >
           DJs, Kollektive & Veranstalter verwalten →
         </Link>
 
         {/* Kategorien */}
-        <div className="mt-8 flex flex-wrap gap-2">
+        <div className="mt-8 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           <button
             type="button"
             onClick={() => switchCategory("parties")}
@@ -457,7 +457,7 @@ export default function PortfolioPage() {
                 return (
                   <div
                     key={item.id}
-                    className="flex flex-wrap items-center justify-between gap-4 py-4"
+                    className="flex flex-col items-stretch gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="min-w-0">
                       <p className="font-medium">{item.name}</p>
@@ -498,7 +498,7 @@ export default function PortfolioPage() {
                     <button
                       type="button"
                       onClick={() => editItem(item)}
-                      className="rounded-lg border border-white/15 px-4 py-2 text-sm hover:bg-white/10"
+                      className="min-h-11 rounded-lg border border-white/15 px-4 py-2 text-sm hover:bg-white/10"
                     >
                       Bearbeiten
                     </button>
@@ -513,7 +513,7 @@ export default function PortfolioPage() {
         {editorOpen && (
           <form
             onSubmit={saveItem}
-            className="mt-6 rounded-xl border border-white/20 bg-neutral-950 p-6"
+            className="mt-6 rounded-xl border border-white/20 bg-neutral-950 p-4 sm:p-6"
           >
             <h2 className="text-xl font-semibold">
               {editingId ? "Eintrag bearbeiten" : "Neuer Eintrag"}
@@ -887,7 +887,7 @@ export default function PortfolioPage() {
               </p>
             )}
 
-            <div className="mt-8 flex gap-3">
+            <div className="mt-8 grid grid-cols-2 gap-3 sm:flex">
               <button
                 type="submit"
                 disabled={saving}

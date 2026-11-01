@@ -19,7 +19,7 @@ interface EntryEditorProps {
 
 const inputStyle =
   "w-full rounded-lg border border-white/15 bg-neutral-900 " +
-  "px-3 py-2.5 text-sm text-white outline-none " +
+  "min-h-12 px-3 py-2.5 text-sm text-white outline-none " +
   "focus:border-white/60";
 
 export default function EntryEditor({
@@ -162,7 +162,7 @@ export default function EntryEditor({
   return (
     <form
       onSubmit={saveEntry}
-      className="mt-6 rounded-xl border border-white/10 bg-neutral-950 p-6"
+      className="mt-6 rounded-xl border border-white/10 bg-neutral-950 p-4 sm:p-6"
     >
       <div className="mb-6">
         <h2 className="text-xl font-semibold">
@@ -283,7 +283,7 @@ export default function EntryEditor({
               {availableDjs.map((dj) => (
                 <label
                   key={dj.id}
-                  className="flex items-center gap-3 rounded-lg bg-neutral-900 p-3"
+                    className="flex min-h-12 items-center gap-3 rounded-lg bg-neutral-900 p-3"
                 >
                   <input
                     type="checkbox"
