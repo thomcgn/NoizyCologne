@@ -3106,10 +3106,10 @@ Ein Coding-Agent darf erklären, Tests erzeugen und Code vorschlagen; **die Lern
 | Akteure | Personen/Kollektive erfassen; Rollen DJ/Veranstalter und Beziehungen zu Partys | Nur React-State; keine persistierte Datenbank |
 | Turnus | Optional kein Turnus, wöchentlich nach Wochentag, monatlich nach n-tem/letztem Wochentag oder Freitext | Keine automatische Terminerzeugung; nach Reload verloren |
 | Location-Portfolio | Locations mit Instagram-Handle verwalten | Nur React-State |
-| Kalender | Eintrag erstellen, als farbige Party im Monatsraster sehen, mehrere Events am Tag, Location-Sperre, Bearbeiten/Löschen, DJ-Mentions in Event-Editor | Keine persistente Speicherung; kein Redaktions-Post; kein veröffentlichtes Instagram-Ereignis |
-| Webauftritt | Öffentliche Landingpage mit NoizyCologne-Auftritt auf gebuchter Domain | Keine produktive Team-Oberfläche, keine öffentlich freigegebene REST-Fach-API |
-| Backend/Deployment | Lokal Spring Boot Health/Status und PostgreSQL-Docker-Umgebung; CI/CD-Grundstruktur | Flyway-Fachschema und CRUD-Anbindung der Oberflächen stehen noch aus |
-| Flyer/Redaktion | Fachlich entschieden, **noch nicht als bedienbar bestätigt** | Kein Flyer-Upload, kein Post-Editor, kein Meta-Publishing |
+| Kalender | Eintrag erstellen, als farbige Party im Monatsraster sehen, mehrere Events am Tag, Location-Sperre, Bearbeiten/Löschen, DJ-Mentions in Event-Editor | Kein veröffentlichtes Instagram-Ereignis |
+| Webauftritt | Öffentliche Landingpage und geschützte Team-Oberfläche mit Login | Keine öffentlich freigegebene REST-Fach-API |
+| Backend/Deployment | Spring Boot, PostgreSQL, Flyway und persistente CRUD-Anbindung der Stammdaten, Kalenderdaten und Medien | Meta-Publishing bleibt deaktiviert |
+| Flyer/Redaktion | Dauerflyer, Event-Flyer, Instagram-nahe Vorschau und persistente Redaktionsentwürfe | Kein Meta-Publishing; Freigabe ist technisch lokal/serverseitig gespeichert, aber nicht an Instagram gekoppelt |
 
 **Qualifizierung des Status:** Diese Bestandsaufnahme basiert auf den bis 31.10.2026 im gemeinsamen Entwicklungsgespräch erfolgreich getesteten lokalen Schritten und auf der bekannten Repository-Struktur. Sie ist **kein** behaupteter End-to-End-Test gegen einen produktiven Server. Ein lokal bestätigter `npx tsc --noEmit`-Check ersetzt keine Integrationstests.
 
@@ -3211,13 +3211,11 @@ flowchart TD
 | PostgreSQL-CRUD später | Alle Daten bleiben nach Reload erhalten; API-Validierung und Änderungsrechte geprüft |
 | Vorzeitiger Publishing-Aufruf | Blockiert, solange Gate-Freigaben/echtes Bild fehlen oder Feature Flag deaktiviert ist |
 
-## 23.9 Nächste kleine Coding-Tickets (nur Planung; noch nicht umgesetzt)
+## 23.9 Nächste kleine Coding-Tickets
 
-- **NC-101 – Persistente Stammdaten:** Partyreihen, Farben, Turnus, Actors/Kollektive, Zuordnungen und Locations via Flyway, DTO und CRUD. Frontend-Rückkopplung; Migrationstests.
-- **NC-102 – Persistenter Kalender:** Event-/Sperr-CRUD, Mehrfacheinträge, farbige Monatsansicht, DJ-Mention-Auswahl; Refresh- und Fehlerfälle testen.
-- **NC-103 – Dauerflyer:** Medienverwaltung, Upload, Vorschau, Austausch/Entfernen im Party-Portfolio. Event-freie Nutzung testen.
-- **NC-104 – Instagram-Redaktion:** optisch realistische Foto-Feed-Post-Vorschau, Caption/Hashtag/Mention-Editor, Standardflyer-Fallback und Event-Override; responsive und nicht publizierend.
-- **NC-105 – Redaktion → Freigabe/Feed:** weitere vom Team zu definierende Gates, Feed-Reihenfolge, Bildpflicht und Meta-PoC. **Kein** aktives Live-Publishing ohne ausdrückliche Abnahme.
+- **NC-101 bis NC-104 – umgesetzt:** Persistente Stammdaten, Kalender, Dauer-/Event-Flyer und Instagram-nahe nicht publizierende Redaktion.
+- **NC-105a – umgesetzt:** Persistente Redaktionsentwürfe pro Event mit Caption, Hashtags, DJ-Mentions und den Statuswerten `DRAFT`, `READY_FOR_REVIEW` und `APPROVED`. Alle authentifizierten Teammitglieder dürfen alle Status bearbeiten; es gibt keine abgestuften Freigaberollen.
+- **NC-105b – offen:** Weitere fachliche Pre-Publish-Gates, Feed-Planung und ein ausdrücklich abzunehmender Meta-PoC. **Kein** aktives Live-Publishing ohne ausdrückliche Abnahme.
 
 ## 23.10 Festhaltepunkt für den nächsten Commit
 

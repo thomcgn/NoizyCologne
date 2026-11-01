@@ -7,6 +7,7 @@ import {
   useCatalog,
   type Actor,
   type CalendarEntry,
+  type EditorialDraftStatus,
   type PartySeries,
 } from "../CatalogProvider";
 
@@ -40,6 +41,7 @@ type DraftState = {
   caption: string;
   hashtags: string;
   mentionIds: string[];
+  status: EditorialDraftStatus;
 };
 
 type GateState = {
@@ -50,7 +52,21 @@ type GateState = {
 };
 
 export default function RedaktionPage() {
-  const { entries, entriesLoading, entriesError, reloadEntries, parties, venues, actors } = useCatalog();
+  const {
+    entries,
+    entriesLoading,
+    entriesError,
+    reloadEntries,
+    parties,
+    venues,
+    actors,
+    drafts: persistedDrafts,
+    draftsLoading,
+    draftsError,
+    reloadDrafts,
+    createDraft,
+    updateDraft: updatePersistedDraft,
+  } = useCatalog();
   const { uploadEventFlyer, deleteEventFlyer } = useCatalog();
   const eventEntries = useMemo(
     () => entries
@@ -59,10 +75,12 @@ export default function RedaktionPage() {
     [entries]
   );
   const [selectedId, setSelectedId] = useState("");
-  const [drafts, setDrafts] = useState<Record<string, DraftState>>({});
+  const [localDrafts, setLocalDrafts] = useState<Record<string, DraftState>>({});
   const [gateStates, setGateStates] = useState<Record<string, GateState>>({});
   const [eventFlyerSaving, setEventFlyerSaving] = useState(false);
   const [eventFlyerError, setEventFlyerError] = useState("");
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [draftError, setDraftError] = useState("");
   const [feedOrder, setFeedOrder] = useState<string[]>([]);
   const orderedEventEntries = useMemo(() => {
     const byId = new Map(eventEntries.map((entry) => [entry.id, entry]));
@@ -83,6 +101,9 @@ export default function RedaktionPage() {
   const selectedVenue = selectedEntry
     ? venues.find((venue) => venue.id === selectedEntry.locationId) ?? null
     : null;
+  const persistedDraft = selectedEntry
+    ? persistedDrafts.find((item) => item.calendarEntryId === selectedEntry.id) ?? null
+    : null;
   const mentionableDjs = selectedParty
     ? actors.filter((actor) =>
         actor.roles.includes("dj") &&
@@ -95,12 +116,13 @@ export default function RedaktionPage() {
 
   const defaultDraft: DraftState = selectedEntry && selectedParty
     ? {
-        caption: buildCaption(selectedEntry, selectedParty, selectedVenue?.name ?? ""),
-        hashtags: "",
-        mentionIds: selectedEntry.mentionDjIds,
+        caption: persistedDraft?.caption ?? buildCaption(selectedEntry, selectedParty, selectedVenue?.name ?? ""),
+        hashtags: persistedDraft?.hashtags ?? "",
+        mentionIds: persistedDraft?.mentionActorIds ?? selectedEntry.mentionDjIds,
+        status: persistedDraft?.status ?? "DRAFT",
       }
-    : { caption: "", hashtags: "", mentionIds: [] };
-  const draft = drafts[activeId] ?? defaultDraft;
+    : { caption: "", hashtags: "", mentionIds: [], status: "DRAFT" };
+  const draft = localDrafts[activeId] ?? defaultDraft;
   const gates = gateStates[activeId] ?? {
     captionReviewed: false,
     hashtagsReviewed: false,
@@ -113,10 +135,44 @@ export default function RedaktionPage() {
 
   function updateDraft(patch: Partial<DraftState>) {
     if (!activeId) return;
-    setDrafts((current) => ({
+    setLocalDrafts((current) => ({
       ...current,
       [activeId]: { ...draft, ...patch },
     }));
+  }
+
+  async function saveDraft() {
+    if (!selectedEntry || selectedEntry.type !== "event") return;
+    setDraftSaving(true);
+    setDraftError("");
+    try {
+      const saved = persistedDraft
+        ? await updatePersistedDraft({
+            ...draft,
+            id: persistedDraft.id,
+            calendarEntryId: selectedEntry.id,
+            mentionActorIds: draft.mentionIds,
+          })
+        : await createDraft(selectedEntry.id, {
+            caption: draft.caption,
+            hashtags: draft.hashtags,
+            mentionActorIds: draft.mentionIds,
+            status: draft.status,
+          });
+      setLocalDrafts((current) => ({
+        ...current,
+        [selectedEntry.id]: {
+          caption: saved.caption,
+          hashtags: saved.hashtags,
+          mentionIds: saved.mentionActorIds,
+          status: saved.status,
+        },
+      }));
+    } catch (cause) {
+      setDraftError(cause instanceof Error ? cause.message : "Der Redaktionsentwurf konnte nicht gespeichert werden.");
+    } finally {
+      setDraftSaving(false);
+    }
   }
 
   function toggleMention(id: string) {
@@ -224,6 +280,23 @@ export default function RedaktionPage() {
               type="button"
               onClick={() => void reloadEntries()}
               className="mt-3 rounded-lg border border-white/20 px-4 py-2 text-sm hover:bg-white/10"
+            >
+              Erneut versuchen
+            </button>
+          </div>
+        )}
+        {draftsLoading && (
+          <p className="mt-3 text-sm text-neutral-500" role="status">
+            Gespeicherte Redaktionsentwürfe werden geladen ...
+          </p>
+        )}
+        {draftsError && (
+          <div className="mt-3 rounded-lg border border-red-500/30 bg-red-950/20 p-3" role="alert">
+            <p className="text-sm text-red-300">{draftsError}</p>
+            <button
+              type="button"
+              onClick={() => void reloadDrafts()}
+              className="mt-3 min-h-10 rounded-lg border border-white/20 px-3 py-2 text-sm hover:bg-white/10"
             >
               Erneut versuchen
             </button>
@@ -383,8 +456,21 @@ export default function RedaktionPage() {
             <section className="rounded-xl border border-white/10 bg-neutral-950 p-4 sm:p-6">
               <h2 className="text-lg font-semibold">Entwurf bearbeiten</h2>
               <p className="mt-2 text-sm leading-6 text-neutral-400">
-                Änderungen bleiben zunächst nur in dieser Ansicht erhalten.
+                Änderungen werden erst mit „Entwurf speichern“ dauerhaft in PostgreSQL gespeichert.
               </p>
+              <label className="mt-5 block">
+                <span className="mb-2 block text-sm text-neutral-300">Redaktionsstatus</span>
+                <select
+                  className="min-h-12 w-full rounded-lg border border-white/15 bg-neutral-900 px-3 py-2.5 text-sm text-white outline-none focus:border-white/60"
+                  value={draft.status}
+                  onChange={(event) => updateDraft({ status: event.target.value as EditorialDraftStatus })}
+                  disabled={draftSaving}
+                >
+                  <option value="DRAFT">Entwurf</option>
+                  <option value="READY_FOR_REVIEW">Zur Prüfung bereit</option>
+                  <option value="APPROVED">Freigegeben (nicht veröffentlicht)</option>
+                </select>
+              </label>
               <section className="mt-5 rounded-lg border border-white/10 p-4">
                 <h3 className="text-sm font-semibold">Event-Flyer</h3>
                 <p className="mt-1 text-xs leading-5 text-neutral-500">
@@ -505,6 +591,15 @@ export default function RedaktionPage() {
                   </p>
                 </div>
               </fieldset>
+              <button
+                type="button"
+                onClick={() => void saveDraft()}
+                disabled={draftSaving || draftsLoading || Boolean(draftsError)}
+                className="mt-5 min-h-12 w-full rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {draftSaving ? "Entwurf wird gespeichert ..." : persistedDraft ? "Entwurf speichern" : "Entwurf anlegen"}
+              </button>
+              {draftError && <p className="mt-2 text-sm text-red-300" role="alert">{draftError}</p>}
             </section>
           </div>
         )}

@@ -67,6 +67,17 @@ export type PartySeries = CatalogItem & {
   defaultFlyer: PartyFlyer | null;
 };
 
+export type EditorialDraftStatus = "DRAFT" | "READY_FOR_REVIEW" | "APPROVED";
+
+export type EditorialPostDraft = {
+  id: string;
+  calendarEntryId: string;
+  caption: string;
+  hashtags: string;
+  mentionActorIds: string[];
+  status: EditorialDraftStatus;
+};
+
 type EntryBase = {
   id: string;
   date: string; // Lokales Kalenderdatum: YYYY-MM-DD (ohne Zeitzonen-Verschiebung)
@@ -122,6 +133,12 @@ type CatalogContextValue = {
   deletePartyFlyer: (partyId: string) => Promise<void>;
   uploadEventFlyer: (entryId: string, file: File) => Promise<PartyFlyer>;
   deleteEventFlyer: (entryId: string) => Promise<void>;
+  drafts: EditorialPostDraft[];
+  draftsLoading: boolean;
+  draftsError: string | null;
+  reloadDrafts: () => Promise<void>;
+  createDraft: (calendarEntryId: string, draft: Omit<EditorialPostDraft, "id" | "calendarEntryId">) => Promise<EditorialPostDraft>;
+  updateDraft: (draft: EditorialPostDraft) => Promise<EditorialPostDraft>;
   venues: CatalogItem[];
   venuesLoading: boolean;
   venuesError: string | null;
@@ -309,6 +326,93 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
 
     return () => window.clearTimeout(loadTimer);
   }, [reloadParties]);
+
+  const [drafts, setDrafts] = useState<EditorialPostDraft[]>([]);
+  const [draftsLoading, setDraftsLoading] = useState(true);
+  const [draftsError, setDraftsError] = useState<string | null>(null);
+
+  const parseDraftResponse = useCallback((body: unknown): EditorialPostDraft => {
+    if (typeof body !== "object" || body === null) {
+      throw new Error("Die Redaktions-API lieferte ein unerwartetes Antwortformat.");
+    }
+    const draft = body as Record<string, unknown>;
+    const validStatus = draft.status === "DRAFT" || draft.status === "READY_FOR_REVIEW" || draft.status === "APPROVED";
+    const validIds = Array.isArray(draft.mentionActorIds) && draft.mentionActorIds.every((id) => typeof id === "string");
+    if (
+      typeof draft.id !== "string" ||
+      typeof draft.calendarEntryId !== "string" ||
+      typeof draft.caption !== "string" ||
+      typeof draft.hashtags !== "string" ||
+      !validIds ||
+      !validStatus
+    ) {
+      throw new Error("Die Redaktions-API lieferte ein unerwartetes Antwortformat.");
+    }
+    return {
+      id: draft.id,
+      calendarEntryId: draft.calendarEntryId,
+      caption: draft.caption,
+      hashtags: draft.hashtags,
+      mentionActorIds: draft.mentionActorIds as string[],
+      status: draft.status as EditorialDraftStatus,
+    };
+  }, []);
+
+  const reloadDrafts = useCallback(async () => {
+    setDraftsLoading(true);
+    setDraftsError(null);
+    try {
+      const response = await fetch("/api/v1/editorial-drafts", {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      if (!response.ok) throw new Error(await readPartyError(response));
+      const body: unknown = await response.json();
+      if (!Array.isArray(body)) throw new Error("Die Redaktions-API lieferte kein gültiges Listenformat.");
+      setDrafts(body.map(parseDraftResponse));
+    } catch (cause) {
+      setDrafts([]);
+      setDraftsError(cause instanceof Error ? `Redaktionsentwürfe konnten nicht geladen werden: ${cause.message}` : "Redaktionsentwürfe konnten nicht geladen werden.");
+    } finally {
+      setDraftsLoading(false);
+    }
+  }, [parseDraftResponse]);
+
+  useEffect(() => {
+    const loadTimer = window.setTimeout(() => { void reloadDrafts(); }, 0);
+    return () => window.clearTimeout(loadTimer);
+  }, [reloadDrafts]);
+
+  async function createDraft(calendarEntryId: string, draft: Omit<EditorialPostDraft, "id" | "calendarEntryId">) {
+    const response = await fetch(`/api/v1/calendar-entries/${encodeURIComponent(calendarEntryId)}/editorial-drafts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(draft),
+    });
+    if (!response.ok) throw new Error(await readPartyError(response));
+    const created = parseDraftResponse(await response.json());
+    setDrafts((current) => [...current, created]);
+    return created;
+  }
+
+  async function updateDraft(draft: EditorialPostDraft) {
+    const response = await fetch(`/api/v1/editorial-drafts/${encodeURIComponent(draft.id)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        caption: draft.caption,
+        hashtags: draft.hashtags,
+        mentionActorIds: draft.mentionActorIds,
+        status: draft.status,
+      }),
+    });
+    if (!response.ok) throw new Error(await readPartyError(response));
+    const updated = parseDraftResponse(await response.json());
+    setDrafts((current) => current.map((item) => item.id === updated.id ? updated : item));
+    return updated;
+  }
 
   async function createParty(party: Omit<PartySeries, "id">) {
     const response = await fetch("/api/v1/parties", {
@@ -867,6 +971,12 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         deletePartyFlyer,
         uploadEventFlyer,
         deleteEventFlyer,
+        drafts,
+        draftsLoading,
+        draftsError,
+        reloadDrafts,
+        createDraft,
+        updateDraft,
         venues,
         venuesLoading,
         venuesError,
