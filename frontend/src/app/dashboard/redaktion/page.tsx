@@ -219,6 +219,7 @@ export default function RedaktionPage() {
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [hoveredPreviewId, setHoveredPreviewId] = useState<string | null>(null);
+  const [previewPosition, setPreviewPosition] = useState({ x: 16, y: 16 });
   const feedPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragStartRef = useRef<{ id: string; x: number; y: number; pointerId: number } | null>(null);
   const dragMovedRef = useRef(false);
@@ -329,6 +330,41 @@ export default function RedaktionPage() {
   const automaticGates = Boolean(selectedEntry && selectedParty && selectedVenue && flyerUrl);
   const manualGates = Object.values(gates).every(Boolean);
   const allGatesPassed = automaticGates && manualGates;
+  const hoveredEntry = hoveredPreviewId
+    ? orderedEventEntries.find((entry) => entry.id === hoveredPreviewId) ?? null
+    : null;
+  const hoveredParty = hoveredEntry
+    ? parties.find((party) => party.id === hoveredEntry.partyId) ?? null
+    : null;
+  const hoveredVenue = hoveredEntry
+    ? venues.find((venue) => venue.id === hoveredEntry.locationId) ?? null
+    : null;
+  const hoveredPersistedDraft = hoveredEntry
+    ? persistedDrafts.find((item) => item.calendarEntryId === hoveredEntry.id) ?? null
+    : null;
+  const hoveredDraft = hoveredEntry
+    ? localDrafts[hoveredEntry.id] ?? (hoveredPersistedDraft ? {
+        caption: hoveredPersistedDraft.caption,
+        hashtags: hoveredPersistedDraft.hashtags,
+        mentionIds: hoveredPersistedDraft.mentionActorIds,
+        genres: hoveredPersistedDraft.genres,
+        status: hoveredPersistedDraft.status,
+      } : null)
+    : null;
+  const hoveredMentionIds = hoveredDraft?.mentionIds
+    ?? (hoveredEntry?.mentionDjIds.length
+      ? hoveredEntry.mentionDjIds
+      : hoveredParty?.djMentionDefault === "residents" ? hoveredParty.residentDjIds : []);
+  const hoveredCaption = hoveredEntry && hoveredVenue && hoveredParty
+    ? hoveredDraft?.caption || buildCaption(
+        hoveredEntry,
+        hoveredVenue,
+        actors,
+        captionPreText,
+        hoveredDraft?.genres ?? [],
+        hoveredMentionIds,
+      )
+    : "";
 
   function updateDraft(patch: Partial<DraftState>) {
     if (!activeId) return;
@@ -557,14 +593,20 @@ export default function RedaktionPage() {
     setIsDragging(false);
   }
 
-  function startFeedPreview(entryId: string) {
+  function startFeedPreview(event: PointerEvent<HTMLButtonElement>, entryId: string) {
     if (isDragging) return;
     if (feedPreviewTimerRef.current) clearTimeout(feedPreviewTimerRef.current);
+    const popupWidth = Math.min(470, window.innerWidth - 32);
+    const popupHeight = Math.min(700, window.innerHeight - 32);
+    setPreviewPosition({
+      x: Math.max(16, Math.min(event.clientX + 18, window.innerWidth - popupWidth - 16)),
+      y: Math.max(16, Math.min(event.clientY + 18, window.innerHeight - popupHeight - 16)),
+    });
     setHoveredPreviewId(null);
     feedPreviewTimerRef.current = setTimeout(() => {
       setHoveredPreviewId(entryId);
       feedPreviewTimerRef.current = null;
-    }, 3000);
+    }, 2000);
   }
 
   function stopFeedPreview(entryId: string) {
@@ -665,24 +707,6 @@ export default function RedaktionPage() {
                   const isActive = entry.id === activeId;
                   const isDragged = entry.id === draggedId;
                   const isDropTarget = entry.id === dropTargetId && isDragging && !isDragged;
-                  const persistedEntryDraft = persistedDrafts.find((item) => item.calendarEntryId === entry.id);
-                  const localEntryDraft = localDrafts[entry.id];
-                  const previewDraft = localEntryDraft ?? (persistedEntryDraft ? {
-                    caption: persistedEntryDraft.caption,
-                    hashtags: persistedEntryDraft.hashtags,
-                    mentionIds: persistedEntryDraft.mentionActorIds,
-                    genres: persistedEntryDraft.genres,
-                    status: persistedEntryDraft.status,
-                  } : null);
-                  const previewVenue = venues.find((venue) => venue.id === entry.locationId) ?? null;
-                  const previewMentionIds = previewDraft?.mentionIds
-                    ?? (entry.mentionDjIds.length > 0
-                      ? entry.mentionDjIds
-                      : party?.djMentionDefault === "residents" ? party.residentDjIds : []);
-                  const previewCaption = previewDraft?.caption
-                    || (previewVenue && party
-                      ? buildCaption(entry, previewVenue, actors, captionPreText, previewDraft?.genres ?? [], previewMentionIds)
-                      : "");
                   return (
                     <button
                       key={entry.id}
@@ -695,7 +719,7 @@ export default function RedaktionPage() {
                         isDropTarget ? "scale-[0.96] ring-2 ring-inset ring-blue-400" : ""
                       }`}
                       onPointerDown={(event) => startPointerDrag(event, entry.id)}
-                      onPointerEnter={() => startFeedPreview(entry.id)}
+                      onPointerEnter={(event) => startFeedPreview(event, entry.id)}
                       onPointerLeave={() => stopFeedPreview(entry.id)}
                       onPointerMove={updatePointerDrag}
                       onPointerUp={finishPointerDrag}
@@ -749,15 +773,6 @@ export default function RedaktionPage() {
                           <span className="mt-1 text-[10px] text-neutral-500">Flyer fehlt</span>
                         </span>
                       )}
-                      {hoveredPreviewId === entry.id && !isDragging && (
-                        <InstagramPostPreview
-                          flyerUrl={entryFlyerUrl}
-                          partyName={party?.name ?? "Partyreihe"}
-                          caption={previewCaption}
-                          hashtags={previewDraft?.hashtags ?? ""}
-                          compact
-                        />
-                      )}
                       <span className="sr-only">{party?.name ?? "Unbekannte Partyreihe"}, {entry.date}</span>
                     </button>
                   );
@@ -778,6 +793,22 @@ export default function RedaktionPage() {
                 </div>
               )}
             </section>
+
+            {hoveredEntry && hoveredParty && !isDragging && (
+              <div
+                className="pointer-events-none fixed z-50 w-[min(470px,calc(100vw-2rem))]"
+                style={{ left: previewPosition.x, top: previewPosition.y }}
+                role="status"
+                aria-label={`Instagram-Vorschau für ${hoveredParty.name}`}
+              >
+                <InstagramPostPreview
+                  flyerUrl={hoveredEntry.eventFlyer?.url ?? hoveredParty.defaultFlyer?.url ?? null}
+                  partyName={hoveredParty.name}
+                  caption={hoveredCaption}
+                  hashtags={hoveredDraft?.hashtags ?? ""}
+                />
+              </div>
+            )}
 
             <section className="rounded-xl border border-white/10 bg-neutral-950 p-4 sm:p-6">
               <div className="mb-5 flex items-center justify-between gap-3">
