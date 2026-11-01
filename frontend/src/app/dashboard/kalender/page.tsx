@@ -143,7 +143,7 @@ export default function CalendarPage() {
   function selectDay(date: Date) {
     setSelectedDate(date);
     setEditingId(null);
-    setEditorOpen(true);
+    setEditorOpen(false);
 
     if (
       date.getMonth() !== month.getMonth() ||
