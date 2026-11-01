@@ -81,10 +81,12 @@ export type CalendarEntry = EntryBase &
         partyId: string;
         startTime: string;
         mentionDjIds: string[];
+        eventFlyer: PartyFlyer | null;
       }
     | {
         type: "closure";
         reason: string;
+        eventFlyer: null;
       }
   );
 
@@ -118,6 +120,8 @@ type CatalogContextValue = {
   updateParty: (party: PartySeries) => Promise<PartySeries>;
   uploadPartyFlyer: (partyId: string, file: File) => Promise<PartyFlyer>;
   deletePartyFlyer: (partyId: string) => Promise<void>;
+  uploadEventFlyer: (entryId: string, file: File) => Promise<PartyFlyer>;
+  deleteEventFlyer: (entryId: string) => Promise<void>;
   venues: CatalogItem[];
   venuesLoading: boolean;
   venuesError: string | null;
@@ -135,7 +139,7 @@ type CatalogContextValue = {
   entriesError: string | null;
   reloadEntries: () => Promise<void>;
   createEntry: (entry: CalendarEntryPayload) => Promise<CalendarEntry>;
-  updateEntry: (entry: CalendarEntry) => Promise<CalendarEntry>;
+  updateEntry: (entry: CalendarEntryPayload & { id: string }) => Promise<CalendarEntry>;
   deleteEntry: (id: string) => Promise<void>;
 };
 
@@ -671,12 +675,16 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     return `Die Kalender-API antwortete mit HTTP ${response.status}.`;
   }
 
-  function parseCalendarEntry(body: unknown): CalendarEntry {
+  const parseCalendarEntry = useCallback((body: unknown): CalendarEntry => {
     if (typeof body !== "object" || body === null) {
       throw new Error("Die Kalender-API lieferte ein unerwartetes Antwortformat.");
     }
 
     const value = body as Record<string, unknown>;
+    let eventFlyer: PartyFlyer | null = null;
+    if (value.eventFlyer !== null && value.eventFlyer !== undefined) {
+      eventFlyer = parsePartyFlyer(value.eventFlyer);
+    }
     if (
       typeof value.id !== "string" ||
       typeof value.date !== "string" ||
@@ -702,6 +710,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         date: value.date,
         locationId: value.locationId,
         notes: value.notes,
+        eventFlyer,
         type: "event",
         partyId: value.partyId,
         startTime: value.startTime ?? "",
@@ -715,13 +724,14 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         date: value.date,
         locationId: value.locationId,
         notes: value.notes,
+        eventFlyer: null,
         type: "closure",
         reason: value.reason,
       };
     }
 
     throw new Error("Die Kalender-API lieferte einen ungültigen Eintragstyp.");
-  }
+  }, [parsePartyFlyer]);
 
   const reloadEntries = useCallback(async () => {
     setEntriesLoading(true);
@@ -752,7 +762,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     } finally {
       setEntriesLoading(false);
     }
-  }, []);
+  }, [parseCalendarEntry]);
 
   useEffect(() => {
     const loadTimer = window.setTimeout(() => {
@@ -779,7 +789,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     return created;
   }
 
-  async function updateEntry(entry: CalendarEntry) {
+  async function updateEntry(entry: CalendarEntryPayload & { id: string }) {
     const { id, ...payload } = entry;
     const response = await fetch(
       `/api/v1/calendar-entries/${encodeURIComponent(id)}`,
@@ -818,6 +828,32 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     setEntries((current) => current.filter((item) => item.id !== id));
   }
 
+  async function uploadEventFlyer(entryId: string, file: File) {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await fetch(
+      `/api/v1/calendar-entries/${encodeURIComponent(entryId)}/flyer`,
+      { method: "POST", body: formData, credentials: "same-origin" }
+    );
+    if (!response.ok) throw new Error(await readCalendarError(response));
+    const flyer = parsePartyFlyer(await response.json());
+    setEntries((current) => current.map((entry) =>
+      entry.id === entryId && entry.type === "event" ? { ...entry, eventFlyer: flyer } : entry
+    ));
+    return flyer;
+  }
+
+  async function deleteEventFlyer(entryId: string) {
+    const response = await fetch(
+      `/api/v1/calendar-entries/${encodeURIComponent(entryId)}/flyer`,
+      { method: "DELETE", credentials: "same-origin" }
+    );
+    if (!response.ok) throw new Error(await readCalendarError(response));
+    setEntries((current) => current.map((entry) =>
+      entry.id === entryId && entry.type === "event" ? { ...entry, eventFlyer: null } : entry
+    ));
+  }
+
   return (
     <CatalogContext.Provider
       value={{
@@ -829,6 +865,8 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         updateParty,
         uploadPartyFlyer,
         deletePartyFlyer,
+        uploadEventFlyer,
+        deleteEventFlyer,
         venues,
         venuesLoading,
         venuesError,

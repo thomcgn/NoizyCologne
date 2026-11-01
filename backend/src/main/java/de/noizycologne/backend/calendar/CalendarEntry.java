@@ -46,6 +46,9 @@ public class CalendarEntry {
     @Column(length = 200)
     private String reason;
 
+    @Column(name = "event_flyer_media_id", length = 100)
+    private String eventFlyerMediaId;
+
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(
             name = "calendar_entry_mentions",
@@ -111,6 +114,14 @@ public class CalendarEntry {
 
     public Set<String> getMentionDjIds() {
         return mentionDjIds;
+    }
+
+    public String getEventFlyerMediaId() {
+        return eventFlyerMediaId;
+    }
+
+    public void setEventFlyerMediaId(String eventFlyerMediaId) {
+        this.eventFlyerMediaId = eventFlyerMediaId;
     }
 
     public void update(LocalDate eventDate, String locationId, String entryType,

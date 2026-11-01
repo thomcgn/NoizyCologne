@@ -51,6 +51,7 @@ type GateState = {
 
 export default function RedaktionPage() {
   const { entries, entriesLoading, entriesError, reloadEntries, parties, venues, actors } = useCatalog();
+  const { uploadEventFlyer, deleteEventFlyer } = useCatalog();
   const eventEntries = useMemo(
     () => entries
       .filter((entry): entry is Extract<CalendarEntry, { type: "event" }> => entry.type === "event")
@@ -60,6 +61,8 @@ export default function RedaktionPage() {
   const [selectedId, setSelectedId] = useState("");
   const [drafts, setDrafts] = useState<Record<string, DraftState>>({});
   const [gateStates, setGateStates] = useState<Record<string, GateState>>({});
+  const [eventFlyerSaving, setEventFlyerSaving] = useState(false);
+  const [eventFlyerError, setEventFlyerError] = useState("");
   const [feedOrder, setFeedOrder] = useState<string[]>([]);
   const orderedEventEntries = useMemo(() => {
     const byId = new Map(eventEntries.map((entry) => [entry.id, entry]));
@@ -87,7 +90,8 @@ export default function RedaktionPage() {
         actor.instagram
       )
     : [];
-  const flyerUrl = selectedParty?.defaultFlyer?.url ?? null;
+  const eventFlyer = selectedEntry?.eventFlyer ?? null;
+  const flyerUrl = eventFlyer?.url ?? selectedParty?.defaultFlyer?.url ?? null;
 
   const defaultDraft: DraftState = selectedEntry && selectedParty
     ? {
@@ -129,6 +133,40 @@ export default function RedaktionPage() {
       ...current,
       [activeId]: { ...gates, [gate]: !gates[gate] },
     }));
+  }
+
+  async function handleEventFlyer(file: File | null) {
+    if (!file || !selectedEntry || selectedEntry.type !== "event") return;
+    if (!(file.type === "image/jpeg" || file.type === "image/png")) {
+      setEventFlyerError("Bitte einen JPEG- oder PNG-Flyer auswählen.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setEventFlyerError("Der Flyer darf höchstens 10 MB groß sein.");
+      return;
+    }
+    setEventFlyerSaving(true);
+    setEventFlyerError("");
+    try {
+      await uploadEventFlyer(selectedEntry.id, file);
+    } catch (cause) {
+      setEventFlyerError(cause instanceof Error ? cause.message : "Der Event-Flyer konnte nicht gespeichert werden.");
+    } finally {
+      setEventFlyerSaving(false);
+    }
+  }
+
+  async function removeEventFlyer() {
+    if (!selectedEntry || selectedEntry.type !== "event" || !eventFlyer) return;
+    setEventFlyerSaving(true);
+    setEventFlyerError("");
+    try {
+      await deleteEventFlyer(selectedEntry.id);
+    } catch (cause) {
+      setEventFlyerError(cause instanceof Error ? cause.message : "Der Event-Flyer konnte nicht entfernt werden.");
+    } finally {
+      setEventFlyerSaving(false);
+    }
   }
 
   function moveEvent(entryId: string, direction: -1 | 1) {
@@ -311,7 +349,7 @@ export default function RedaktionPage() {
                 {flyerUrl ? (
                   <Image
                     src={flyerUrl}
-                    alt={`Dauerflyer ${selectedParty?.name ?? "Partyreihe"}`}
+                    alt={`${eventFlyer ? "Event-Flyer" : "Dauerflyer"} ${selectedParty?.name ?? "Partyreihe"}`}
                     width={900}
                     height={900}
                     unoptimized
@@ -344,6 +382,37 @@ export default function RedaktionPage() {
               <p className="mt-2 text-sm leading-6 text-neutral-400">
                 Änderungen bleiben zunächst nur in dieser Ansicht erhalten.
               </p>
+              <section className="mt-5 rounded-lg border border-white/10 p-4">
+                <h3 className="text-sm font-semibold">Event-Flyer</h3>
+                <p className="mt-1 text-xs leading-5 text-neutral-500">
+                  Ein Event-Flyer überschreibt den Dauerflyer nur für diesen Entwurf. Es wird nichts veröffentlicht.
+                </p>
+                <label className="mt-3 block">
+                  <span className="sr-only">Event-Flyer auswählen</span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png"
+                    disabled={eventFlyerSaving}
+                    onChange={(event) => {
+                      void handleEventFlyer(event.target.files?.[0] ?? null);
+                      event.target.value = "";
+                    }}
+                    className="block w-full text-sm text-neutral-300 file:mr-4 file:rounded-lg file:border-0 file:bg-white file:px-4 file:py-2 file:font-semibold file:text-black disabled:opacity-50"
+                  />
+                </label>
+                {eventFlyer && (
+                  <button
+                    type="button"
+                    onClick={() => void removeEventFlyer()}
+                    disabled={eventFlyerSaving}
+                    className="mt-3 min-h-11 rounded-lg border border-red-400/40 px-3 py-2 text-sm text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Event-Flyer entfernen
+                  </button>
+                )}
+                {eventFlyerSaving && <p className="mt-2 text-xs text-neutral-400" role="status">Event-Flyer wird gespeichert ...</p>}
+                {eventFlyerError && <p className="mt-2 text-xs text-red-300" role="alert">{eventFlyerError}</p>}
+              </section>
               <label className="mt-5 block">
                 <span className="mb-2 block text-sm text-neutral-300">Caption</span>
                 <textarea

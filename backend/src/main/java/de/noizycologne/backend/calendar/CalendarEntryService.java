@@ -2,6 +2,8 @@ package de.noizycologne.backend.calendar;
 
 import de.noizycologne.backend.actor.Actor;
 import de.noizycologne.backend.actor.ActorRepository;
+import de.noizycologne.backend.media.MediaAssetRepository;
+import de.noizycologne.backend.media.PartyFlyerResponse;
 import de.noizycologne.backend.party.PartySeriesRepository;
 import de.noizycologne.backend.venue.VenueRepository;
 import org.springframework.http.HttpStatus;
@@ -31,15 +33,18 @@ public class CalendarEntryService {
     private final VenueRepository venueRepository;
     private final PartySeriesRepository partySeriesRepository;
     private final ActorRepository actorRepository;
+    private final MediaAssetRepository mediaAssetRepository;
 
     public CalendarEntryService(CalendarEntryRepository calendarEntryRepository,
                                 VenueRepository venueRepository,
                                 PartySeriesRepository partySeriesRepository,
-                                ActorRepository actorRepository) {
+                                ActorRepository actorRepository,
+                                MediaAssetRepository mediaAssetRepository) {
         this.calendarEntryRepository = calendarEntryRepository;
         this.venueRepository = venueRepository;
         this.partySeriesRepository = partySeriesRepository;
         this.actorRepository = actorRepository;
+        this.mediaAssetRepository = mediaAssetRepository;
     }
 
     @Transactional(readOnly = true)
@@ -48,7 +53,7 @@ public class CalendarEntryService {
                 .sorted(Comparator.comparing(CalendarEntry::getEventDate)
                         .thenComparing(entry -> entry.getStartTime(), Comparator.nullsLast(Comparator.naturalOrder()))
                         .thenComparing(CalendarEntry::getId))
-                .map(CalendarEntryResponse::from)
+                .map(this::toResponse)
                 .toList();
     }
 
@@ -65,7 +70,7 @@ public class CalendarEntryService {
                 validated.reason(),
                 validated.mentionDjIds()
         );
-        return CalendarEntryResponse.from(calendarEntryRepository.save(entry));
+        return toResponse(calendarEntryRepository.save(entry));
     }
 
     @Transactional
@@ -83,7 +88,7 @@ public class CalendarEntryService {
                 validated.reason(),
                 validated.mentionDjIds()
         );
-        return CalendarEntryResponse.from(calendarEntryRepository.save(entry));
+        return toResponse(calendarEntryRepository.save(entry));
     }
 
     @Transactional
@@ -178,6 +183,22 @@ public class CalendarEntryService {
 
     private ResponseStatusException badRequest(String message) {
         return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+    }
+
+    private CalendarEntryResponse toResponse(CalendarEntry entry) {
+        PartyFlyerResponse flyer = null;
+        if (entry.getEventFlyerMediaId() != null) {
+            flyer = mediaAssetRepository.findById(entry.getEventFlyerMediaId())
+                    .map(asset -> new PartyFlyerResponse(
+                            asset.getId(),
+                            asset.getOriginalFilename(),
+                            asset.getMediaType(),
+                            asset.getFileSize(),
+                            "/api/v1/calendar-entries/" + entry.getId() + "/flyer"
+                    ))
+                    .orElse(null);
+        }
+        return CalendarEntryResponse.from(entry, flyer);
     }
 
     private record ValidatedEntry(
