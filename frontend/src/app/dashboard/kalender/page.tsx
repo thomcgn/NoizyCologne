@@ -32,6 +32,7 @@ export default function CalendarPage() {
   const [actionError, setActionError] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [entrySearch, setEntrySearch] = useState("");
+  const [calendarOpen, setCalendarOpen] = useState(true);
 
   const days = useMemo(() => {
     const year = month.getFullYear();
@@ -229,100 +230,117 @@ export default function CalendarPage() {
                 year: "numeric",
               })}
             </h2>
-            <div className="flex gap-1.5 sm:gap-2">
+            <div className="flex flex-wrap justify-end gap-1.5 sm:gap-2">
+              {calendarOpen && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => changeMonth(-1)}
+                    aria-label="Vorheriger Monat"
+                    className="rounded-lg border border-white/20 px-4 py-2 hover:bg-white/10"
+                  >
+                    ←
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => changeMonth(1)}
+                    aria-label="Nächster Monat"
+                    className="rounded-lg border border-white/20 px-4 py-2 hover:bg-white/10"
+                  >
+                    →
+                  </button>
+                </>
+              )}
               <button
                 type="button"
-                onClick={() => changeMonth(-1)}
-                aria-label="Vorheriger Monat"
-                className="rounded-lg border border-white/20 px-4 py-2 hover:bg-white/10"
+                onClick={() => setCalendarOpen((open) => !open)}
+                aria-expanded={calendarOpen}
+                aria-controls="calendar-month-view"
+                className="rounded-lg border border-white/20 px-4 py-2 text-sm hover:bg-white/10"
               >
-                ←
-              </button>
-              <button
-                type="button"
-                onClick={() => changeMonth(1)}
-                aria-label="Nächster Monat"
-                className="rounded-lg border border-white/20 px-4 py-2 hover:bg-white/10"
-              >
-                →
+                {calendarOpen ? "Kalender ausblenden" : "Kalender einblenden"}
               </button>
             </div>
           </div>
 
-          <div className="mb-2 grid grid-cols-7 text-center">
-            {weekdays.map((day) => (
-              <div
-                key={day}
-                className="py-2 text-xs font-medium text-neutral-400 sm:text-sm"
-              >
-                {day}
+          {calendarOpen && (
+            <div id="calendar-month-view">
+              <div className="mb-2 grid grid-cols-7 text-center">
+                {weekdays.map((day) => (
+                  <div
+                    key={day}
+                    className="py-2 text-xs font-medium text-neutral-400 sm:text-sm"
+                  >
+                    {day}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
 
-          <div className="grid grid-cols-7 gap-px overflow-hidden rounded-xl border border-white/10 bg-white/10">
-            {days.map((date) => {
-              const inMonth = date.getMonth() === month.getMonth();
-              const isWeekend = [0, 6].includes(date.getDay());
-              const isSelected =
-                selectedDate !== null && sameDay(date, selectedDate);
-              const dayEntries = entriesByDate.get(toDateKey(date)) ?? [];
+              <div className="grid grid-cols-7 gap-px overflow-hidden rounded-xl border border-white/10 bg-white/10">
+                {days.map((date) => {
+                  const inMonth = date.getMonth() === month.getMonth();
+                  const isWeekend = [0, 6].includes(date.getDay());
+                  const isSelected =
+                    selectedDate !== null && sameDay(date, selectedDate);
+                  const dayEntries = entriesByDate.get(toDateKey(date)) ?? [];
 
-              return (
-                <button
-                  key={toDateKey(date)}
-                  type="button"
-                  onClick={() => selectDay(date)}
-                  aria-pressed={isSelected}
-                  aria-label={`${date.toLocaleDateString("de-DE", {
-                    weekday: "long",
-                    day: "numeric",
-                    month: "long",
-                    year: "numeric",
-                  })}, ${dayEntries.length} Einträge`}
-                  className={[
-                    "min-h-16 min-w-0 p-1 text-left transition-colors sm:min-h-28 sm:p-2",
-                    inMonth
-                      ? isWeekend
-                        ? "bg-neutral-900"
-                        : "bg-neutral-950"
-                      : "bg-black text-neutral-600",
-                    isSelected
-                      ? "ring-2 ring-inset ring-white"
-                      : "hover:bg-neutral-800",
-                  ].join(" ")}
-                >
-                  <span className="block text-sm font-medium">
-                    {date.getDate()}
-                  </span>
-
-                  <span className="mt-1 block space-y-1">
-                    {dayEntries.slice(0, 2).map((entry) => (
-                      <span
-                        key={entry.id}
-                        className="block truncate rounded-sm border-l-[3px] bg-white/5 px-1 py-1 text-[10px] leading-tight text-white sm:text-xs"
-                        style={{
-                          borderLeftColor: getEntryColor(entry),
-                          backgroundColor: `${getEntryColor(entry)}22`,
-                        }}
-                        title={getEntryName(entry)}
-                      >
-                        {entry.type === "event" && entry.startTime
-                          ? `${entry.startTime} `
-                          : ""}
-                        {getEntryName(entry)}
+                  return (
+                    <button
+                      key={toDateKey(date)}
+                      type="button"
+                      onClick={() => selectDay(date)}
+                      aria-pressed={isSelected}
+                      aria-label={`${date.toLocaleDateString("de-DE", {
+                        weekday: "long",
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric",
+                      })}, ${dayEntries.length} Einträge`}
+                      className={[
+                        "min-h-16 min-w-0 p-1 text-left transition-colors sm:min-h-28 sm:p-2",
+                        inMonth
+                          ? isWeekend
+                            ? "bg-neutral-900"
+                            : "bg-neutral-950"
+                          : "bg-black text-neutral-600",
+                        isSelected
+                          ? "ring-2 ring-inset ring-white"
+                          : "hover:bg-neutral-800",
+                      ].join(" ")}
+                    >
+                      <span className="block text-sm font-medium">
+                        {date.getDate()}
                       </span>
-                    ))}
-                    {dayEntries.length > 2 && (
-                      <span className="block text-[10px] text-neutral-400 sm:text-xs">
-                        +{dayEntries.length - 2} weitere
+
+                      <span className="mt-1 block space-y-1">
+                        {dayEntries.slice(0, 2).map((entry) => (
+                          <span
+                            key={entry.id}
+                            className="block truncate rounded-sm border-l-[3px] bg-white/5 px-1 py-1 text-[10px] leading-tight text-white sm:text-xs"
+                            style={{
+                              borderLeftColor: getEntryColor(entry),
+                              backgroundColor: `${getEntryColor(entry)}22`,
+                            }}
+                            title={getEntryName(entry)}
+                          >
+                            {entry.type === "event" && entry.startTime
+                              ? `${entry.startTime} `
+                              : ""}
+                            {getEntryName(entry)}
+                          </span>
+                        ))}
+                        {dayEntries.length > 2 && (
+                          <span className="block text-[10px] text-neutral-400 sm:text-xs">
+                            +{dayEntries.length - 2} weitere
+                          </span>
+                        )}
                       </span>
-                    )}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="mt-6 rounded-2xl border border-white/10 bg-neutral-950 p-4 sm:p-6">
