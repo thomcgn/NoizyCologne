@@ -586,11 +586,14 @@ export default function PortfolioPage() {
                     <input
                       className="block w-full text-sm text-neutral-300 file:mr-4 file:rounded-lg file:border-0 file:bg-white file:px-4 file:py-2 file:font-semibold file:text-black"
                       type="file"
-                      accept="image/jpeg,image/png"
+                      accept=".jpg,.jpeg,.png,image/jpeg,image/png"
                       onChange={(event) => {
                         const file = event.target.files?.[0] ?? null;
                         if (!file) return;
-                        if (!["image/jpeg", "image/png"].includes(file.type)) {
+                        const filename = file.name.toLowerCase();
+                        const isJpeg = file.type === "image/jpeg" || filename.endsWith(".jpg") || filename.endsWith(".jpeg");
+                        const isPng = file.type === "image/png" || filename.endsWith(".png");
+                        if (!isJpeg && !isPng) {
                           setError("Bitte einen JPEG- oder PNG-Flyer auswählen.");
                           event.target.value = "";
                           return;
