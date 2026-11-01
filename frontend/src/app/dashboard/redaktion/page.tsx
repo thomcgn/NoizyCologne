@@ -103,45 +103,69 @@ type GateState = {
   feedOrderReviewed: boolean;
 };
 
-type FeedInstagramPreviewProps = {
+type InstagramPostPreviewProps = {
   flyerUrl: string | null;
   partyName: string;
   caption: string;
   hashtags: string;
+  compact?: boolean;
 };
 
-function FeedInstagramPreview({ flyerUrl, partyName, caption, hashtags }: FeedInstagramPreviewProps) {
+function InstagramPostPreview({ flyerUrl, partyName, caption, hashtags, compact = false }: InstagramPostPreviewProps) {
   return (
-    <div className="pointer-events-none absolute inset-2 z-20 overflow-hidden rounded-lg border border-white/20 bg-black/95 text-white shadow-2xl ring-1 ring-black">
-      <div className="flex items-center gap-1.5 border-b border-white/10 px-2 py-1.5">
-        <div className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white p-0.5">
-          <Image src="/noizy-logo-black.png" alt="" width={16} height={16} className="size-full object-contain" />
+    <article className={compact
+      ? "pointer-events-none absolute inset-2 z-20 overflow-hidden rounded-lg border border-white/20 bg-black/95 text-white shadow-2xl ring-1 ring-black"
+      : "mx-auto max-w-[470px] overflow-hidden rounded-xl border border-white/10 bg-black"}
+    >
+      <div className={compact
+        ? "flex items-center gap-1.5 border-b border-white/10 px-2 py-1.5"
+        : "flex items-center gap-3 border-b border-white/10 p-3"}
+      >
+        <div className={compact
+          ? "flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white p-0.5"
+          : "flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white p-1"}
+        >
+          <Image src="/noizy-logo-black.png" alt="" width={compact ? 16 : 36} height={compact ? 16 : 36} className="size-full object-contain" />
         </div>
-        <span className="truncate text-[9px] font-semibold">noizycologne</span>
-        <span className="ml-auto text-[9px] text-neutral-400" aria-hidden="true">•••</span>
+        <div className="min-w-0 flex-1">
+          <p className={compact ? "truncate text-[9px] font-semibold" : "truncate text-sm font-semibold"}>noizycologne</p>
+          <p className={compact ? "text-[8px] text-neutral-500" : "text-xs text-neutral-500"}>Team-Entwurf</p>
+        </div>
+        <span className={compact ? "text-[9px] leading-none text-neutral-400" : "text-lg leading-none text-neutral-300"} aria-hidden="true">•••</span>
       </div>
       {flyerUrl ? (
-        <div className="relative aspect-square w-full bg-neutral-950">
+        <div className={`relative w-full bg-neutral-950 ${compact ? "aspect-square" : "aspect-[4/5]"}`}>
           <Image
             src={flyerUrl}
-            alt={`${partyName} Vorschau`}
+            alt={`${partyName} Event-Vorschau`}
             fill
-            sizes="180px"
+            sizes={compact ? "180px" : "(max-width: 640px) 100vw, 470px"}
+            loading={compact ? "lazy" : "eager"}
             unoptimized
             className="object-contain"
           />
         </div>
       ) : (
-        <div className="flex aspect-square items-center justify-center bg-neutral-900 px-3 text-center text-[9px] text-neutral-400">
-          Kein Flyer hinterlegt
+        <div className={`flex items-center justify-center bg-neutral-900 text-center text-neutral-500 ${compact ? "aspect-square px-3 text-[9px]" : "aspect-[4/5] p-8 text-sm"}`}>
+          {compact ? "Kein Flyer hinterlegt" : "Für diesen Entwurf ist noch kein Bild hinterlegt. Lade einen Event-Flyer hoch oder hinterlege einen Dauerflyer."}
         </div>
       )}
-      <div className="space-y-1 px-2 py-1.5 text-[9px] leading-3">
-        <p className="font-semibold">noizycologne</p>
-        {caption && <p className="line-clamp-3 text-neutral-300">{caption}</p>}
-        {hashtags && <p className="line-clamp-2 text-blue-300">{hashtags}</p>}
+      <div className={compact ? "space-y-1 px-2 py-1.5 text-[9px] leading-3" : "p-3"}>
+        <div className={compact ? "hidden" : "mb-3 flex items-center justify-between text-xl leading-none text-neutral-200"} aria-hidden="true">
+          <div className="flex items-center gap-4">
+            <span>♡</span>
+            <span className="text-lg">▢</span>
+            <span>⌁</span>
+          </div>
+          <span>⌑</span>
+        </div>
+        <div className={compact ? "space-y-1" : "space-y-2 text-sm leading-5"}>
+          <p className="font-semibold">noizycologne</p>
+          {caption && <p className={compact ? "line-clamp-3 text-neutral-300" : "whitespace-pre-wrap text-neutral-300"}>{caption}</p>}
+          {hashtags && <p className={compact ? "line-clamp-2 text-blue-300" : "whitespace-pre-wrap text-blue-300"}>{hashtags}</p>}
+        </div>
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -726,11 +750,12 @@ export default function RedaktionPage() {
                         </span>
                       )}
                       {hoveredPreviewId === entry.id && !isDragging && (
-                        <FeedInstagramPreview
+                        <InstagramPostPreview
                           flyerUrl={entryFlyerUrl}
                           partyName={party?.name ?? "Partyreihe"}
                           caption={previewCaption}
                           hashtags={previewDraft?.hashtags ?? ""}
+                          compact
                         />
                       )}
                       <span className="sr-only">{party?.name ?? "Unbekannte Partyreihe"}, {entry.date}</span>
@@ -765,56 +790,12 @@ export default function RedaktionPage() {
                 </span>
               </div>
 
-              <article className="mx-auto max-w-[470px] overflow-hidden rounded-xl border border-white/10 bg-black">
-                <div className="flex items-center gap-3 border-b border-white/10 p-3">
-                  <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white p-1">
-                    <Image
-                      src="/noizy-logo-black.png"
-                      alt=""
-                      width={36}
-                      height={36}
-                      className="size-full object-contain"
-                    />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold">noizycologne</p>
-                    <p className="text-xs text-neutral-500">Team-Entwurf</p>
-                  </div>
-                  <span className="text-lg leading-none text-neutral-300" aria-hidden="true">•••</span>
-                </div>
-                {flyerUrl ? (
-                  <div className="relative aspect-[4/5] w-full bg-neutral-950">
-                    <Image
-                      src={flyerUrl}
-                      alt={`${eventFlyer ? "Event-Flyer" : "Dauerflyer"} ${selectedParty?.name ?? "Partyreihe"}`}
-                      fill
-                      sizes="(max-width: 640px) 100vw, 470px"
-                      loading="eager"
-                      unoptimized
-                      className="object-contain"
-                    />
-                  </div>
-                ) : (
-                  <div className="flex aspect-[4/5] items-center justify-center bg-neutral-900 p-8 text-center text-sm text-neutral-500">
-                    Für diesen Entwurf ist noch kein Bild hinterlegt. Lade einen Event-Flyer hoch oder hinterlege einen Dauerflyer.
-                  </div>
-                )}
-                <div className="p-3">
-                  <div className="mb-3 flex items-center justify-between text-xl leading-none text-neutral-200" aria-hidden="true">
-                    <div className="flex items-center gap-4">
-                      <span>♡</span>
-                      <span className="text-lg">▢</span>
-                      <span>⌁</span>
-                    </div>
-                    <span>⌑</span>
-                  </div>
-                  <div className="space-y-2 text-sm leading-5">
-                    <p className="font-semibold">noizycologne</p>
-                    <p className="whitespace-pre-wrap text-neutral-300">{draft.caption || "Caption hier vorbereiten ..."}</p>
-                    {draft.hashtags.trim() && <p className="whitespace-pre-wrap text-blue-300">{draft.hashtags}</p>}
-                  </div>
-                </div>
-              </article>
+              <InstagramPostPreview
+                flyerUrl={flyerUrl}
+                partyName={selectedParty?.name ?? "Partyreihe"}
+                caption={draft.caption || "Caption hier vorbereiten ..."}
+                hashtags={draft.hashtags}
+              />
             </section>
 
             <section className="rounded-xl border border-white/10 bg-neutral-950 p-4 sm:p-6">
