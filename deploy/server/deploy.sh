@@ -41,6 +41,22 @@ ensure_media_volume() {
   fi
 }
 
+prepare_media_volume_permissions() {
+  local media_volume="${MEDIA_DATA_VOLUME:-}"
+  local api_image="$1"
+
+  if [[ -z "$media_volume" && -f .env ]]; then
+    media_volume="$(awk -F= '$1 == "MEDIA_DATA_VOLUME" { print substr($0, index($0, "=") + 1); exit }' .env)"
+  fi
+  media_volume="${media_volume:-noizycologne_media_data}"
+
+  echo "Preparing persistent media volume permissions"
+  docker run --rm --user 0 \
+    --entrypoint /usr/bin/chown \
+    -v "$media_volume:/app/uploads" \
+    "$api_image" -R 10001:10001 /app/uploads
+}
+
 main() {
   cd "$(dirname "${BASH_SOURCE[0]}")"
 
@@ -71,6 +87,7 @@ main() {
   ensure_media_volume
   "${compose[@]}" config >/dev/null
   IMAGE_TAG="$image_tag" "${compose[@]}" pull api frontend landing
+  prepare_media_volume_permissions "ghcr.io/thomcgn/noizycologne-backend:$image_tag"
   "${compose[@]}" run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
   check_host_port_conflicts
 

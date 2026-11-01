@@ -21,6 +21,9 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import javax.imageio.ImageIO;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
@@ -43,6 +46,19 @@ class CalendarEntryFlyerControllerIntegrationTests {
 
     private static final byte[] PNG = java.util.Base64.getDecoder().decode(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+
+    private static byte[] JPEG;
+
+    static {
+        try {
+            BufferedImage image = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            ImageIO.write(image, "jpg", output);
+            JPEG = output.toByteArray();
+        } catch (java.io.IOException exception) {
+            throw new ExceptionInInitializerError(exception);
+        }
+    }
 
     @Autowired
     private MockMvc mockMvc;
@@ -107,7 +123,7 @@ class CalendarEntryFlyerControllerIntegrationTests {
         entryIds.add(entry.getId());
 
         MockMultipartFile upload = new MockMultipartFile(
-                "file", "event.png", MediaType.IMAGE_PNG_VALUE, PNG);
+                "file", "event.jpg", MediaType.IMAGE_JPEG_VALUE, JPEG);
         String uploadBody = mockMvc.perform(multipart("/api/v1/calendar-entries/{id}/flyer", entry.getId())
                         .file(upload))
                 .andExpect(status().isOk())
@@ -116,7 +132,8 @@ class CalendarEntryFlyerControllerIntegrationTests {
         JsonNode uploaded = objectMapper.readTree(uploadBody);
         String assetId = uploaded.get("id").asText();
         assetIds.add(assetId);
-        assertThat(uploaded.get("originalFilename").asText()).isEqualTo("event.png");
+        assertThat(uploaded.get("originalFilename").asText()).isEqualTo("event.jpg");
+        assertThat(uploaded.get("mediaType").asText()).isEqualTo(MediaType.IMAGE_JPEG_VALUE);
 
         JsonNode entries = objectMapper.readTree(mockMvc.perform(get("/api/v1/calendar-entries"))
                 .andExpect(status().isOk())
@@ -133,8 +150,8 @@ class CalendarEntryFlyerControllerIntegrationTests {
 
         mockMvc.perform(get("/api/v1/calendar-entries/{id}/flyer", entry.getId()))
                 .andExpect(status().isOk())
-                .andExpect(content().contentType(MediaType.IMAGE_PNG))
-                .andExpect(content().bytes(PNG));
+                .andExpect(content().contentType(MediaType.IMAGE_JPEG))
+                .andExpect(content().bytes(JPEG));
 
         mockMvc.perform(delete("/api/v1/calendar-entries/{id}/flyer", entry.getId()))
                 .andExpect(status().isNoContent());

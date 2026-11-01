@@ -26,7 +26,7 @@ services:
       DB_USER: ${POSTGRES_USER}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       NOIZY_PUBLISH_ENABLED: "false"
-      MEDIA_ROOT: /app/uploads
+      NOIZY_MEDIA_ROOT: /app/uploads
     depends_on:
       db:
         condition: service_healthy

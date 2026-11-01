@@ -137,7 +137,10 @@ export default function RedaktionPage() {
 
   async function handleEventFlyer(file: File | null) {
     if (!file || !selectedEntry || selectedEntry.type !== "event") return;
-    if (!(file.type === "image/jpeg" || file.type === "image/png")) {
+    const filename = file.name.toLowerCase();
+    const isJpeg = file.type === "image/jpeg" || filename.endsWith(".jpg") || filename.endsWith(".jpeg");
+    const isPng = file.type === "image/png" || filename.endsWith(".png");
+    if (!isJpeg && !isPng) {
       setEventFlyerError("Bitte einen JPEG- oder PNG-Flyer auswählen.");
       return;
     }
@@ -391,7 +394,7 @@ export default function RedaktionPage() {
                   <span className="sr-only">Event-Flyer auswählen</span>
                   <input
                     type="file"
-                    accept="image/jpeg,image/png"
+                    accept=".jpg,.jpeg,.png,image/jpeg,image/png"
                     disabled={eventFlyerSaving}
                     onChange={(event) => {
                       void handleEventFlyer(event.target.files?.[0] ?? null);
