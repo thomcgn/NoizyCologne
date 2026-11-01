@@ -81,6 +81,14 @@ public class OpenAiFlyerGenreAnalyzer implements FlyerGenreAnalyzer {
                     .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                if (response.statusCode() == 401) {
+                    throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                            "Der OpenAI-Key wurde abgelehnt. Bitte die serverseitige KI-Konfiguration prüfen.");
+                }
+                if (response.statusCode() == 429) {
+                    throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                            "Das OpenAI-Kontingent ist erschöpft. Bitte Guthaben oder Abrechnung prüfen.");
+                }
                 throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                         "Die Flyer-Genreanalyse konnte beim KI-Dienst nicht ausgeführt werden.");
             }
