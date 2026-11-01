@@ -631,7 +631,7 @@ export default function RedaktionPage() {
                           sizes="(max-width: 640px) 33vw, (max-width: 1280px) 25vw, 20vw"
                           unoptimized
                           draggable={false}
-                          className="pointer-events-none select-none object-cover"
+                          className="pointer-events-none select-none object-contain"
                         />
                       ) : (
                         <span className="pointer-events-none flex size-full select-none flex-col items-center justify-center bg-gradient-to-br from-neutral-800 via-neutral-950 to-blue-950/50 p-3 text-center">
