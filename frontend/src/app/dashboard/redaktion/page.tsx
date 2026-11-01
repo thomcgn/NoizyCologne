@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import {
   useCatalog,
   type Actor,
@@ -219,7 +219,10 @@ export default function RedaktionPage() {
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [hoveredPreviewId, setHoveredPreviewId] = useState<string | null>(null);
+  const [viewport, setViewport] = useState({ width: 0, height: 0 });
+  const [previewScale, setPreviewScale] = useState(1);
   const feedPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previewCardRef = useRef<HTMLDivElement | null>(null);
   const dragStartRef = useRef<{ id: string; x: number; y: number; pointerId: number } | null>(null);
   const dragMovedRef = useRef(false);
   useEffect(() => {
@@ -252,6 +255,22 @@ export default function RedaktionPage() {
   }, []);
   useEffect(() => () => {
     if (feedPreviewTimerRef.current) clearTimeout(feedPreviewTimerRef.current);
+  }, []);
+  useEffect(() => {
+    const updateViewport = () => {
+      const visualViewport = window.visualViewport;
+      setViewport({
+        width: Math.round(visualViewport?.width ?? window.innerWidth),
+        height: Math.round(visualViewport?.height ?? window.innerHeight),
+      });
+    };
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    window.visualViewport?.addEventListener("resize", updateViewport);
+    return () => {
+      window.removeEventListener("resize", updateViewport);
+      window.visualViewport?.removeEventListener("resize", updateViewport);
+    };
   }, []);
   const orderedEventEntries = useMemo(() => {
     const byId = new Map(eventEntries.map((entry) => [entry.id, entry]));
@@ -364,6 +383,17 @@ export default function RedaktionPage() {
         hoveredMentionIds,
       )
     : "";
+  useLayoutEffect(() => {
+    const card = previewCardRef.current;
+    if (!hoveredEntry || !hoveredParty || !card || viewport.width === 0 || viewport.height === 0) {
+      setPreviewScale(1);
+      return;
+    }
+    const availableWidth = Math.max(1, viewport.width - 32);
+    const availableHeight = Math.max(1, viewport.height - 32);
+    const scale = Math.min(1, availableWidth / card.offsetWidth, availableHeight / card.offsetHeight);
+    setPreviewScale(scale);
+  }, [hoveredEntry, hoveredParty, hoveredCaption, hoveredDraft?.hashtags, viewport.width, viewport.height]);
 
   function updateDraft(patch: Partial<DraftState>) {
     if (!activeId) return;
@@ -705,7 +735,6 @@ export default function RedaktionPage() {
                       key={entry.id}
                       type="button"
                       data-feed-tile-id={entry.id}
-                      title={`${index + 1}. ${party?.name ?? "Unbekannte Partyreihe"} · ${entry.date}`}
                       className={`group relative aspect-square min-h-0 cursor-grab overflow-hidden rounded-none border-0 bg-neutral-900 text-left outline-none transition duration-150 touch-none select-none focus-visible:z-20 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white active:cursor-grabbing ${
                         isActive ? "ring-2 ring-inset ring-white" : ""
                       } ${isDragged ? "z-10 scale-[1.03] opacity-60 shadow-2xl" : "hover:brightness-110"} ${
@@ -793,7 +822,11 @@ export default function RedaktionPage() {
                 role="status"
                 aria-label={`Instagram-Vorschau für ${hoveredParty.name}`}
               >
-                <div className="max-h-[calc(100vh-2rem)] w-full max-w-[470px] overflow-y-auto rounded-xl">
+                <div
+                  ref={previewCardRef}
+                  className="w-full max-w-[470px] rounded-xl"
+                  style={{ transform: `scale(${previewScale})`, transformOrigin: "center center" }}
+                >
                   <InstagramPostPreview
                     flyerUrl={hoveredEntry.eventFlyer?.url ?? hoveredParty.defaultFlyer?.url ?? null}
                     partyName={hoveredParty.name}
