@@ -24,12 +24,12 @@ public record PartySeriesResponse(
                 party.getColor(),
                 party.getDjAssignments().stream()
                         .filter(assignment -> "resident".equals(assignment.getAssignment()))
-                        .map(PartyDjAssignment::getActorId)
+                        .map(assignment -> assignment.getActorId())
                         .sorted()
                         .toList(),
                 party.getDjAssignments().stream()
                         .filter(assignment -> "other".equals(assignment.getAssignment()))
-                        .map(PartyDjAssignment::getActorId)
+                        .map(assignment -> assignment.getActorId())
                         .sorted()
                         .toList(),
                 party.getOrganizerIds().stream().sorted().toList(),

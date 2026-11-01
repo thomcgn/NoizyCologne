@@ -34,7 +34,7 @@ public class GenreLexicon {
     private static void add(String canonical, String... aliases) { ENTRIES.put(canonical, List.of(aliases)); }
 
     public List<String> findGenres(List<TesseractOcrService.OcrWord> words) {
-        String text = normalize(words.stream().map(TesseractOcrService.OcrWord::text).reduce("", (a, b) -> a + " " + b));
+        String text = normalize(words.stream().map(word -> word.text()).reduce("", (a, b) -> a + " " + b));
         Map<String, Boolean> found = new LinkedHashMap<>();
         ENTRIES.entrySet().stream()
                 .sorted((left, right) -> Integer.compare(longestAlias(right.getValue()), longestAlias(left.getValue())))

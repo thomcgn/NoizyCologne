@@ -5,14 +5,12 @@ import de.noizycologne.backend.actor.ActorRepository;
 import de.noizycologne.backend.calendar.CalendarEntry;
 import de.noizycologne.backend.calendar.CalendarEntryRepository;
 import de.noizycologne.backend.media.MediaAssetRepository;
-import de.noizycologne.backend.party.PartySeries;
 import de.noizycologne.backend.party.PartySeriesRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -112,7 +110,7 @@ public class EditorialPostDraftService {
             return true;
         }
         return entry.getPartyId() != null && partySeriesRepository.findById(entry.getPartyId())
-                .map(PartySeries::getDefaultFlyerMediaId)
+                .map(party -> party.getDefaultFlyerMediaId())
                 .filter(mediaAssetRepository::existsById)
                 .isPresent();
     }

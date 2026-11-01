@@ -1,0 +1,24 @@
+{
+  "properties": [
+    {
+      "name": "noizy.media.root",
+      "type": "java.lang.String",
+      "description": "Root directory for uploaded media assets."
+    },
+    {
+      "name": "noizy.ai.tesseract.command",
+      "type": "java.lang.String",
+      "description": "Executable used for local Tesseract OCR."
+    },
+    {
+      "name": "noizy.ai.tesseract.languages",
+      "type": "java.lang.String",
+      "description": "Tesseract language pack expression used for OCR."
+    },
+    {
+      "name": "noizy.ai.tesseract.timeout-seconds",
+      "type": "java.lang.Long",
+      "description": "Maximum duration of one Tesseract OCR process in seconds."
+    }
+  ]
+}
