@@ -45,8 +45,10 @@ const inputStyle =
 
 export default function PortfolioPage({
   initialCategory = "parties",
+  standalone = false,
 }: {
   initialCategory?: Category;
+  standalone?: boolean;
 }) {
   const {
     parties,
@@ -347,23 +349,28 @@ export default function PortfolioPage({
           </p>
 
           <h1 className="mt-2 text-3xl font-bold">
-            Party-Portfolio
+            {category === "parties" ? "Partys" : "Locations"}
           </h1>
 
           <p className="mt-3 text-neutral-400">
-            Partyreihen, Locations und ihre Beteiligten verwalten.
+            {category === "parties"
+              ? "Partyreihen, Farben, Turnus und Beteiligte verwalten."
+              : "Locations und ihre Instagram-Accounts verwalten."}
           </p>
         </header>
 
-        <Link
-          href="/dashboard/portfolio/akteure"
-          className="mt-5 inline-flex min-h-12 items-center rounded-lg border border-white/20 px-5 py-3 text-sm hover:bg-white/10"
-        >
-          DJs, Kollektive & Veranstalter verwalten →
-        </Link>
+        {category === "parties" && !standalone && (
+          <Link
+            href="/dashboard/portfolio/akteure"
+            className="mt-5 inline-flex min-h-12 items-center rounded-lg border border-white/20 px-5 py-3 text-sm hover:bg-white/10"
+          >
+            DJs, Kollektive & Veranstalter verwalten →
+          </Link>
+        )}
 
         {/* Kategorien */}
-        <div className="mt-8 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+        {!standalone && (
+          <div className="mt-8 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           <button
             type="button"
             onClick={() => switchCategory("parties")}
@@ -387,7 +394,8 @@ export default function PortfolioPage({
           >
             Locations
           </button>
-        </div>
+          </div>
+        )}
 
         {/* Suche und Liste */}
         <section className="mt-6 rounded-xl border border-white/10 bg-neutral-950 p-5">

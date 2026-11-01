@@ -1,5 +1,5 @@
 import PortfolioPage from "../portfolio/page";
 
 export default function LocationsPage() {
-  return <PortfolioPage initialCategory="locations" />;
+  return <PortfolioPage initialCategory="locations" standalone />;
 }
