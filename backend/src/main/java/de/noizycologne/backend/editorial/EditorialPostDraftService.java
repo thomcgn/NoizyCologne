@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -52,7 +53,7 @@ public class EditorialPostDraftService {
         }
         validate(entry, request);
         EditorialPostDraft draft = new EditorialPostDraft(calendarEntryId, request.caption().trim(),
-                request.hashtags().trim(), request.status(), request.mentionActorIds());
+                request.hashtags().trim(), request.status(), request.mentionActorIds(), normalizedGenres(request));
         return EditorialPostDraftResponse.from(draftRepository.save(draft));
     }
 
@@ -62,7 +63,7 @@ public class EditorialPostDraftService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Redaktionsentwurf nicht gefunden"));
         CalendarEntry entry = findEvent(draft.getCalendarEntryId());
         validate(entry, request);
-        draft.update(request.caption().trim(), request.hashtags().trim(), request.status(), request.mentionActorIds());
+        draft.update(request.caption().trim(), request.hashtags().trim(), request.status(), request.mentionActorIds(), normalizedGenres(request));
         return EditorialPostDraftResponse.from(draftRepository.save(draft));
     }
 
@@ -78,6 +79,9 @@ public class EditorialPostDraftService {
     private void validate(CalendarEntry entry, EditorialPostDraftRequest request) {
         if (!STATUSES.contains(request.status())) {
             throw badRequest("Unbekannter Redaktionsstatus");
+        }
+        if (request.genres().stream().anyMatch(genre -> genre.trim().isEmpty())) {
+            throw badRequest("Genres dürfen nicht leer sein");
         }
         Set<String> mentionIds = request.mentionActorIds();
         if (!entry.getMentionDjIds().containsAll(mentionIds)) {
@@ -95,6 +99,12 @@ public class EditorialPostDraftService {
                 throw badRequest("Ein freizugebender Entwurf benötigt einen Dauer- oder Event-Flyer");
             }
         }
+    }
+
+    private Set<String> normalizedGenres(EditorialPostDraftRequest request) {
+        Set<String> genres = new LinkedHashSet<>();
+        request.genres().forEach(genre -> genres.add(genre.trim()));
+        return genres;
     }
 
     private boolean hasFlyer(CalendarEntry entry) {

@@ -20,11 +20,15 @@ public record EditorialPostDraftRequest(
         String status,
 
         @Size(max = 100)
-        Set<@NotBlank @Size(max = 100) String> mentionActorIds
+        Set<@NotBlank @Size(max = 100) String> mentionActorIds,
+
+        @Size(max = 20)
+        Set<@NotBlank @Size(max = 50) String> genres
 ) {
     public EditorialPostDraftRequest {
         caption = caption == null ? "" : caption;
         hashtags = hashtags == null ? "" : hashtags;
         mentionActorIds = mentionActorIds == null ? Set.of() : new LinkedHashSet<>(mentionActorIds);
+        genres = genres == null ? Set.of() : new LinkedHashSet<>(genres);
     }
 }

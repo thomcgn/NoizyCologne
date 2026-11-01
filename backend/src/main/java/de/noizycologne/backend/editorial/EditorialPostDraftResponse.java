@@ -8,6 +8,7 @@ public record EditorialPostDraftResponse(
         String caption,
         String hashtags,
         List<String> mentionActorIds,
+        List<String> genres,
         String status
 ) {
     public static EditorialPostDraftResponse from(EditorialPostDraft draft) {
@@ -17,6 +18,7 @@ public record EditorialPostDraftResponse(
                 draft.getCaption(),
                 draft.getHashtags(),
                 draft.getMentionActorIds().stream().sorted().toList(),
+                draft.getGenres().stream().sorted().toList(),
                 draft.getStatus()
         );
     }

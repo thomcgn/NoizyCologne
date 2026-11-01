@@ -75,6 +75,7 @@ export type EditorialPostDraft = {
   caption: string;
   hashtags: string;
   mentionActorIds: string[];
+  genres: string[];
   status: EditorialDraftStatus;
 };
 
@@ -344,6 +345,8 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       typeof draft.caption !== "string" ||
       typeof draft.hashtags !== "string" ||
       !validIds ||
+      !Array.isArray(draft.genres) ||
+      !draft.genres.every((genre) => typeof genre === "string") ||
       !validStatus
     ) {
       throw new Error("Die Redaktions-API lieferte ein unerwartetes Antwortformat.");
@@ -354,6 +357,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       caption: draft.caption,
       hashtags: draft.hashtags,
       mentionActorIds: draft.mentionActorIds as string[],
+      genres: draft.genres as string[],
       status: draft.status as EditorialDraftStatus,
     };
   }, []);
@@ -405,6 +409,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         caption: draft.caption,
         hashtags: draft.hashtags,
         mentionActorIds: draft.mentionActorIds,
+        genres: draft.genres,
         status: draft.status,
       }),
     });

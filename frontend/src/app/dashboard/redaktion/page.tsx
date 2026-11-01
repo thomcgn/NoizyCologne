@@ -41,8 +41,16 @@ type DraftState = {
   caption: string;
   hashtags: string;
   mentionIds: string[];
+  genres: string[];
   status: EditorialDraftStatus;
 };
+
+const GENRE_OPTIONS = [
+  "House", "Techno", "Disco", "Electro", "Trance", "Drum & Bass",
+  "Breakbeat", "Hip-Hop", "Rap", "R&B", "Pop", "Indie", "Rock", "Punk",
+  "Metal", "Hardcore", "Reggae", "Dancehall", "Afrobeat", "Latin", "Jazz",
+  "Funk", "Soul", "Ambient", "Sonstiges",
+] as const;
 
 type GateState = {
   captionReviewed: boolean;
@@ -119,9 +127,10 @@ export default function RedaktionPage() {
         caption: persistedDraft?.caption ?? buildCaption(selectedEntry, selectedParty, selectedVenue?.name ?? ""),
         hashtags: persistedDraft?.hashtags ?? "",
         mentionIds: persistedDraft?.mentionActorIds ?? selectedEntry.mentionDjIds,
+        genres: persistedDraft?.genres ?? [],
         status: persistedDraft?.status ?? "DRAFT",
       }
-    : { caption: "", hashtags: "", mentionIds: [], status: "DRAFT" };
+    : { caption: "", hashtags: "", mentionIds: [], genres: [], status: "DRAFT" };
   const draft = localDrafts[activeId] ?? defaultDraft;
   const gates = gateStates[activeId] ?? {
     captionReviewed: false,
@@ -157,6 +166,7 @@ export default function RedaktionPage() {
             caption: draft.caption,
             hashtags: draft.hashtags,
             mentionActorIds: draft.mentionIds,
+            genres: draft.genres,
             status: draft.status,
           });
       setLocalDrafts((current) => ({
@@ -165,6 +175,7 @@ export default function RedaktionPage() {
           caption: saved.caption,
           hashtags: saved.hashtags,
           mentionIds: saved.mentionActorIds,
+          genres: saved.genres,
           status: saved.status,
         },
       }));
@@ -510,6 +521,30 @@ export default function RedaktionPage() {
                   onChange={(event) => updateDraft({ caption: event.target.value })}
                 />
               </label>
+              <fieldset className="mt-5">
+                <legend className="text-sm text-neutral-300">Genres</legend>
+                <p className="mt-1 text-xs leading-5 text-neutral-500">
+                  Bitte die Genres vom Flyer redaktionell auswählen. Die Auswahl wird im Entwurf gespeichert.
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {GENRE_OPTIONS.map((genre) => (
+                    <label key={genre} className="flex min-h-11 items-center gap-2 rounded-lg bg-neutral-900 px-3 py-2 text-sm">
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-white"
+                        checked={draft.genres.includes(genre)}
+                        onChange={() => updateDraft({
+                          genres: draft.genres.includes(genre)
+                            ? draft.genres.filter((item) => item !== genre)
+                            : [...draft.genres, genre],
+                        })}
+                        disabled={draftSaving}
+                      />
+                      <span>{genre}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
               <label className="mt-5 block">
                 <span className="mb-2 block text-sm text-neutral-300">Hashtags</span>
                 <textarea

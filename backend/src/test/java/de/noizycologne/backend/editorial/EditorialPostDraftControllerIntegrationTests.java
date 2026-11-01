@@ -81,7 +81,7 @@ class EditorialPostDraftControllerIntegrationTests {
         entryIds.add(entry.getId());
 
         EditorialPostDraftRequest createRequest = new EditorialPostDraftRequest(
-                "Caption für das Team", "#noizycologne", "DRAFT", Set.of(dj.getId()));
+                "Caption für das Team", "#noizycologne", "DRAFT", Set.of(dj.getId()), Set.of("House", "Disco"));
         EditorialPostDraftResponse created = objectMapper.readValue(
                 mockMvc.perform(post("/api/v1/calendar-entries/{id}/editorial-drafts", entry.getId())
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -92,6 +92,7 @@ class EditorialPostDraftControllerIntegrationTests {
         draftIds.add(created.id());
         assertThat(created.status()).isEqualTo("DRAFT");
         assertThat(created.mentionActorIds()).containsExactly(dj.getId());
+        assertThat(created.genres()).containsExactlyInAnyOrder("House", "Disco");
 
         EditorialPostDraftResponse[] reloaded = objectMapper.readValue(
                 mockMvc.perform(get("/api/v1/editorial-drafts"))
@@ -101,7 +102,7 @@ class EditorialPostDraftControllerIntegrationTests {
         assertThat(List.of(reloaded)).extracting(EditorialPostDraftResponse::id).contains(created.id());
 
         EditorialPostDraftRequest updateRequest = new EditorialPostDraftRequest(
-                "Überarbeitete Caption", "#team", "READY_FOR_REVIEW", Set.of());
+                "Überarbeitete Caption", "#team", "READY_FOR_REVIEW", Set.of(), Set.of("Techno"));
         EditorialPostDraftResponse updated = objectMapper.readValue(
                 mockMvc.perform(put("/api/v1/editorial-drafts/{id}", created.id())
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -111,6 +112,7 @@ class EditorialPostDraftControllerIntegrationTests {
                 EditorialPostDraftResponse.class);
         assertThat(updated.status()).isEqualTo("READY_FOR_REVIEW");
         assertThat(updated.caption()).isEqualTo("Überarbeitete Caption");
+        assertThat(updated.genres()).containsExactly("Techno");
     }
 
     @Test
@@ -132,14 +134,14 @@ class EditorialPostDraftControllerIntegrationTests {
         entryIds.add(entry.getId());
 
         EditorialPostDraftRequest invalidMention = new EditorialPostDraftRequest(
-                "Caption", "", "DRAFT", Set.of(unrelatedDj.getId()));
+                "Caption", "", "DRAFT", Set.of(unrelatedDj.getId()), Set.of());
         mockMvc.perform(post("/api/v1/calendar-entries/{id}/editorial-drafts", entry.getId())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidMention)))
                 .andExpect(status().isBadRequest());
 
         EditorialPostDraftRequest approvalWithoutFlyer = new EditorialPostDraftRequest(
-                "Caption", "", "APPROVED", Set.of(selectedDj.getId()));
+                "Caption", "", "APPROVED", Set.of(selectedDj.getId()), Set.of("House"));
         mockMvc.perform(post("/api/v1/calendar-entries/{id}/editorial-drafts", entry.getId())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(approvalWithoutFlyer)))

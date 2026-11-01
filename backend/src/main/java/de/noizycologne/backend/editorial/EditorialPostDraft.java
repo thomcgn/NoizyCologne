@@ -43,16 +43,26 @@ public class EditorialPostDraft {
     @Column(name = "actor_id", nullable = false, length = 100)
     private Set<String> mentionActorIds = new LinkedHashSet<>();
 
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+            name = "editorial_post_draft_genres",
+            joinColumns = @JoinColumn(name = "draft_id")
+    )
+    @Column(name = "genre", nullable = false, length = 50)
+    private Set<String> genres = new LinkedHashSet<>();
+
     protected EditorialPostDraft() {
     }
 
     public EditorialPostDraft(String calendarEntryId, String caption, String hashtags,
-                              String status, Collection<String> mentionActorIds) {
+                              String status, Collection<String> mentionActorIds,
+                              Collection<String> genres) {
         this.calendarEntryId = calendarEntryId;
         this.caption = caption;
         this.hashtags = hashtags;
         this.status = status;
         this.mentionActorIds = new LinkedHashSet<>(mentionActorIds);
+        this.genres = new LinkedHashSet<>(genres);
     }
 
     @PrePersist
@@ -68,13 +78,16 @@ public class EditorialPostDraft {
     public String getHashtags() { return hashtags; }
     public String getStatus() { return status; }
     public Set<String> getMentionActorIds() { return mentionActorIds; }
+    public Set<String> getGenres() { return genres; }
 
     public void update(String caption, String hashtags, String status,
-                       Collection<String> mentionActorIds) {
+                       Collection<String> mentionActorIds, Collection<String> genres) {
         this.caption = caption;
         this.hashtags = hashtags;
         this.status = status;
         this.mentionActorIds.clear();
         this.mentionActorIds.addAll(mentionActorIds);
+        this.genres.clear();
+        this.genres.addAll(genres);
     }
 }
