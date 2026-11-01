@@ -64,6 +64,11 @@ function buildCaption(
     .join(" ");
 }
 
+function isLegacyCaption(caption: string, entry: CalendarEntry) {
+  if (entry.type !== "event") return false;
+  return caption.includes("\n") || caption.includes("\r") || caption.includes("Beginn:");
+}
+
 type DraftState = {
   caption: string;
   hashtags: string;
@@ -196,14 +201,22 @@ export default function RedaktionPage() {
   const eventFlyer = selectedEntry?.eventFlyer ?? null;
   const flyerUrl = eventFlyer?.url ?? selectedParty?.defaultFlyer?.url ?? null;
   const currentGenreSuggestions = selectedEntry ? genreAnalysis[selectedEntry.id] ?? [] : [];
+  const generatedCaption = selectedEntry && selectedVenue
+    ? buildCaption(
+        selectedEntry,
+        selectedVenue,
+        actors,
+        captionPreText,
+        persistedDraft?.genres ?? [],
+      )
+    : "";
 
   const defaultDraft: DraftState = selectedEntry && selectedParty
     ? {
         caption: persistedDraft
+          && !isLegacyCaption(persistedDraft.caption, selectedEntry)
           ? persistedDraft.caption
-          : selectedVenue
-            ? buildCaption(selectedEntry, selectedVenue, actors, captionPreText)
-            : "",
+          : generatedCaption,
         hashtags: persistedDraft?.hashtags ?? "",
         mentionIds: persistedDraft?.mentionActorIds ?? selectedEntry.mentionDjIds,
         genres: persistedDraft?.genres ?? [],
