@@ -46,7 +46,7 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     ResponseEntity<ApiErrorResponse> handleUploadTooLarge() {
-        return error(HttpStatus.PAYLOAD_TOO_LARGE, "FILE_TOO_LARGE",
+        return error(HttpStatus.CONTENT_TOO_LARGE, "FILE_TOO_LARGE",
                 "Die Bilddatei ist zu groß. Erlaubt sind höchstens 8 MB.", false);
     }
 
@@ -76,8 +76,8 @@ public class ApiExceptionHandler {
             case FORBIDDEN -> "ACCESS_DENIED";
             case NOT_FOUND -> "RESOURCE_NOT_FOUND";
             case CONFLICT -> "CONFLICT";
-            case PAYLOAD_TOO_LARGE -> "FILE_TOO_LARGE";
-            case UNPROCESSABLE_ENTITY -> "INVALID_CONTENT";
+            case CONTENT_TOO_LARGE -> "FILE_TOO_LARGE";
+            case UNPROCESSABLE_CONTENT -> "INVALID_CONTENT";
             case SERVICE_UNAVAILABLE -> "SERVICE_UNAVAILABLE";
             case GATEWAY_TIMEOUT -> "REQUEST_TIMEOUT";
             default -> "REQUEST_FAILED";

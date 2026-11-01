@@ -53,7 +53,7 @@ public class TesseractFlyerGenreAnalyzer implements FlyerGenreAnalyzer {
         } catch (ResponseStatusException exception) {
             throw exception;
         } catch (RuntimeException exception) {
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT,
                     "Der Flyer konnte offline nicht zuverlässig analysiert werden.", exception);
         }
     }
