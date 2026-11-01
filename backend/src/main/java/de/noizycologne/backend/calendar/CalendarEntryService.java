@@ -50,9 +50,14 @@ public class CalendarEntryService {
     @Transactional(readOnly = true)
     public List<CalendarEntryResponse> getEntries() {
         return calendarEntryRepository.findAll().stream()
-                .sorted(Comparator.comparing(CalendarEntry::getEventDate)
-                        .thenComparing(entry -> entry.getStartTime(), Comparator.nullsLast(Comparator.naturalOrder()))
-                        .thenComparing(CalendarEntry::getId))
+                .sorted((left, right) -> {
+                    int dateComparison = left.getEventDate().compareTo(right.getEventDate());
+                    if (dateComparison != 0) return dateComparison;
+                    int timeComparison = Comparator.nullsLast(Comparator.<LocalTime>naturalOrder())
+                            .compare(left.getStartTime(), right.getStartTime());
+                    if (timeComparison != 0) return timeComparison;
+                    return left.getId().compareTo(right.getId());
+                })
                 .map(this::toResponse)
                 .toList();
     }
