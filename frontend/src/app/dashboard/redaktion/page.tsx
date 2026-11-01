@@ -100,6 +100,10 @@ export default function RedaktionPage() {
       .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)),
     [entries]
   );
+  const draftEventEntries = useMemo(
+    () => eventEntries.filter((entry) => persistedDrafts.some((draft) => draft.calendarEntryId === entry.id)),
+    [eventEntries, persistedDrafts]
+  );
   const [selectedId, setSelectedId] = useState("");
   const [localDrafts, setLocalDrafts] = useState<Record<string, DraftState>>({});
   const [gateStates, setGateStates] = useState<Record<string, GateState>>({});
@@ -117,16 +121,16 @@ export default function RedaktionPage() {
   const dragStartRef = useRef<{ id: string; x: number; y: number; pointerId: number } | null>(null);
   const dragMovedRef = useRef(false);
   const orderedEventEntries = useMemo(() => {
-    const byId = new Map(eventEntries.map((entry) => [entry.id, entry]));
+    const byId = new Map(draftEventEntries.map((entry) => [entry.id, entry]));
     const knownIds = feedOrder.filter((id) => byId.has(id));
-    const newIds = eventEntries.map((entry) => entry.id).filter((id) => !knownIds.includes(id));
+    const newIds = draftEventEntries.map((entry) => entry.id).filter((id) => !knownIds.includes(id));
     return [...knownIds, ...newIds]
       .map((id) => byId.get(id))
       .filter((entry): entry is Extract<CalendarEntry, { type: "event" }> => Boolean(entry));
-  }, [eventEntries, feedOrder]);
+  }, [draftEventEntries, feedOrder]);
   const activeId = selectedId && eventEntries.some((entry) => entry.id === selectedId)
     ? selectedId
-    : orderedEventEntries[0]?.id ?? "";
+    : orderedEventEntries[0]?.id ?? eventEntries[0]?.id ?? "";
 
   const selectedEntry = eventEntries.find((entry) => entry.id === activeId) ?? null;
   const selectedParty = selectedEntry
@@ -468,6 +472,26 @@ export default function RedaktionPage() {
                 </div>
                 <span className="rounded-full border border-blue-400/30 px-3 py-1 text-xs text-blue-300">nur lokal</span>
               </div>
+              {draftEventEntries.length < eventEntries.length && (
+                <label className="mx-4 mb-5 block sm:mx-6">
+                  <span className="mb-2 block text-sm text-neutral-300">Veranstaltung für neuen Entwurf auswählen</span>
+                  <select
+                    className="min-h-11 w-full rounded-lg border border-white/15 bg-neutral-900 px-3 py-2.5 text-sm text-white outline-none focus:border-white/60"
+                    value={activeId}
+                    onChange={(event) => setSelectedId(event.target.value)}
+                  >
+                    {eventEntries.map((entry) => {
+                      const party = parties.find((item) => item.id === entry.partyId);
+                      const hasDraft = draftEventEntries.some((draftEntry) => draftEntry.id === entry.id);
+                      return (
+                        <option key={entry.id} value={entry.id}>
+                          {entry.date} · {party?.name ?? "Unbekannte Partyreihe"}{hasDraft ? " · Entwurf vorhanden" : " · neuer Entwurf"}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
+              )}
               <p className="sr-only" id="feed-order-help">
                 Tastatur: Pfeiltasten verschieben die ausgewählte Kachel, Home und Ende setzen sie an den Anfang oder das Ende. Enter öffnet den zugehörigen Entwurf.
               </p>
@@ -549,6 +573,11 @@ export default function RedaktionPage() {
                   );
                 })}
               </div>
+              {orderedEventEntries.length === 0 && (
+                <p className="bg-neutral-950 p-6 text-sm text-neutral-400">
+                  Im Feed erscheinen ausschließlich bereits angelegte Redaktionsentwürfe. Lege rechts für eine Kalenderveranstaltung zuerst einen Entwurf an.
+                </p>
+              )}
               <p className="p-4 text-xs text-neutral-500 sm:px-6 sm:pb-6">
                 Kachel anklicken = Entwurf auswählen · Ziehen = umsortieren · Pfeiltasten/Home/Ende = Tastaturalternative
               </p>
