@@ -199,6 +199,15 @@ export default function RedaktionPage() {
         actor.instagram
       )
     : [];
+  const partyMentionDefaults = selectedParty?.djMentionDefault === "residents"
+    ? selectedParty.residentDjIds
+    : [];
+  const configuredMentionIds = selectedEntry && selectedEntry.mentionDjIds.length > 0
+    ? selectedEntry.mentionDjIds
+    : partyMentionDefaults;
+  const initialMentionIds = persistedDraft && persistedDraft.mentionActorIds.length > 0
+    ? persistedDraft.mentionActorIds
+    : configuredMentionIds;
   const eventFlyer = selectedEntry?.eventFlyer ?? null;
   const flyerUrl = eventFlyer?.url ?? selectedParty?.defaultFlyer?.url ?? null;
   const currentGenreSuggestions = selectedEntry ? genreAnalysis[selectedEntry.id] ?? [] : [];
@@ -209,7 +218,7 @@ export default function RedaktionPage() {
         actors,
         captionPreText,
         persistedDraft?.genres ?? [],
-        persistedDraft?.mentionActorIds ?? selectedEntry.mentionDjIds,
+        initialMentionIds,
       )
     : "";
 
@@ -220,7 +229,7 @@ export default function RedaktionPage() {
           ? persistedDraft.caption
           : generatedCaption,
         hashtags: persistedDraft?.hashtags ?? "",
-        mentionIds: persistedDraft?.mentionActorIds ?? selectedEntry.mentionDjIds,
+        mentionIds: initialMentionIds,
         genres: persistedDraft?.genres ?? [],
         status: persistedDraft?.status ?? "DRAFT",
       }
