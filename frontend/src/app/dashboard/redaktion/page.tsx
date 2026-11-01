@@ -143,6 +143,7 @@ export default function RedaktionPage() {
   const [availableGenres, setAvailableGenres] = useState<ActiveGenre[]>([]);
   const [genresLoading, setGenresLoading] = useState(true);
   const [genresError, setGenresError] = useState("");
+  const [genresOpen, setGenresOpen] = useState(true);
   const [captionPreText] = useState(() => {
     if (typeof window === "undefined") return DEFAULT_CAPTION_PRETEXT;
     return window.localStorage.getItem(CAPTION_PRETEXT_STORAGE_KEY)?.trim() || DEFAULT_CAPTION_PRETEXT;
@@ -170,7 +171,7 @@ export default function RedaktionPage() {
             && typeof genre.canonicalName === "string"
             && typeof genre.displayName === "string"
             && genre.active === true;
-        });
+        }).sort((first, second) => first.displayName.localeCompare(second.displayName, "de-DE"));
         if (!cancelled) setAvailableGenres(genres);
       } catch (cause) {
         if (!cancelled) setGenresError(cause instanceof Error ? cause.message : "Genres konnten nicht geladen werden.");
@@ -816,27 +817,44 @@ export default function RedaktionPage() {
                 />
               </label>
               <fieldset className="mt-5">
-                <legend className="text-sm text-neutral-300">Genres</legend>
-                <p className="mt-1 text-xs leading-5 text-neutral-500">
-                  Bitte die Genres vom Flyer redaktionell auswählen. Die Auswahl wird gespeichert und in die Caption übernommen.
-                </p>
-                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  {genresLoading && <p className="col-span-full text-sm text-neutral-500" role="status">Genres werden aus der Datenbank geladen ...</p>}
-                  {genresError && <p className="col-span-full text-sm text-red-300" role="alert">{genresError}</p>}
-                  {!genresLoading && !genresError && availableGenres.length === 0 && <p className="col-span-full text-sm text-neutral-500">Keine aktiven Genres in den Einstellungen vorhanden.</p>}
-                  {availableGenres.map((genre) => (
-                    <label key={genre.id} className="flex min-h-11 items-center gap-2 rounded-lg bg-neutral-900 px-3 py-2 text-sm">
-                      <input
-                        type="checkbox"
-                        className="size-4 accent-white"
-                        checked={draft.genres.includes(genre.displayName)}
-                        onChange={() => toggleGenre(genre.displayName)}
-                        disabled={draftSaving}
-                      />
-                      <span>{genre.displayName}</span>
-                    </label>
-                  ))}
-                </div>
+                <legend className="w-full">
+                  <button
+                    type="button"
+                    onClick={() => setGenresOpen((open) => !open)}
+                    aria-expanded={genresOpen}
+                    aria-controls="editorial-genres"
+                    className="flex min-h-11 w-full items-center justify-between rounded-lg border border-white/10 px-3 text-left text-sm text-neutral-200 hover:bg-white/5"
+                  >
+                    <span>Genres</span>
+                    <span className="text-xs text-neutral-500">
+                      {genresOpen ? "Einklappen" : `${draft.genres.length} ausgewählt · Einblenden`}
+                    </span>
+                  </button>
+                </legend>
+                {genresOpen && (
+                  <div id="editorial-genres">
+                    <p className="mt-3 text-xs leading-5 text-neutral-500">
+                      Bitte die Genres vom Flyer redaktionell auswählen. Die Auswahl wird gespeichert und in die Caption übernommen.
+                    </p>
+                    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {genresLoading && <p className="col-span-full text-sm text-neutral-500" role="status">Genres werden aus der Datenbank geladen ...</p>}
+                      {genresError && <p className="col-span-full text-sm text-red-300" role="alert">{genresError}</p>}
+                      {!genresLoading && !genresError && availableGenres.length === 0 && <p className="col-span-full text-sm text-neutral-500">Keine aktiven Genres in den Einstellungen vorhanden.</p>}
+                      {availableGenres.map((genre) => (
+                        <label key={genre.id} className="flex min-h-11 items-center gap-2 rounded-lg bg-neutral-900 px-3 py-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="size-4 accent-white"
+                            checked={draft.genres.includes(genre.displayName)}
+                            onChange={() => toggleGenre(genre.displayName)}
+                            disabled={draftSaving}
+                          />
+                          <span>{genre.displayName}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </fieldset>
               <label className="mt-5 block">
                 <span className="mb-2 block text-sm text-neutral-300">Hashtags</span>

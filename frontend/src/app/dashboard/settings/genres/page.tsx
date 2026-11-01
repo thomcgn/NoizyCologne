@@ -76,8 +76,10 @@ export default function GenresPage() {
 
   const visibleGenres = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("de-DE");
-    return genres.filter((genre) => !needle || [genre.canonicalName, genre.displayName, ...genre.aliases.map((alias) => alias.value)]
-      .some((value) => value.toLocaleLowerCase("de-DE").includes(needle)));
+    return genres
+      .filter((genre) => !needle || [genre.canonicalName, genre.displayName, ...genre.aliases.map((alias) => alias.value)]
+        .some((value) => value.toLocaleLowerCase("de-DE").includes(needle)))
+      .sort((first, second) => first.displayName.localeCompare(second.displayName, "de-DE"));
   }, [genres, query]);
 
   function newGenre() {
