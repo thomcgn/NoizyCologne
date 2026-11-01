@@ -36,7 +36,11 @@ public class TesseractFlyerGenreAnalyzer implements FlyerGenreAnalyzer {
                 fallbacks.add("gray-2x");
                 fallbacks.add("contrast-2x");
             }
-            if (base.words().size() < 3) fallbacks.add("adaptive-2x");
+            if (base.words().size() < 3) {
+                fallbacks.add("adaptive-2x");
+            } else if (base.isUnclear()) {
+                fallbacks.add("otsu-2x");
+            }
             int pass = 2;
             for (String variant : fallbacks.subList(0, Math.min(3, fallbacks.size()))) {
                 ImagePreprocessor.PreparedImage image = prepared.image(variant);
@@ -45,10 +49,9 @@ public class TesseractFlyerGenreAnalyzer implements FlyerGenreAnalyzer {
                 merge(bestWords, result.words());
             }
 
-            List<String> genres = genreLexicon.findGenres(List.copyOf(bestWords.values()));
-            double confidence = confidence(bestWords.values());
+            List<GenreLexicon.GenreMatch> genres = genreLexicon.findGenreMatches(List.copyOf(bestWords.values()));
             return new FlyerGenreAnalysisResponse(genres.stream()
-                    .map(genre -> new FlyerGenreAnalysisResponse.GenreSuggestion(genre, confidence))
+                    .map(match -> new FlyerGenreAnalysisResponse.GenreSuggestion(match.genre(), match.confidence(), match.uncertain()))
                     .toList());
         } catch (ResponseStatusException exception) {
             throw exception;
@@ -69,15 +72,4 @@ public class TesseractFlyerGenreAnalyzer implements FlyerGenreAnalyzer {
         }
     }
 
-    private double confidence(Iterable<TesseractOcrService.OcrWord> words) {
-        double sum = 0;
-        int count = 0;
-        for (TesseractOcrService.OcrWord word : words) {
-            if (word.confidence() >= 0) {
-                sum += word.confidence();
-                count++;
-            }
-        }
-        return count == 0 ? 0.0 : Math.min(1.0, Math.max(0.0, (sum / count) / 100.0));
-    }
 }

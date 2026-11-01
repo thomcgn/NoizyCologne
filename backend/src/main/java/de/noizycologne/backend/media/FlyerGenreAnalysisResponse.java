@@ -7,5 +7,5 @@ public record FlyerGenreAnalysisResponse(List<GenreSuggestion> genres) {
         genres = List.copyOf(genres);
     }
 
-    public record GenreSuggestion(String genre, double confidence) { }
+    public record GenreSuggestion(String genre, double confidence, boolean uncertain) { }
 }

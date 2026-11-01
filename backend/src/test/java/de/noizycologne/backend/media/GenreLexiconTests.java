@@ -24,7 +24,51 @@ class GenreLexiconTests {
         assertThat(lexicon.findGenres(List.of(word("rockabillyx")))).doesNotContain("Rockabilly");
     }
 
+    @Test
+    void returnsEvidenceBasedConfidenceForExactMatches() {
+        List<GenreLexicon.GenreMatch> matches = lexicon.findGenreMatches(List.of(
+                word("Garage", 92, 0), word("Punk", 68, 20), word("Soul", 41, 40)
+        ));
+
+        assertThat(matches).extracting(match -> match.genre())
+                .containsExactlyInAnyOrder("Garage-Punk", "Soul");
+        assertThat(matches).filteredOn(match -> match.genre().equals("Garage-Punk"))
+                .singleElement()
+                .satisfies(match -> {
+                    assertThat(match.confidence()).isBetween(0.79, 0.81);
+                    assertThat(match.uncertain()).isFalse();
+                });
+        assertThat(matches).filteredOn(match -> match.genre().equals("Soul"))
+                .singleElement()
+                .satisfies(match -> assertThat(match.confidence()).isEqualTo(0.41));
+    }
+
+    @Test
+    void marksControlledFuzzyMatchesAsUncertain() {
+        List<GenreLexicon.GenreMatch> matches = lexicon.findGenreMatches(List.of(
+                word("50s", 88, 0), word("Rnk", 74, 20)
+        ));
+
+        assertThat(matches).filteredOn(match -> match.genre().equals("50s Rock’n’Roll"))
+                .singleElement()
+                .satisfies(match -> {
+                    assertThat(match.confidence()).isLessThan(0.9);
+                    assertThat(match.uncertain()).isTrue();
+                });
+    }
+
+    @Test
+    void doesNotFuzzyMatchShortAmbiguousGenres() {
+        assertThat(lexicon.findGenreMatches(List.of(word("Skb", 90, 0))))
+                .extracting(match -> match.genre())
+                .doesNotContain("Ska");
+    }
+
     private TesseractOcrService.OcrWord word(String text) {
-        return new TesseractOcrService.OcrWord(text, 90, 0, 0, 10, 10, "test", 11, 1, 1, 1);
+        return word(text, 90, 0);
+    }
+
+    private TesseractOcrService.OcrWord word(String text, int confidence, int left) {
+        return new TesseractOcrService.OcrWord(text, confidence, left, 0, 10, 10, "test", 11, 1, 1, 1);
     }
 }

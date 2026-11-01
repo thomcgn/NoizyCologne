@@ -7,7 +7,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Component
 public class GenreLexicon {
@@ -34,13 +36,19 @@ public class GenreLexicon {
     private static void add(String canonical, String... aliases) { ENTRIES.put(canonical, List.of(aliases)); }
 
     public List<String> findGenres(List<TesseractOcrService.OcrWord> words) {
-        String text = normalize(words.stream().map(word -> word.text()).reduce("", (a, b) -> a + " " + b));
-        Map<String, Boolean> found = new LinkedHashMap<>();
+        return findGenreMatches(words).stream().map(match -> match.genre()).toList();
+    }
+
+    public List<GenreMatch> findGenreMatches(List<TesseractOcrService.OcrWord> words) {
+        List<TextLine> lines = lines(words);
+        String text = normalize(lines.stream().map(line -> line.text()).collect(Collectors.joining(" ")));
+        Map<String, GenreMatch> found = new LinkedHashMap<>();
         ENTRIES.entrySet().stream()
                 .sorted((left, right) -> Integer.compare(longestAlias(right.getValue()), longestAlias(left.getValue())))
-                .forEach(entry -> entry.getValue().stream().map(this::normalize)
-                        .filter(alias -> contains(text, alias)).findFirst()
-                        .ifPresent(alias -> found.put(entry.getKey(), true)));
+                .forEach(entry -> {
+                    GenreMatch match = bestMatch(entry.getKey(), entry.getValue(), text, lines);
+                    if (match != null) found.put(entry.getKey(), match);
+                });
         // Specific compound genres are evidence for the compound label, not an
         // additional generic label. This avoids turning "Garage-Punk" into
         // the misleading pair "Garage-Punk" + "Punk".
@@ -48,7 +56,84 @@ public class GenreLexicon {
         if (found.containsKey("Garage Rock")) found.remove("Rock");
         if (found.containsKey("50s Rock’n’Roll")) found.remove("Rock’n’Roll");
         if (found.containsKey("Wild R&B")) found.remove("Rhythm & Blues");
-        return List.copyOf(found.keySet());
+        return List.copyOf(found.values());
+    }
+
+    private GenreMatch bestMatch(String genre, List<String> aliases, String text, List<TextLine> lines) {
+        GenreMatch best = null;
+        for (String aliasValue : aliases) {
+            String alias = normalize(aliasValue);
+            List<String> aliasTokens = List.of(alias.split(" "));
+            if (contains(text, alias)) {
+                double evidence = evidenceConfidence(aliasTokens, lines);
+                best = better(best, new GenreMatch(genre, evidence, false));
+                continue;
+            }
+            // Short words such as Ska are too ambiguous for automatic fuzzy correction.
+            if (alias.length() < 6 || aliasTokens.stream().anyMatch(token -> token.length() < 3)) continue;
+            for (TextLine line : lines) {
+                List<String> tokens = line.words().stream().map(word -> normalize(word.text())).toList();
+                int windowSize = aliasTokens.size();
+                for (int start = 0; start + windowSize <= tokens.size(); start++) {
+                    String candidate = String.join(" ", tokens.subList(start, start + windowSize));
+                    if (aliasTokens.size() == 1 && (candidate.contains(alias) || alias.contains(candidate))) continue;
+                    double similarity = similarity(candidate, alias);
+                    if (similarity >= 0.78) {
+                        double ocrConfidence = line.words().subList(start, start + windowSize).stream()
+                                .mapToDouble(word -> word.confidence())
+                                .filter(value -> value >= 0)
+                                .average().orElse(0) / 100.0;
+                        double score = Math.min(0.89, similarity * 0.7 + ocrConfidence * 0.3);
+                        best = better(best, new GenreMatch(genre, score, true));
+                    }
+                }
+            }
+        }
+        return best;
+    }
+
+    private GenreMatch better(GenreMatch current, GenreMatch candidate) {
+        return current == null || candidate.confidence() > current.confidence() ? candidate : current;
+    }
+
+    private double evidenceConfidence(List<String> aliasTokens, List<TextLine> lines) {
+        return lines.stream().flatMap(line -> line.words().stream())
+                .filter(word -> aliasTokens.contains(normalize(word.text())))
+                .mapToDouble(word -> word.confidence())
+                .filter(value -> value >= 0)
+                .average().orElse(0) / 100.0;
+    }
+
+    private List<TextLine> lines(List<TesseractOcrService.OcrWord> words) {
+        Map<String, List<TesseractOcrService.OcrWord>> grouped = words.stream()
+                .filter(Objects::nonNull)
+                .sorted(java.util.Comparator.comparingInt((TesseractOcrService.OcrWord word) -> word.top())
+                        .thenComparingInt(word -> word.left()))
+                .collect(Collectors.groupingBy(word -> word.block() + ":" + word.line(), LinkedHashMap::new, Collectors.toList()));
+        return grouped.values().stream().map(lineWords -> new TextLine(lineWords.stream()
+                .map(word -> word.text()).collect(Collectors.joining(" ")), lineWords)).toList();
+    }
+
+    private double similarity(String left, String right) {
+        if (left.equals(right)) return 1.0;
+        int max = Math.max(left.length(), right.length());
+        if (max == 0) return 1.0;
+        return 1.0 - ((double) distance(left, right) / max);
+    }
+
+    private int distance(String left, String right) {
+        int[] previous = new int[right.length() + 1];
+        for (int j = 0; j <= right.length(); j++) previous[j] = j;
+        for (int i = 1; i <= left.length(); i++) {
+            int[] current = new int[right.length() + 1];
+            current[0] = i;
+            for (int j = 1; j <= right.length(); j++) {
+                current[j] = Math.min(Math.min(current[j - 1] + 1, previous[j] + 1),
+                        previous[j - 1] + (left.charAt(i - 1) == right.charAt(j - 1) ? 0 : 1));
+            }
+            previous = current;
+        }
+        return previous[right.length()];
     }
 
     private int longestAlias(List<String> aliases) {
@@ -65,4 +150,8 @@ public class GenreLexicon {
     private boolean contains(String text, String phrase) {
         return Pattern.compile("(?<![\\p{L}\\p{N}])" + Pattern.quote(phrase) + "(?![\\p{L}\\p{N}])").matcher(text).find();
     }
+
+    public record GenreMatch(String genre, double confidence, boolean uncertain) { }
+
+    private record TextLine(String text, List<TesseractOcrService.OcrWord> words) { }
 }
