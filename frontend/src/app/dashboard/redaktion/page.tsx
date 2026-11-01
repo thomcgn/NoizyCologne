@@ -219,7 +219,6 @@ export default function RedaktionPage() {
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [hoveredPreviewId, setHoveredPreviewId] = useState<string | null>(null);
-  const [previewPosition, setPreviewPosition] = useState({ x: 16, y: 16 });
   const feedPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragStartRef = useRef<{ id: string; x: number; y: number; pointerId: number } | null>(null);
   const dragMovedRef = useRef(false);
@@ -593,15 +592,9 @@ export default function RedaktionPage() {
     setIsDragging(false);
   }
 
-  function startFeedPreview(event: PointerEvent<HTMLButtonElement>, entryId: string) {
+  function startFeedPreview(entryId: string) {
     if (isDragging) return;
     if (feedPreviewTimerRef.current) clearTimeout(feedPreviewTimerRef.current);
-    const popupWidth = Math.min(470, window.innerWidth - 32);
-    const popupHeight = Math.min(700, window.innerHeight - 32);
-    setPreviewPosition({
-      x: Math.max(16, Math.min(event.clientX + 18, window.innerWidth - popupWidth - 16)),
-      y: Math.max(16, Math.min(event.clientY + 18, window.innerHeight - popupHeight - 16)),
-    });
     setHoveredPreviewId(null);
     feedPreviewTimerRef.current = setTimeout(() => {
       setHoveredPreviewId(entryId);
@@ -719,7 +712,7 @@ export default function RedaktionPage() {
                         isDropTarget ? "scale-[0.96] ring-2 ring-inset ring-blue-400" : ""
                       }`}
                       onPointerDown={(event) => startPointerDrag(event, entry.id)}
-                      onPointerEnter={(event) => startFeedPreview(event, entry.id)}
+                      onPointerEnter={() => startFeedPreview(entry.id)}
                       onPointerLeave={() => stopFeedPreview(entry.id)}
                       onPointerMove={updatePointerDrag}
                       onPointerUp={finishPointerDrag}
@@ -796,17 +789,18 @@ export default function RedaktionPage() {
 
             {hoveredEntry && hoveredParty && !isDragging && (
               <div
-                className="pointer-events-none fixed z-50 w-[min(470px,calc(100vw-2rem))]"
-                style={{ left: previewPosition.x, top: previewPosition.y }}
+                className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4"
                 role="status"
                 aria-label={`Instagram-Vorschau für ${hoveredParty.name}`}
               >
-                <InstagramPostPreview
-                  flyerUrl={hoveredEntry.eventFlyer?.url ?? hoveredParty.defaultFlyer?.url ?? null}
-                  partyName={hoveredParty.name}
-                  caption={hoveredCaption}
-                  hashtags={hoveredDraft?.hashtags ?? ""}
-                />
+                <div className="max-h-[calc(100vh-2rem)] w-full max-w-[470px] overflow-y-auto rounded-xl">
+                  <InstagramPostPreview
+                    flyerUrl={hoveredEntry.eventFlyer?.url ?? hoveredParty.defaultFlyer?.url ?? null}
+                    partyName={hoveredParty.name}
+                    caption={hoveredCaption}
+                    hashtags={hoveredDraft?.hashtags ?? ""}
+                  />
+                </div>
               </div>
             )}
 
