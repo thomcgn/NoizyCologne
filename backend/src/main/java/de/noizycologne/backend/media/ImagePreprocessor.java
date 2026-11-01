@@ -9,14 +9,15 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /** Creates a bounded set of OCR-friendly variants without changing the original asset. */
 @Component
 public class ImagePreprocessor {
-    private static final int MAX_PIXELS = 40_000_000;
-    private static final int MAX_PROCESSING_DIMENSION = 2400;
-    private static final int MAX_VARIANTS = 6;
+    private static final int MAX_PIXELS = 8_000_000;
+    private static final int MAX_PROCESSING_PIXELS = 4_000_000;
 
     public PreparedImages prepare(Path source) {
         try {
@@ -30,14 +31,7 @@ public class ImagePreprocessor {
             BufferedImage working = fitForProcessing(original);
             double processingScale = (double) original.getWidth() / working.getWidth();
             Path directory = Files.createTempDirectory("noizy-ocr-");
-            List<PreparedImage> images = new ArrayList<>();
-            images.add(new PreparedImage(source, "original", 1.0, false));
-            images.add(write(directory, "gray-2x", scale(grayscale(working), 2), 2.0 * processingScale));
-            images.add(write(directory, "contrast-2x", scale(contrast(working), 2), 2.0 * processingScale));
-            images.add(write(directory, "otsu-2x", scale(otsu(grayscale(working)), 2), 2.0 * processingScale));
-            images.add(write(directory, "adaptive-2x", scale(adaptive(grayscale(working)), 2), 2.0 * processingScale));
-            images.add(write(directory, "invert-2x", scale(invert(grayscale(working)), 2), 2.0 * processingScale));
-            return new PreparedImages(directory, images.subList(0, Math.min(MAX_VARIANTS, images.size())));
+            return new PreparedImages(directory, source, working, processingScale);
         } catch (IOException exception) {
             throw new IllegalStateException("Der Flyer konnte für OCR nicht vorbereitet werden.", exception);
         }
@@ -50,9 +44,9 @@ public class ImagePreprocessor {
     }
 
     private BufferedImage fitForProcessing(BufferedImage source) {
-        int longestSide = Math.max(source.getWidth(), source.getHeight());
-        if (longestSide <= MAX_PROCESSING_DIMENSION) return source;
-        double factor = (double) MAX_PROCESSING_DIMENSION / longestSide;
+        long pixels = (long) source.getWidth() * source.getHeight();
+        if (pixels <= MAX_PROCESSING_PIXELS) return source;
+        double factor = Math.sqrt((double) MAX_PROCESSING_PIXELS / pixels);
         int width = Math.max(1, (int) Math.round(source.getWidth() * factor));
         int height = Math.max(1, (int) Math.round(source.getHeight() * factor));
         BufferedImage result = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
@@ -149,10 +143,45 @@ public class ImagePreprocessor {
 
     public record PreparedImage(Path path, String variant, double scale, boolean temporary) { }
 
-    public record PreparedImages(Path directory, List<PreparedImage> images) implements AutoCloseable {
+    public final class PreparedImages implements AutoCloseable {
+        private final Path directory;
+        private final Path source;
+        private final BufferedImage working;
+        private final double processingScale;
+        private final Map<String, PreparedImage> images = new LinkedHashMap<>();
+
+        private PreparedImages(Path directory, Path source, BufferedImage working, double processingScale) {
+            this.directory = directory;
+            this.source = source;
+            this.working = working;
+            this.processingScale = processingScale;
+        }
+
+        public PreparedImage image(String variant) {
+            if ("original".equals(variant)) return new PreparedImage(source, variant, 1.0, false);
+            return images.computeIfAbsent(variant, this::createVariant);
+        }
+
+        private PreparedImage createVariant(String variant) {
+            try {
+                BufferedImage gray = grayscale(working);
+                BufferedImage result = switch (variant) {
+                    case "gray-2x" -> scale(gray, 2);
+                    case "contrast-2x" -> scale(contrast(working), 2);
+                    case "otsu-2x" -> scale(otsu(gray), 2);
+                    case "adaptive-2x" -> scale(adaptive(gray), 2);
+                    case "invert-2x" -> scale(invert(gray), 2);
+                    default -> throw new IllegalArgumentException("Unbekannte OCR-Variante: " + variant);
+                };
+                return write(directory, variant, result, 2.0 * processingScale);
+            } catch (IOException exception) {
+                throw new IllegalStateException("Die OCR-Variante konnte nicht erzeugt werden.", exception);
+            }
+        }
+
         @Override public void close() {
             try {
-                for (PreparedImage image : images) if (image.temporary()) Files.deleteIfExists(image.path());
+                for (PreparedImage image : images.values()) if (image.temporary()) Files.deleteIfExists(image.path());
                 Files.deleteIfExists(directory);
             } catch (IOException ignored) { }
         }

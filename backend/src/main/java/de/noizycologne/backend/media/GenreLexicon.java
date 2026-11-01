@@ -36,9 +36,23 @@ public class GenreLexicon {
     public List<String> findGenres(List<TesseractOcrService.OcrWord> words) {
         String text = normalize(words.stream().map(TesseractOcrService.OcrWord::text).reduce("", (a, b) -> a + " " + b));
         Map<String, Boolean> found = new LinkedHashMap<>();
-        ENTRIES.forEach((canonical, aliases) -> aliases.stream().map(this::normalize)
-                .filter(alias -> contains(text, alias)).findFirst().ifPresent(alias -> found.put(canonical, true)));
+        ENTRIES.entrySet().stream()
+                .sorted((left, right) -> Integer.compare(longestAlias(right.getValue()), longestAlias(left.getValue())))
+                .forEach(entry -> entry.getValue().stream().map(this::normalize)
+                        .filter(alias -> contains(text, alias)).findFirst()
+                        .ifPresent(alias -> found.put(entry.getKey(), true)));
+        // Specific compound genres are evidence for the compound label, not an
+        // additional generic label. This avoids turning "Garage-Punk" into
+        // the misleading pair "Garage-Punk" + "Punk".
+        if (found.containsKey("Garage-Punk")) found.remove("Punk");
+        if (found.containsKey("Garage Rock")) found.remove("Rock");
+        if (found.containsKey("50s Rock’n’Roll")) found.remove("Rock’n’Roll");
+        if (found.containsKey("Wild R&B")) found.remove("Rhythm & Blues");
         return List.copyOf(found.keySet());
+    }
+
+    private int longestAlias(List<String> aliases) {
+        return aliases.stream().mapToInt(alias -> normalize(alias).length()).max().orElse(0);
     }
 
     String normalize(String value) {

@@ -14,9 +14,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Semaphore;
 
 @Service
 public class TesseractOcrService {
+    private static final Semaphore OCR_SLOT = new Semaphore(1);
     private final String command;
     private final String languages;
     private final long timeoutMillis;
@@ -36,9 +38,14 @@ public class TesseractOcrService {
             thread.setDaemon(true);
             return thread;
         });
+        boolean acquired = false;
         try {
-            process = new ProcessBuilder(command, image.path().toString(), "stdout", "--tsv", "-l", languages,
-                    "--oem", "1", "--psm", Integer.toString(psm)).redirectErrorStream(true).start();
+            OCR_SLOT.acquire();
+            acquired = true;
+            ProcessBuilder processBuilder = new ProcessBuilder(command, image.path().toString(), "stdout", "--tsv", "-l", languages,
+                    "--oem", "1", "--psm", Integer.toString(psm)).redirectErrorStream(true);
+            processBuilder.environment().put("OMP_THREAD_LIMIT", "1");
+            process = processBuilder.start();
             Process running = process;
             Future<String> output = reader.submit(() -> new String(running.getInputStream().readAllBytes(), StandardCharsets.UTF_8));
             if (!process.waitFor(timeoutMillis, TimeUnit.MILLISECONDS)) {
@@ -59,6 +66,7 @@ public class TesseractOcrService {
         } finally {
             if (process != null && process.isAlive()) process.destroyForcibly();
             reader.shutdownNow();
+            if (acquired) OCR_SLOT.release();
         }
     }
 

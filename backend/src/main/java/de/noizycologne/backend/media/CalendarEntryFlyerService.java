@@ -28,8 +28,8 @@ import java.util.Iterator;
 @Service
 public class CalendarEntryFlyerService {
 
-    private static final long MAX_FILE_SIZE = 10 * 1024 * 1024;
-    private static final int MAX_PIXELS = 40_000_000;
+    private static final long MAX_FILE_SIZE = 8 * 1024 * 1024;
+    private static final int MAX_PIXELS = 8_000_000;
 
     private final CalendarEntryRepository calendarEntryRepository;
     private final MediaAssetRepository mediaAssetRepository;
@@ -127,7 +127,7 @@ public class CalendarEntryFlyerService {
 
     private ValidatedImage validateImage(MultipartFile file) {
         if (file == null || file.isEmpty()) throw badRequest("Bitte eine Bilddatei auswählen");
-        if (file.getSize() > MAX_FILE_SIZE) throw badRequest("Der Flyer darf höchstens 10 MB groß sein");
+        if (file.getSize() > MAX_FILE_SIZE) throw badRequest("Der Flyer darf höchstens 8 MB groß sein");
         try (ImageInputStream input = ImageIO.createImageInputStream(file.getInputStream())) {
             if (input == null) throw badRequest("Die Datei ist kein gültiges Bild");
             Iterator<ImageReader> readers = ImageIO.getImageReaders(input);

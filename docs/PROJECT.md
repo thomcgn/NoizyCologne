@@ -3220,3 +3220,13 @@ flowchart TD
 ## 23.10 Festhaltepunkt für den nächsten Commit
 
 Der Nutzer hat bestätigt, dass der lokale Frontend-TypeScript-Check erfolgreich ist und dass das Anlegen/Anzeigen/Bearbeiten/Löschen von Kalender-Einträgen **funktioniert**. Git-Checkpoint vor weiteren funktionalen Änderungen empfohlen. **Nicht hiermit behaupten**, dass ein Commit oder Push bereits erfolgt ist: Lokales Git ist außerhalb dieses Handbuchs zu prüfen. Danach wird dieses vollständige v1.7-Handbuch als `docs/PROJECT.md` versioniert. Frühere v1.6-MD bleibt Historie.
+
+## 23.11 Offline-OCR 2.0 – verbindliche Betriebsgrenzen
+
+Die Flyer-Genre-Erkennung läuft vollständig lokal über Spring Boot, ImageIO/Java2D, die Tesseract-CLI und einen deterministischen lokalen Genre-Katalog. Es werden keine Cloud-OCR-, LLM- oder kostenpflichtigen Analyse-Dienste verwendet. Das Originalbild bleibt unverändert; OCR-Arbeitsdateien liegen nur temporär außerhalb der Medienablage und werden nach dem Lauf entfernt.
+
+Für den knappen VPS gelten folgende Schutzgrenzen: maximal 8 MB Uploadgröße und 8 MP Eingabefläche, höchstens 4 MP interne Arbeitsfläche, maximal vier OCR-Pässe pro Flyer, eine parallele Tesseract-Ausführung und `OMP_THREAD_LIMIT=1`. Die aktuelle HTTP-Analyse bleibt synchron, blockiert aber keine zweite Tesseract-Ausführung; eine spätere Job-Queue muss diese Schnittstelle vor einer Erhöhung der Last in einen begrenzten `QUEUED`/`RUNNING`/`COMPLETED`/`FAILED`-Ablauf überführen. Es gibt keine Redis-/Rabbit-Abhängigkeit.
+
+Tesseract liefert TSV-Wörter mit Text, Konfidenz, Bounding-Box, Variante, PSM, Pass sowie Block-/Zeilenbezug. Die Genre-Erkennung ist ein prüfbarer Vorschlag: Sie nutzt normalisierte, mehrwortfähige Aliasregeln, bevorzugt spezifische Begriffe vor generischen Bestandteilen (z. B. `Garage-Punk` nicht zusätzlich als `Punk`) und darf nicht als bestätigtes Line-up oder als Veröffentlichung interpretiert werden. Unsichere oder redaktionell ergänzte Genres bleiben eine getrennte manuelle Prüfung. Der Standard kann über `TESSERACT_LANGUAGES` konfiguriert werden; die lokale Anwendung nutzt weiterhin `deu+eng`, damit deutschsprachige Flyer nicht stillschweigend schlechter erkannt werden.
+
+Die OCR-Grenzen werden mit lokalen Backend-Tests, Flyway/PostgreSQL-Integrationstests und reproduzierbaren Referenz-Flyern geprüft. Vor einem Deployment sind außerdem Speicherverbrauch, Laufzeit unter 30 Sekunden pro Flyer, Queue-Verhalten sowie die mobile Review-Oberfläche separat zu messen; fehlende Messwerte dürfen nicht als Produktionsfreigabe ausgegeben werden.

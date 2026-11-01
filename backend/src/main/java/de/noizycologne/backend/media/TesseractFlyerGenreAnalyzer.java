@@ -5,7 +5,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -29,24 +28,21 @@ public class TesseractFlyerGenreAnalyzer implements FlyerGenreAnalyzer {
     public FlyerGenreAnalysisResponse analyze(MediaAsset asset, Path imagePath) {
         try (ImagePreprocessor.PreparedImages prepared = imagePreprocessor.prepare(imagePath)) {
             Map<String, TesseractOcrService.OcrWord> bestWords = new java.util.LinkedHashMap<>();
-            TesseractOcrService.OcrResult base = ocrService.recognize(prepared.images().get(0), 11, 1);
+            TesseractOcrService.OcrResult base = ocrService.recognize(prepared.image("original"), 11, 1);
             merge(bestWords, base.words());
 
-            List<ImagePreprocessor.PreparedImage> fallbacks = new ArrayList<>();
+            List<String> fallbacks = new java.util.ArrayList<>();
             if (base.isUnclear()) {
-                fallbacks.add(prepared.images().get(1));
-                fallbacks.add(prepared.images().get(2));
+                fallbacks.add("gray-2x");
+                fallbacks.add("contrast-2x");
             }
-            if (base.words().size() < 3) {
-                fallbacks.add(prepared.images().get(3));
-                fallbacks.add(prepared.images().get(4));
-            }
+            if (base.words().size() < 3) fallbacks.add("adaptive-2x");
             int pass = 2;
-            for (ImagePreprocessor.PreparedImage image : fallbacks) {
+            for (String variant : fallbacks.subList(0, Math.min(3, fallbacks.size()))) {
+                ImagePreprocessor.PreparedImage image = prepared.image(variant);
                 int psm = image.variant().startsWith("gray") ? 6 : 11;
                 TesseractOcrService.OcrResult result = ocrService.recognize(image, psm, pass++);
                 merge(bestWords, result.words());
-                if (bestWords.size() >= 100) break;
             }
 
             List<String> genres = genreLexicon.findGenres(List.copyOf(bestWords.values()));

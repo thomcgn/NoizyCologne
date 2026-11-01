@@ -16,7 +16,7 @@ class GenreLexiconTests {
                 word("Garage"), word("Punk"), word("50s"), word("RnR"), word("Soul")
         );
 
-        assertThat(lexicon.findGenres(words)).containsExactly("Punk", "Garage-Punk", "Rock’n’Roll", "50s Rock’n’Roll", "Soul");
+        assertThat(lexicon.findGenres(words)).containsExactlyInAnyOrder("Garage-Punk", "50s Rock’n’Roll", "Soul");
     }
 
     @Test
