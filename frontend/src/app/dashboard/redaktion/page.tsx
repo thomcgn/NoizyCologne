@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type PointerEvent } from "react";
 import {
   useCatalog,
   type Actor,
@@ -108,6 +108,11 @@ export default function RedaktionPage() {
   const [draftSaving, setDraftSaving] = useState(false);
   const [draftError, setDraftError] = useState("");
   const [feedOrder, setFeedOrder] = useState<string[]>([]);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef<{ id: string; x: number; y: number; pointerId: number } | null>(null);
+  const dragMovedRef = useRef(false);
   const orderedEventEntries = useMemo(() => {
     const byId = new Map(eventEntries.map((entry) => [entry.id, entry]));
     const knownIds = feedOrder.filter((id) => byId.has(id));
@@ -310,6 +315,75 @@ export default function RedaktionPage() {
     }));
   }
 
+  function moveEventToIndex(entryId: string, targetIndex: number) {
+    const currentOrder = orderedEventEntries.map((entry) => entry.id);
+    const currentIndex = currentOrder.indexOf(entryId);
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= currentOrder.length || currentIndex === targetIndex) return;
+    const [movedId] = currentOrder.splice(currentIndex, 1);
+    currentOrder.splice(targetIndex, 0, movedId);
+    setFeedOrder(currentOrder);
+    setGateStates((current) => ({
+      ...current,
+      [entryId]: {
+        ...(current[entryId] ?? {
+          captionReviewed: false,
+          hashtagsReviewed: false,
+          mentionsReviewed: false,
+          feedOrderReviewed: false,
+        }),
+        feedOrderReviewed: false,
+      },
+    }));
+  }
+
+  function moveEventWithKeyboard(entryId: string, direction: -1 | 1) {
+    moveEvent(entryId, direction);
+    setSelectedId(entryId);
+  }
+
+  function startPointerDrag(event: PointerEvent<HTMLButtonElement>, entryId: string) {
+    if (event.button !== 0) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragStartRef.current = { id: entryId, x: event.clientX, y: event.clientY, pointerId: event.pointerId };
+    dragMovedRef.current = false;
+    setDraggedId(entryId);
+    setDropTargetId(entryId);
+  }
+
+  function updatePointerDrag(event: PointerEvent<HTMLButtonElement>) {
+    const start = dragStartRef.current;
+    if (!start || start.pointerId !== event.pointerId) return;
+    const distance = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+    if (distance < 6) return;
+    dragMovedRef.current = true;
+    setIsDragging(true);
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-feed-tile-id]");
+    const targetId = target?.dataset.feedTileId;
+    if (!targetId || targetId === start.id) return;
+    setDropTargetId(targetId);
+    const targetIndex = orderedEventEntries.findIndex((entry) => entry.id === targetId);
+    if (targetIndex >= 0) moveEventToIndex(start.id, targetIndex);
+  }
+
+  function finishPointerDrag(event: PointerEvent<HTMLButtonElement>) {
+    const start = dragStartRef.current;
+    if (start?.pointerId === event.pointerId && event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    dragStartRef.current = null;
+    setDraggedId(null);
+    setDropTargetId(null);
+    setIsDragging(false);
+  }
+
+  function cancelPointerDrag() {
+    dragStartRef.current = null;
+    dragMovedRef.current = false;
+    setDraggedId(null);
+    setDropTargetId(null);
+    setIsDragging(false);
+  }
+
   return (
     <main className="app-page min-h-dvh bg-black px-4 py-6 text-white sm:py-8 md:px-10">
       <div className="mx-auto max-w-7xl">
@@ -380,77 +454,103 @@ export default function RedaktionPage() {
         )}
 
         {eventEntries.length > 0 && (
-          <div className="mt-8 grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)_minmax(300px,420px)]">
-            <section className="rounded-xl border border-white/10 bg-neutral-950 p-4">
-              <h2 className="text-lg font-semibold">Veranstaltung</h2>
-              <label className="mt-4 block">
-                <span className="mb-2 block text-sm text-neutral-300">Entwurf auswählen</span>
-                <select
-                  className="min-h-12 w-full rounded-lg border border-white/15 bg-neutral-900 px-3 py-2.5 text-sm text-white outline-none focus:border-white/60"
-                  value={selectedId}
-                  onChange={(event) => setSelectedId(event.target.value)}
-                >
-                  {orderedEventEntries.map((entry) => {
-                    const party = parties.find((item) => item.id === entry.partyId);
-                    return (
-                      <option key={entry.id} value={entry.id}>
-                        {entry.date} · {party?.name ?? "Unbekannte Partyreihe"}
-                      </option>
-                    );
-                  })}
-                </select>
-              </label>
-
-              <div className="mt-6 border-t border-white/10 pt-5">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold">Feed-Reihenfolge</h3>
-                  <span className="text-xs text-neutral-500">nur lokal</span>
+          <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(300px,420px)]">
+            <section className="rounded-xl border border-white/10 bg-neutral-950 p-4 sm:p-6 xl:col-span-2">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold">Feed-Anordnung</h2>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-400">
+                    Ziehe die Kacheln in die gewünschte Instagram-Reihenfolge. Die Anordnung bleibt vorerst nur in dieser Ansicht und verändert keine Kalenderdaten.
+                  </p>
                 </div>
-                <p className="mt-2 text-xs leading-5 text-neutral-500">
-                  Die Reihenfolge wird nicht gespeichert und verändert keine Kalenderdaten.
-                </p>
-                <ol className="mt-3 space-y-2">
-                  {orderedEventEntries.map((entry, index) => {
-                    const party = parties.find((item) => item.id === entry.partyId);
-                    const isActive = entry.id === activeId;
-                    return (
-                      <li
-                        key={entry.id}
-                        className={`rounded-lg border p-2 ${isActive ? "border-white/40 bg-white/10" : "border-white/10 bg-neutral-900"}`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            className="min-h-10 min-w-10 rounded-md border border-white/15 text-sm text-neutral-300 disabled:cursor-not-allowed disabled:opacity-30"
-                            onClick={() => moveEvent(entry.id, -1)}
-                            disabled={index === 0}
-                            aria-label={`${party?.name ?? "Veranstaltung"} nach oben verschieben`}
-                          >
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            className="min-h-10 min-w-10 rounded-md border border-white/15 text-sm text-neutral-300 disabled:cursor-not-allowed disabled:opacity-30"
-                            onClick={() => moveEvent(entry.id, 1)}
-                            disabled={index === orderedEventEntries.length - 1}
-                            aria-label={`${party?.name ?? "Veranstaltung"} nach unten verschieben`}
-                          >
-                            ↓
-                          </button>
-                          <button
-                            type="button"
-                            className="min-w-0 flex-1 text-left"
-                            onClick={() => setSelectedId(entry.id)}
-                          >
-                            <span className="block text-xs text-neutral-500">{index + 1}. · {entry.date}</span>
-                            <span className="block truncate text-sm">{party?.name ?? "Unbekannte Partyreihe"}</span>
-                          </button>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ol>
+                <span className="rounded-full border border-blue-400/30 px-3 py-1 text-xs text-blue-300">nur lokal</span>
               </div>
+              <p className="sr-only" id="feed-order-help">
+                Tastatur: Pfeiltasten verschieben die ausgewählte Kachel, Home und Ende setzen sie an den Anfang oder das Ende. Enter öffnet den zugehörigen Entwurf.
+              </p>
+              <div
+                className={`mt-5 grid grid-cols-3 gap-2 sm:gap-3 ${isDragging ? "select-none" : ""}`}
+                aria-describedby="feed-order-help"
+              >
+                {orderedEventEntries.map((entry, index) => {
+                  const party = parties.find((item) => item.id === entry.partyId);
+                  const entryFlyerUrl = entry.eventFlyer?.url ?? party?.defaultFlyer?.url ?? null;
+                  const isActive = entry.id === activeId;
+                  const isDragged = entry.id === draggedId;
+                  const isDropTarget = entry.id === dropTargetId && isDragging && !isDragged;
+                  return (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      data-feed-tile-id={entry.id}
+                      className={`relative aspect-square min-h-0 overflow-hidden rounded-lg border bg-neutral-900 text-left outline-none transition duration-150 touch-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
+                        isActive ? "border-white/80" : "border-white/10"
+                      } ${isDragged ? "z-10 scale-[1.03] opacity-60 shadow-2xl" : "hover:border-white/40"} ${
+                        isDropTarget ? "scale-[0.96] border-blue-400 ring-2 ring-blue-400" : ""
+                      }`}
+                      onPointerDown={(event) => startPointerDrag(event, entry.id)}
+                      onPointerMove={updatePointerDrag}
+                      onPointerUp={finishPointerDrag}
+                      onPointerCancel={cancelPointerDrag}
+                      onClick={(event) => {
+                        if (dragMovedRef.current) {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          dragMovedRef.current = false;
+                          return;
+                        }
+                        setSelectedId(entry.id);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+                          event.preventDefault();
+                          moveEventWithKeyboard(entry.id, -1);
+                        } else if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+                          event.preventDefault();
+                          moveEventWithKeyboard(entry.id, 1);
+                        } else if (event.key === "Home") {
+                          event.preventDefault();
+                          moveEventToIndex(entry.id, 0);
+                          setSelectedId(entry.id);
+                        } else if (event.key === "End") {
+                          event.preventDefault();
+                          moveEventToIndex(entry.id, orderedEventEntries.length - 1);
+                          setSelectedId(entry.id);
+                        }
+                      }}
+                      aria-label={`${index + 1}. ${party?.name ?? "Unbekannte Partyreihe"}, ${entry.date}. Zum Bearbeiten auswählen.`}
+                      aria-pressed={isActive}
+                    >
+                      <span className="absolute left-2 top-2 z-10 flex size-8 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white shadow-lg sm:left-3 sm:top-3 sm:size-9">
+                        {index + 1}
+                      </span>
+                      {entryFlyerUrl ? (
+                        <Image
+                          src={entryFlyerUrl}
+                          alt={`${entry.eventFlyer ? "Event-Flyer" : "Dauerflyer"} ${party?.name ?? "Partyreihe"}`}
+                          fill
+                          sizes="(max-width: 640px) 33vw, (max-width: 1280px) 25vw, 20vw"
+                          unoptimized
+                          className="object-cover"
+                        />
+                      ) : (
+                        <span className="flex size-full flex-col items-center justify-center bg-gradient-to-br from-neutral-800 via-neutral-950 to-blue-950/50 p-3 text-center">
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-300">NoizyCologne</span>
+                          <span className="mt-2 line-clamp-3 text-xs text-neutral-300">{party?.name ?? "Kein Flyer"}</span>
+                          <span className="mt-1 text-[10px] text-neutral-500">Flyer fehlt</span>
+                        </span>
+                      )}
+                      <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/45 to-transparent px-2 pb-2 pt-8 text-[10px] text-white sm:px-3 sm:pb-3 sm:text-xs">
+                        <span className="block truncate font-medium">{party?.name ?? "Unbekannte Partyreihe"}</span>
+                        <span className="block text-neutral-300">{entry.date}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-3 text-xs text-neutral-500">
+                Kachel anklicken = Entwurf auswählen · Ziehen = umsortieren · Pfeiltasten/Home/Ende = Tastaturalternative
+              </p>
 
               {selectedEntry && selectedParty && (
                 <div className="mt-6 space-y-3 border-t border-white/10 pt-5 text-sm">
