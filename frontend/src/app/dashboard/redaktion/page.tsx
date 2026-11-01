@@ -7,10 +7,14 @@ import {
   useCatalog,
   type Actor,
   type CalendarEntry,
+  type CatalogItem,
   type EditorialDraftStatus,
   type GenreSuggestion,
-  type PartySeries,
 } from "../CatalogProvider";
+import {
+  CAPTION_PRETEXT_STORAGE_KEY,
+  DEFAULT_CAPTION_PRETEXT,
+} from "../captionSettings";
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat("de-DE", {
@@ -25,29 +29,35 @@ function displayHandle(actor: Actor) {
   return actor.instagram ? `@${actor.instagram.replace(/^@/, "")}` : "Kein Handle";
 }
 
-function buildCaption(entry: CalendarEntry, party: PartySeries, locationName: string, genres: string[] = []) {
-  if (entry.type !== "event") return "";
-  return [
-    party.name,
-    formatDate(entry.date),
-    entry.startTime ? `Beginn: ${entry.startTime} Uhr` : null,
-    locationName,
-    entry.notes || null,
-    genres.length > 0 ? `Genres: ${genres.join(", ")}` : null,
-  ]
-    .filter((line): line is string => Boolean(line))
-    .join("\n");
+function formatCaptionDate(date: string) {
+  const [year, month, day] = date.split("-");
+  return `${day}.${month}.${year}`;
 }
 
-function syncCaptionGenres(caption: string, genres: string[]) {
-  const withoutGenres = caption
-    .split("\n")
-    .filter((line) => !/^Genres:\s*/i.test(line.trim()))
-    .join("\n")
-    .trimEnd();
-  return genres.length > 0
-    ? `${withoutGenres}${withoutGenres ? "\n" : ""}Genres: ${genres.join(", ")}`
-    : withoutGenres;
+function buildCaption(
+  entry: CalendarEntry,
+  venue: CatalogItem,
+  actors: Actor[],
+  preText: string,
+  genres: string[] = [],
+) {
+  if (entry.type !== "event") return "";
+  const djHandles = entry.mentionDjIds
+    .map((id) => actors.find((actor) => actor.id === id)?.instagram)
+    .filter((handle): handle is string => Boolean(handle?.trim()))
+    .map((handle) => `@${handle.replace(/^@/, "")}`);
+  const locationHandle = venue.instagram.trim()
+    ? `@${venue.instagram.replace(/^@/, "")}`
+    : null;
+  return [
+    preText.trim() || DEFAULT_CAPTION_PRETEXT,
+    formatCaptionDate(entry.date),
+    genres.length > 0 ? genres.join(", ") : null,
+    djHandles.length > 0 ? `mit ${djHandles.join(" & ")}` : null,
+    locationHandle ? `im ${locationHandle}` : null,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join(" ");
 }
 
 type DraftState = {
@@ -100,10 +110,6 @@ export default function RedaktionPage() {
       .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)),
     [entries]
   );
-  const draftEventEntries = useMemo(
-    () => eventEntries.filter((entry) => persistedDrafts.some((draft) => draft.calendarEntryId === entry.id)),
-    [eventEntries, persistedDrafts]
-  );
   const [selectedId, setSelectedId] = useState("");
   const [localDrafts, setLocalDrafts] = useState<Record<string, DraftState>>({});
   const [gateStates, setGateStates] = useState<Record<string, GateState>>({});
@@ -114,6 +120,10 @@ export default function RedaktionPage() {
   const [genreAnalysisError, setGenreAnalysisError] = useState("");
   const [draftSaving, setDraftSaving] = useState(false);
   const [draftError, setDraftError] = useState("");
+  const [captionPreText] = useState(() => {
+    if (typeof window === "undefined") return DEFAULT_CAPTION_PRETEXT;
+    return window.localStorage.getItem(CAPTION_PRETEXT_STORAGE_KEY)?.trim() || DEFAULT_CAPTION_PRETEXT;
+  });
   const [feedOrder, setFeedOrder] = useState<string[]>([]);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
@@ -121,13 +131,13 @@ export default function RedaktionPage() {
   const dragStartRef = useRef<{ id: string; x: number; y: number; pointerId: number } | null>(null);
   const dragMovedRef = useRef(false);
   const orderedEventEntries = useMemo(() => {
-    const byId = new Map(draftEventEntries.map((entry) => [entry.id, entry]));
+    const byId = new Map(eventEntries.map((entry) => [entry.id, entry]));
     const knownIds = feedOrder.filter((id) => byId.has(id));
-    const newIds = draftEventEntries.map((entry) => entry.id).filter((id) => !knownIds.includes(id));
+    const newIds = eventEntries.map((entry) => entry.id).filter((id) => !knownIds.includes(id));
     return [...knownIds, ...newIds]
       .map((id) => byId.get(id))
       .filter((entry): entry is Extract<CalendarEntry, { type: "event" }> => Boolean(entry));
-  }, [draftEventEntries, feedOrder]);
+  }, [eventEntries, feedOrder]);
   const activeId = selectedId && eventEntries.some((entry) => entry.id === selectedId)
     ? selectedId
     : orderedEventEntries[0]?.id ?? eventEntries[0]?.id ?? "";
@@ -156,8 +166,10 @@ export default function RedaktionPage() {
   const defaultDraft: DraftState = selectedEntry && selectedParty
     ? {
         caption: persistedDraft
-          ? syncCaptionGenres(persistedDraft.caption, persistedDraft.genres)
-          : buildCaption(selectedEntry, selectedParty, selectedVenue?.name ?? ""),
+          ? persistedDraft.caption
+          : selectedVenue
+            ? buildCaption(selectedEntry, selectedVenue, actors, captionPreText)
+            : "",
         hashtags: persistedDraft?.hashtags ?? "",
         mentionIds: persistedDraft?.mentionActorIds ?? selectedEntry.mentionDjIds,
         genres: persistedDraft?.genres ?? [],
@@ -189,13 +201,20 @@ export default function RedaktionPage() {
       : [...draft.genres, genre];
     updateDraft({
       genres,
-      caption: syncCaptionGenres(draft.caption, genres),
+      caption: selectedEntry && selectedParty && selectedVenue
+        ? buildCaption(selectedEntry, selectedVenue, actors, captionPreText, genres)
+        : draft.caption,
     });
   }
 
   function applyGenreSuggestions() {
     const genres = currentGenreSuggestions.map((suggestion) => suggestion.genre);
-    updateDraft({ genres, caption: syncCaptionGenres(draft.caption, genres) });
+    updateDraft({
+      genres,
+      caption: selectedEntry && selectedParty && selectedVenue
+        ? buildCaption(selectedEntry, selectedVenue, actors, captionPreText, genres)
+        : draft.caption,
+    });
   }
 
   async function analyzeGenres() {
@@ -472,26 +491,6 @@ export default function RedaktionPage() {
                 </div>
                 <span className="rounded-full border border-blue-400/30 px-3 py-1 text-xs text-blue-300">nur lokal</span>
               </div>
-              {draftEventEntries.length < eventEntries.length && (
-                <label className="mx-4 mb-5 block sm:mx-6">
-                  <span className="mb-2 block text-sm text-neutral-300">Veranstaltung für neuen Entwurf auswählen</span>
-                  <select
-                    className="min-h-11 w-full rounded-lg border border-white/15 bg-neutral-900 px-3 py-2.5 text-sm text-white outline-none focus:border-white/60"
-                    value={activeId}
-                    onChange={(event) => setSelectedId(event.target.value)}
-                  >
-                    {eventEntries.map((entry) => {
-                      const party = parties.find((item) => item.id === entry.partyId);
-                      const hasDraft = draftEventEntries.some((draftEntry) => draftEntry.id === entry.id);
-                      return (
-                        <option key={entry.id} value={entry.id}>
-                          {entry.date} · {party?.name ?? "Unbekannte Partyreihe"}{hasDraft ? " · Entwurf vorhanden" : " · neuer Entwurf"}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </label>
-              )}
               <p className="sr-only" id="feed-order-help">
                 Tastatur: Pfeiltasten verschieben die ausgewählte Kachel, Home und Ende setzen sie an den Anfang oder das Ende. Enter öffnet den zugehörigen Entwurf.
               </p>
@@ -573,11 +572,6 @@ export default function RedaktionPage() {
                   );
                 })}
               </div>
-              {orderedEventEntries.length === 0 && (
-                <p className="bg-neutral-950 p-6 text-sm text-neutral-400">
-                  Im Feed erscheinen ausschließlich bereits angelegte Redaktionsentwürfe. Lege rechts für eine Kalenderveranstaltung zuerst einen Entwurf an.
-                </p>
-              )}
               <p className="p-4 text-xs text-neutral-500 sm:px-6 sm:pb-6">
                 Kachel anklicken = Entwurf auswählen · Ziehen = umsortieren · Pfeiltasten/Home/Ende = Tastaturalternative
               </p>

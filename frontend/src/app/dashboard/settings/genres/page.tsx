@@ -2,6 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  CAPTION_PRETEXT_STORAGE_KEY,
+  DEFAULT_CAPTION_PRETEXT,
+} from "../../captionSettings";
 
 type GenreAlias = { id: string; value: string };
 type Genre = {
@@ -38,6 +42,11 @@ export default function GenresPage() {
   const [active, setActive] = useState(true);
   const [newAlias, setNewAlias] = useState("");
   const [aliasGenreId, setAliasGenreId] = useState<string | null>(null);
+  const [captionPreText, setCaptionPreText] = useState(() => {
+    if (typeof window === "undefined") return DEFAULT_CAPTION_PRETEXT;
+    return window.localStorage.getItem(CAPTION_PRETEXT_STORAGE_KEY)?.trim() || DEFAULT_CAPTION_PRETEXT;
+  });
+  const [captionPreTextSaved, setCaptionPreTextSaved] = useState(false);
 
   async function loadGenres() {
     setLoading(true);
@@ -57,6 +66,14 @@ export default function GenresPage() {
     const loadTimer = window.setTimeout(() => { void loadGenres(); }, 0);
     return () => window.clearTimeout(loadTimer);
   }, []);
+
+  function saveCaptionPreText() {
+    const value = captionPreText.trim() || DEFAULT_CAPTION_PRETEXT;
+    window.localStorage.setItem(CAPTION_PRETEXT_STORAGE_KEY, value);
+    setCaptionPreText(value);
+    setCaptionPreTextSaved(true);
+    window.setTimeout(() => setCaptionPreTextSaved(false), 2200);
+  }
 
   const visibleGenres = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("de-DE");
@@ -155,6 +172,22 @@ export default function GenresPage() {
         <div><p className="text-xs uppercase tracking-[0.2em] text-neutral-500">NoizyCologne / Einstellungen</p><h1 className="mt-2 text-3xl font-bold">Genres</h1><p className="mt-3 text-neutral-400">Aktive Genres und OCR-Aliase für die lokale Flyer-Erkennung.</p></div>
         <button type="button" onClick={newGenre} className="min-h-12 rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black">+ Genre anlegen</button>
       </header>
+      <section className="mt-8 rounded-xl border border-white/10 bg-neutral-950 p-4 sm:p-5">
+        <h2 className="text-lg font-semibold">Instagram-Caption</h2>
+        <p className="mt-2 text-sm leading-6 text-neutral-400">
+          Dieser Pre-Text steht am Anfang neuer Captions. Die restliche Vorlage wird aus Veranstaltung, Genres, DJ-Mentions und Location-Handle aufgebaut.
+        </p>
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+          <label className="flex-1">
+            <span className="mb-2 block text-sm text-neutral-300">Pre-Text / Accountname</span>
+            <input className={inputStyle} value={captionPreText} onChange={(event) => setCaptionPreText(event.target.value)} maxLength={100} placeholder={DEFAULT_CAPTION_PRETEXT} />
+          </label>
+          <button type="button" onClick={saveCaptionPreText} className="min-h-11 self-end rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black">
+            {captionPreTextSaved ? "Gespeichert" : "Pre-Text speichern"}
+          </button>
+        </div>
+        <p className="mt-3 text-xs text-neutral-500">Beispiel: {captionPreText.trim() || DEFAULT_CAPTION_PRETEXT} 14.11.2026 Punk, Emo mit @dj im @location</p>
+      </section>
       <div className="mt-8 flex flex-col gap-3 sm:flex-row"><input className={inputStyle} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Genres und Aliase durchsuchen" aria-label="Genres durchsuchen" /><button type="button" onClick={() => void loadGenres()} className="min-h-11 rounded-lg border border-white/15 px-4 py-2 text-sm">Neu laden</button></div>
       {error && <p role="alert" className="mt-4 rounded-lg border border-red-400/40 bg-red-950/30 p-3 text-sm text-red-300">{error}</p>}
       {editorOpen ? <form onSubmit={saveGenre} className="mt-6 rounded-xl border border-white/20 bg-neutral-950 p-4 sm:p-6"><h2 className="text-xl font-semibold">{editingId ? "Genre bearbeiten" : "Neues Genre"}</h2><div className="mt-4 grid gap-4 sm:grid-cols-2"><label><span className="mb-2 block text-sm text-neutral-300">Kanonischer Name</span><input className={inputStyle} value={canonicalName} onChange={(event) => setCanonicalName(event.target.value)} maxLength={100} required /></label><label><span className="mb-2 block text-sm text-neutral-300">Anzeigename</span><input className={inputStyle} value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={100} required /></label></div><label className="mt-4 flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} className="size-4 accent-white" /> Für OCR aktiv</label><div className="mt-5 flex gap-3"><button type="submit" disabled={saving} className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black disabled:opacity-60">{saving ? "Speichern ..." : "Speichern"}</button><button type="button" onClick={() => setEditorOpen(false)} className="rounded-lg border border-white/15 px-5 py-3 text-sm">Abbrechen</button></div></form> : null}
