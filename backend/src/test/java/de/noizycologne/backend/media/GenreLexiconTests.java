@@ -1,10 +1,15 @@
 package de.noizycologne.backend.media;
 
+import de.noizycologne.backend.genre.Genre;
+import de.noizycologne.backend.genre.GenreAliasRepository;
+import de.noizycologne.backend.genre.GenreRepository;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class GenreLexiconTests {
 
@@ -82,6 +87,22 @@ class GenreLexiconTests {
                 .doesNotContain("Rock");
         assertThat(lexicon.findGenres(List.of(word("Rock"), word("Punk"))))
                 .contains("Rock");
+    }
+
+    @Test
+    void matchesCanonicalNameWhenDynamicGenreHasNoAlias() {
+        GenreRepository genres = mock(GenreRepository.class);
+        GenreAliasRepository aliases = mock(GenreAliasRepository.class);
+        Genre genre = mock(Genre.class);
+        when(genre.getId()).thenReturn("breakbeat");
+        when(genre.getCanonicalName()).thenReturn("Breakbeat");
+        when(genres.findAllByActiveTrueOrderByCanonicalNameAsc()).thenReturn(List.of(genre));
+        when(aliases.findAllByGenreIdIn(List.of("breakbeat"))).thenReturn(List.of());
+
+        GenreLexicon dynamicLexicon = new GenreLexicon(genres, aliases);
+
+        assertThat(dynamicLexicon.findGenres(List.of(word("Breakbeat"))))
+                .containsExactly("Breakbeat");
     }
 
     private TesseractOcrService.OcrWord word(String text) {

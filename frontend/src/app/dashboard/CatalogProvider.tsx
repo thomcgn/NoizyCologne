@@ -45,6 +45,7 @@ export type PartyFlyer = {
 export type GenreSuggestion = {
   genre: string;
   confidence: number;
+  uncertain: boolean;
 };
 
 function fallbackApiError(status: number, resource: string): string {
@@ -979,7 +980,8 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       return typeof suggestion.genre === "string"
         && typeof suggestion.confidence === "number"
         && suggestion.confidence >= 0
-        && suggestion.confidence <= 1;
+        && suggestion.confidence <= 1
+        && typeof suggestion.uncertain === "boolean";
     })) {
       throw new Error("Die Flyer-Analyse lieferte ungültige Genre-Vorschläge.");
     }

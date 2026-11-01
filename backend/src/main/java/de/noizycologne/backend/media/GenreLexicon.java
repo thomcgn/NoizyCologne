@@ -43,8 +43,12 @@ public class GenreLexicon {
         for (GenreAlias alias : aliasRepository.findAllByGenreIdIn(genres.stream().map(Genre::getId).toList())) {
             aliases.computeIfAbsent(alias.getGenreId(), ignored -> new java.util.ArrayList<>()).add(alias.getValue());
         }
-        entries = genres.stream().map(genre -> new Entry(genre.getCanonicalName(),
-                List.copyOf(aliases.getOrDefault(genre.getId(), List.of())))).toList();
+        entries = genres.stream().map(genre -> {
+            List<String> values = new java.util.ArrayList<>();
+            values.add(genre.getCanonicalName());
+            values.addAll(aliases.getOrDefault(genre.getId(), List.of()));
+            return new Entry(genre.getCanonicalName(), values.stream().distinct().toList());
+        }).toList();
     }
 
     public List<String> findGenres(List<TesseractOcrService.OcrWord> words) {

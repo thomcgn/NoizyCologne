@@ -705,7 +705,9 @@ export default function RedaktionPage() {
                     {genreAnalysisError && <p className="mt-3 text-sm text-red-300" role="alert">{genreAnalysisError}</p>}
                     {currentGenreSuggestions.length > 0 && (
                       <div className="mt-3 border-t border-white/10 pt-3">
-                        <p className="text-xs text-neutral-400">Vorschläge: {currentGenreSuggestions.map((suggestion) => `${suggestion.genre} (${Math.round(suggestion.confidence * 100)}%)`).join(", ")}</p>
+                        <p className="text-xs text-neutral-400">
+                          Vorschläge: {currentGenreSuggestions.map((suggestion) => `${suggestion.genre} (${suggestion.uncertain ? "unsicher" : "OCR"}, ${Math.round(suggestion.confidence * 100)} % OCR-Konfidenz)`).join(", ")}
+                        </p>
                         <button
                           type="button"
                           onClick={applyGenreSuggestions}
