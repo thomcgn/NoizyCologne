@@ -146,10 +146,10 @@ export default function ActorsPage() {
     <main className="app-page min-h-dvh bg-black px-4 py-6 text-white sm:py-8 md:px-10">
       <div className="mx-auto max-w-5xl">
         <Link
-          href="/dashboard/portfolio"
+          href="/dashboard/djs"
           className="text-sm text-neutral-400 hover:text-white"
         >
-          ← Party-Portfolio
+          ← DJs
         </Link>
 
         <header className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">

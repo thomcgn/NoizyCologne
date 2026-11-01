@@ -12,7 +12,7 @@ import {
   type RecurrenceRule,
 } from "../CatalogProvider";
 
-type Category = "parties" | "locations";
+export type Category = "parties" | "locations";
 type DjAssignment = "none" | "resident" | "other";
 type RecurrenceChoice = "none" | "weekly" | "monthly_weekday" | "other";
 
@@ -43,7 +43,11 @@ const inputStyle =
   "px-3 py-2.5 text-sm text-white outline-none " +
   "focus:border-white/60";
 
-export default function PortfolioPage() {
+export default function PortfolioPage({
+  initialCategory = "parties",
+}: {
+  initialCategory?: Category;
+}) {
   const {
     parties,
     partiesLoading,
@@ -62,7 +66,7 @@ export default function PortfolioPage() {
     actors,
   } = useCatalog();
 
-  const [category, setCategory] = useState<Category>("parties");
+  const [category, setCategory] = useState<Category>(initialCategory);
   const [search, setSearch] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);

@@ -8,8 +8,8 @@ const modules = [
     status: "In Vorbereitung",
   },
   {
-    title: "Party-Portfolio",
-    description: "Partyreihen, Locations, DJs, Kollektive und Instagram-Accounts.",
+    title: "Partys",
+    description: "Partyreihen, Farben, Turnus und Beteiligte verwalten.",
     status: "In Vorbereitung",
   },
   {
@@ -43,37 +43,54 @@ export default function DashboardPage() {
             aria-label="Hauptnavigation"
             className="mt-6 grid grid-cols-2 gap-2 text-sm sm:mt-10 sm:flex sm:space-y-2 lg:block"
           >
-            <div className="rounded-lg bg-white px-3 py-3 text-center font-semibold text-black sm:px-4 lg:text-left">
+            <Link
+              href="/dashboard"
+              className="rounded-lg bg-white px-3 py-3 text-center font-semibold text-black sm:px-4 lg:block lg:text-left"
+            >
               Übersicht
-            </div>
+            </Link>
 
-<Link
-  href="/dashboard/kalender"
-  className="block rounded-lg px-3 py-3 text-center text-neutral-300 hover:bg-white/10 sm:px-4 lg:text-left"
->
-  Kalender
-</Link>
+            <Link
+              href="/dashboard/kalender"
+              className="block rounded-lg px-3 py-3 text-center text-neutral-300 hover:bg-white/10 sm:px-4 lg:text-left"
+            >
+              Kalender
+            </Link>
 
-<Link
-  href="/dashboard/portfolio"
-  className="block rounded-lg px-3 py-3 text-center text-neutral-300 hover:bg-white/10 sm:px-4 lg:text-left"
->
-  Party-Portfolio
-</Link>
+            <Link
+              href="/dashboard/partys"
+              className="block rounded-lg px-3 py-3 text-center text-neutral-300 hover:bg-white/10 sm:px-4 lg:text-left"
+            >
+              Partys
+            </Link>
 
-<Link
-  href="/dashboard/redaktion"
-  className="block rounded-lg px-3 py-3 text-center text-neutral-300 hover:bg-white/10 sm:px-4 lg:text-left"
->
-  Redaktion
-</Link>
+            <Link
+              href="/dashboard/djs"
+              className="block rounded-lg px-3 py-3 text-center text-neutral-300 hover:bg-white/10 sm:px-4 lg:text-left"
+            >
+              DJs
+            </Link>
 
-<Link
-  href="/dashboard/settings/genres"
-  className="block rounded-lg px-3 py-3 text-center text-neutral-300 hover:bg-white/10 sm:px-4 lg:text-left"
->
-  Einstellungen
-</Link>
+            <Link
+              href="/dashboard/locations"
+              className="block rounded-lg px-3 py-3 text-center text-neutral-300 hover:bg-white/10 sm:px-4 lg:text-left"
+            >
+              Locations
+            </Link>
+
+            <Link
+              href="/dashboard/redaktion"
+              className="block rounded-lg px-3 py-3 text-center text-neutral-300 hover:bg-white/10 sm:px-4 lg:text-left"
+            >
+              Redaktion
+            </Link>
+
+            <Link
+              href="/dashboard/settings/genres"
+              className="block rounded-lg px-3 py-3 text-center text-neutral-300 hover:bg-white/10 sm:px-4 lg:text-left"
+            >
+              Einstellungen
+            </Link>
 
           </nav>
         </aside>
