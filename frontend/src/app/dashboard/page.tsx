@@ -41,7 +41,7 @@ export default function DashboardPage() {
 
           <nav
             aria-label="Hauptnavigation"
-            className="mt-6 grid grid-cols-3 gap-2 text-sm sm:mt-10 sm:flex sm:space-y-2 lg:block"
+            className="mt-6 grid grid-cols-2 gap-2 text-sm sm:mt-10 sm:flex sm:space-y-2 lg:block"
           >
             <div className="rounded-lg bg-white px-3 py-3 text-center font-semibold text-black sm:px-4 lg:text-left">
               Übersicht
@@ -143,3 +143,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

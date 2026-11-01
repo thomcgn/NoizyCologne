@@ -13,8 +13,8 @@ export default async function DashboardLayout({
 
   return (
     <CatalogProvider>
-      <div className="relative">
-        <div className="fixed right-4 top-4 z-20 flex gap-2 sm:right-8 sm:top-8">
+      <div className="dashboard-shell relative">
+        <div className="dashboard-controls flex justify-end gap-2 lg:fixed lg:right-8 lg:top-8 lg:z-20">
           <ThemeToggle />
           <LogoutButton />
         </div>
@@ -23,3 +23,4 @@ export default async function DashboardLayout({
     </CatalogProvider>
   );
 }
+
