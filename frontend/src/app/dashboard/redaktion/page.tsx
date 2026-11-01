@@ -458,8 +458,8 @@ export default function RedaktionPage() {
 
         {eventEntries.length > 0 && (
           <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(300px,420px)]">
-            <section className="rounded-xl border border-white/10 bg-neutral-950 p-4 sm:p-6 xl:col-span-2">
-              <div className="flex flex-wrap items-start justify-between gap-3">
+            <section className="overflow-hidden rounded-xl border border-white/10 bg-black xl:col-span-2">
+              <div className="flex flex-wrap items-start justify-between gap-3 p-4 sm:p-6">
                 <div>
                   <h2 className="text-lg font-semibold">Feed-Anordnung</h2>
                   <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-400">
@@ -472,7 +472,7 @@ export default function RedaktionPage() {
                 Tastatur: Pfeiltasten verschieben die ausgewählte Kachel, Home und Ende setzen sie an den Anfang oder das Ende. Enter öffnet den zugehörigen Entwurf.
               </p>
               <div
-                className={`mt-5 grid grid-cols-3 gap-2 sm:gap-3 ${isDragging ? "select-none" : ""}`}
+                className={`grid grid-cols-3 gap-px bg-neutral-800 ${isDragging ? "select-none" : ""}`}
                 aria-describedby="feed-order-help"
               >
                 {orderedEventEntries.map((entry, index) => {
@@ -486,10 +486,11 @@ export default function RedaktionPage() {
                       key={entry.id}
                       type="button"
                       data-feed-tile-id={entry.id}
-                      className={`relative aspect-square min-h-0 overflow-hidden rounded-lg border bg-neutral-900 text-left outline-none transition duration-150 touch-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
-                        isActive ? "border-white/80" : "border-white/10"
-                      } ${isDragged ? "z-10 scale-[1.03] opacity-60 shadow-2xl" : "hover:border-white/40"} ${
-                        isDropTarget ? "scale-[0.96] border-blue-400 ring-2 ring-blue-400" : ""
+                      title={`${index + 1}. ${party?.name ?? "Unbekannte Partyreihe"} · ${entry.date}`}
+                      className={`group relative aspect-square min-h-0 overflow-hidden rounded-none border-0 bg-neutral-900 text-left outline-none transition duration-150 touch-none focus-visible:z-20 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white ${
+                        isActive ? "ring-2 ring-inset ring-white" : ""
+                      } ${isDragged ? "z-10 scale-[1.03] opacity-60 shadow-2xl" : "hover:brightness-110"} ${
+                        isDropTarget ? "scale-[0.96] ring-2 ring-inset ring-blue-400" : ""
                       }`}
                       onPointerDown={(event) => startPointerDrag(event, entry.id)}
                       onPointerMove={updatePointerDrag}
@@ -524,7 +525,7 @@ export default function RedaktionPage() {
                       aria-label={`${index + 1}. ${party?.name ?? "Unbekannte Partyreihe"}, ${entry.date}. Zum Bearbeiten auswählen.`}
                       aria-pressed={isActive}
                     >
-                      <span className="absolute left-2 top-2 z-10 flex size-8 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white shadow-lg sm:left-3 sm:top-3 sm:size-9">
+                      <span className="absolute left-2 top-2 z-10 flex size-7 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white shadow-lg sm:left-3 sm:top-3 sm:size-8">
                         {index + 1}
                       </span>
                       {entryFlyerUrl ? (
@@ -543,15 +544,12 @@ export default function RedaktionPage() {
                           <span className="mt-1 text-[10px] text-neutral-500">Flyer fehlt</span>
                         </span>
                       )}
-                      <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/45 to-transparent px-2 pb-2 pt-8 text-[10px] text-white sm:px-3 sm:pb-3 sm:text-xs">
-                        <span className="block truncate font-medium">{party?.name ?? "Unbekannte Partyreihe"}</span>
-                        <span className="block text-neutral-300">{entry.date}</span>
-                      </span>
+                      <span className="sr-only">{party?.name ?? "Unbekannte Partyreihe"}, {entry.date}</span>
                     </button>
                   );
                 })}
               </div>
-              <p className="mt-3 text-xs text-neutral-500">
+              <p className="p-4 text-xs text-neutral-500 sm:px-6 sm:pb-6">
                 Kachel anklicken = Entwurf auswählen · Ziehen = umsortieren · Pfeiltasten/Home/Ende = Tastaturalternative
               </p>
 
