@@ -24,7 +24,7 @@ function displayHandle(actor: Actor) {
   return actor.instagram ? `@${actor.instagram.replace(/^@/, "")}` : "Kein Handle";
 }
 
-function buildCaption(entry: CalendarEntry, party: PartySeries, locationName: string) {
+function buildCaption(entry: CalendarEntry, party: PartySeries, locationName: string, genres: string[] = []) {
   if (entry.type !== "event") return "";
   return [
     party.name,
@@ -32,9 +32,21 @@ function buildCaption(entry: CalendarEntry, party: PartySeries, locationName: st
     entry.startTime ? `Beginn: ${entry.startTime} Uhr` : null,
     locationName,
     entry.notes || null,
+    genres.length > 0 ? `Genres: ${genres.join(", ")}` : null,
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n");
+}
+
+function syncCaptionGenres(caption: string, genres: string[]) {
+  const withoutGenres = caption
+    .split("\n")
+    .filter((line) => !/^Genres:\s*/i.test(line.trim()))
+    .join("\n")
+    .trimEnd();
+  return genres.length > 0
+    ? `${withoutGenres}${withoutGenres ? "\n" : ""}Genres: ${genres.join(", ")}`
+    : withoutGenres;
 }
 
 type DraftState = {
@@ -46,10 +58,11 @@ type DraftState = {
 };
 
 const GENRE_OPTIONS = [
-  "House", "Techno", "Disco", "Electro", "Trance", "Drum & Bass",
-  "Breakbeat", "Hip-Hop", "Rap", "R&B", "Pop", "Indie", "Rock", "Punk",
-  "Metal", "Hardcore", "Reggae", "Dancehall", "Afrobeat", "Latin", "Jazz",
-  "Funk", "Soul", "Ambient", "Sonstiges",
+  "Rock", "Alternative", "Indie", "Punk", "Punkrock", "Garage Rock",
+  "Rock’n’Roll", "Emo", "Hardcore", "Metal", "Metalcore", "Heavy Metal",
+  "Thrash Metal", "Death Metal", "Black Metal", "Doom", "Hard Rock",
+  "Psych", "Ska", "Soul", "Post-Punk", "Darkwave", "Gothic", "Britpop",
+  "Singer-Songwriter", "Folk", "Pop", "Sonstiges",
 ] as const;
 
 type GateState = {
@@ -124,7 +137,9 @@ export default function RedaktionPage() {
 
   const defaultDraft: DraftState = selectedEntry && selectedParty
     ? {
-        caption: persistedDraft?.caption ?? buildCaption(selectedEntry, selectedParty, selectedVenue?.name ?? ""),
+        caption: persistedDraft
+          ? syncCaptionGenres(persistedDraft.caption, persistedDraft.genres)
+          : buildCaption(selectedEntry, selectedParty, selectedVenue?.name ?? ""),
         hashtags: persistedDraft?.hashtags ?? "",
         mentionIds: persistedDraft?.mentionActorIds ?? selectedEntry.mentionDjIds,
         genres: persistedDraft?.genres ?? [],
@@ -148,6 +163,16 @@ export default function RedaktionPage() {
       ...current,
       [activeId]: { ...draft, ...patch },
     }));
+  }
+
+  function toggleGenre(genre: string) {
+    const genres = draft.genres.includes(genre)
+      ? draft.genres.filter((item) => item !== genre)
+      : [...draft.genres, genre];
+    updateDraft({
+      genres,
+      caption: syncCaptionGenres(draft.caption, genres),
+    });
   }
 
   async function saveDraft() {
@@ -524,7 +549,7 @@ export default function RedaktionPage() {
               <fieldset className="mt-5">
                 <legend className="text-sm text-neutral-300">Genres</legend>
                 <p className="mt-1 text-xs leading-5 text-neutral-500">
-                  Bitte die Genres vom Flyer redaktionell auswählen. Die Auswahl wird im Entwurf gespeichert.
+                  Bitte die Genres vom Flyer redaktionell auswählen. Die Auswahl wird gespeichert und in die Caption übernommen.
                 </p>
                 <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {GENRE_OPTIONS.map((genre) => (
@@ -533,11 +558,7 @@ export default function RedaktionPage() {
                         type="checkbox"
                         className="size-4 accent-white"
                         checked={draft.genres.includes(genre)}
-                        onChange={() => updateDraft({
-                          genres: draft.genres.includes(genre)
-                            ? draft.genres.filter((item) => item !== genre)
-                            : [...draft.genres, genre],
-                        })}
+                        onChange={() => toggleGenre(genre)}
                         disabled={draftSaving}
                       />
                       <span>{genre}</span>
