@@ -35,7 +35,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -182,5 +184,14 @@ class CalendarEntryFlyerControllerIntegrationTests {
         assertThat(mediaAssetRepository.count()).isEqualTo(assetsBefore);
         assertThat(calendarEntryRepository.findById(entry.getId()).orElseThrow().getEventFlyerMediaId())
                 .isNull();
+    }
+
+    @Test
+    void returnsAnActionableErrorForAnUnknownAnalysisEntry() throws Exception {
+        mockMvc.perform(post("/api/v1/calendar-entries/{id}/flyer/analysis", UUID.randomUUID()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("Kalendereintrag nicht gefunden"))
+                .andExpect(jsonPath("$.retryable").value(false));
     }
 }

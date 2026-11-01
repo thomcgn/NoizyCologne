@@ -47,6 +47,19 @@ export type GenreSuggestion = {
   confidence: number;
 };
 
+function fallbackApiError(status: number, resource: string): string {
+  if (status === 401) return "Die Anmeldung ist abgelaufen. Bitte erneut anmelden.";
+  if (status === 403) return "Diese Aktion ist für dein Team-Konto nicht freigegeben.";
+  if (status === 404) return `${resource} wurde nicht gefunden. Bitte aktualisieren und erneut versuchen.`;
+  if (status === 409) return `${resource} konnte nicht gespeichert werden, weil sich die Daten inzwischen geändert haben.`;
+  if (status === 413) return "Die Datei ist zu groß. Bitte wähle ein Bild bis höchstens 8 MB.";
+  if (status === 422) return `Die Daten für ${resource.toLowerCase()} konnten nicht verarbeitet werden. Bitte prüfe die Eingaben.`;
+  if (status === 502 || status === 503) return `${resource} ist momentan nicht erreichbar. Bitte prüfe, ob das Backend läuft, und versuche es erneut.`;
+  if (status === 504) return `${resource} hat zu lange gebraucht. Bitte versuche es erneut.`;
+  if (status >= 500) return `Im Backend ist ein technischer Fehler bei ${resource.toLowerCase()} aufgetreten. Bitte versuche es erneut.`;
+  return `${resource} antwortete mit HTTP ${status}.`;
+}
+
 export const PARTY_COLORS = [
   "#E11D48",
   "#0891B2",
@@ -189,10 +202,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       // Die Statusmeldung darunter bleibt verständlich, auch wenn kein JSON vorliegt.
     }
 
-    if (response.status === 401) {
-      return "Die Anmeldung ist abgelaufen. Bitte erneut anmelden.";
-    }
-    return `Die Partyreihen-API antwortete mit HTTP ${response.status}.`;
+    return fallbackApiError(response.status, "Die Partyreihenverwaltung");
   }
 
   const parsePartyFlyer = useCallback((body: unknown): PartyFlyer => {
@@ -527,7 +537,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       // Die Statusmeldung darunter bleibt verständlich, auch wenn kein JSON vorliegt.
     }
 
-    return `Die Location-API antwortete mit HTTP ${response.status}.`;
+    return fallbackApiError(response.status, "Die Locationverwaltung");
   }
 
   function parseVenueResponse(body: unknown): CatalogItem {
@@ -646,10 +656,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       // Die Statusmeldung darunter bleibt verständlich, auch wenn kein JSON vorliegt.
     }
 
-    if (response.status === 401) {
-      return "Die Anmeldung ist abgelaufen. Bitte erneut anmelden.";
-    }
-    return `Die Akteur-API antwortete mit HTTP ${response.status}.`;
+    return fallbackApiError(response.status, "Die Akteurverwaltung");
   }
 
   function parseActorResponse(body: unknown): Actor {
@@ -784,10 +791,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       // Die Statusmeldung darunter bleibt verständlich, auch wenn kein JSON vorliegt.
     }
 
-    if (response.status === 401) {
-      return "Die Anmeldung ist abgelaufen. Bitte erneut anmelden.";
-    }
-    return `Die Kalender-API antwortete mit HTTP ${response.status}.`;
+    return fallbackApiError(response.status, "Die Kalenderverwaltung");
   }
 
   const parseCalendarEntry = useCallback((body: unknown): CalendarEntry => {
