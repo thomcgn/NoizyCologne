@@ -94,7 +94,10 @@ export default function RedaktionPage() {
   const eventEntries = useMemo(
     () => entries
       .filter((entry): entry is Extract<CalendarEntry, { type: "event" }> => entry.type === "event")
-      .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)),
+      // Instagram zeigt im Profilraster den zuletzt veröffentlichten Beitrag zuerst.
+      // Diese lokale Standardreihenfolge bildet die spätere Profilansicht ab:
+      // neuestes Datum oben links, danach zeilenweise von links nach rechts.
+      .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)),
     [entries]
   );
   const [selectedId, setSelectedId] = useState("");
