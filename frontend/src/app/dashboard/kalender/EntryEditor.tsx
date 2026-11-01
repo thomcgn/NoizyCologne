@@ -37,6 +37,7 @@ export default function EntryEditor({
   } = useCatalog();
 
   const [type, setType] = useState<EntryType>(entry?.type ?? "event");
+  const [entryDate, setEntryDate] = useState(() => date);
   const [locationId, setLocationId] = useState(entry?.locationId ?? "");
   const [partyId, setPartyId] = useState(
     entry?.type === "event" ? entry.partyId : ""
@@ -109,7 +110,7 @@ export default function EntryEditor({
     }
 
     const base = {
-      date: toDateKey(date),
+      date: toDateKey(entryDate),
       locationId,
       notes: notes.trim(),
     };
@@ -152,7 +153,7 @@ export default function EntryEditor({
     }
   }
 
-  const formattedDate = date.toLocaleDateString("de-DE", {
+  const formattedDate = entryDate.toLocaleDateString("de-DE", {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -170,6 +171,22 @@ export default function EntryEditor({
         </h2>
         <p className="mt-1 text-sm text-neutral-400">{formattedDate}</p>
       </div>
+
+      <label className="mb-6 block">
+        <span className="mb-2 block text-sm text-neutral-300">Datum</span>
+        <input
+          className={inputStyle}
+          type="date"
+          value={toDateKey(entryDate)}
+          onChange={(event) => {
+            const [year, month, day] = event.target.value.split("-").map(Number);
+            if (year && month && day) {
+              setEntryDate(new Date(year, month - 1, day));
+            }
+          }}
+          required
+        />
+      </label>
 
       <div className="mb-6 grid grid-cols-2 gap-2">
         <button
