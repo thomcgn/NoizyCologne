@@ -33,6 +33,37 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Keep content clear of the notch and home indicator in either orientation. */
+.dashboard-shell {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.app-page {
+  overflow-wrap: anywhere;
+}
+
+.app-page :where(section, article, fieldset, label) {
+  min-width: 0;
+}
+
+.app-page :where(input, select, textarea) {
+  max-width: 100%;
+}
+
+.dashboard-controls {
+  padding: max(12px, env(safe-area-inset-top, 0px)) 16px 0;
+  background: var(--background);
+}
+
+@media (min-width: 1024px) {
+  .dashboard-controls {
+    padding: 0;
+    background: transparent;
+  }
+}
+
 /* The existing screens use Tailwind's dark palette. These token overrides keep
    the theme switch small and consistent without changing application logic. */
 [data-theme="light"] body,
@@ -131,7 +162,7 @@ body {
 }
 [data-theme="light"] .login-submit:hover { background: #1a1a1a; }
 
-@media (max-width: 640px) {
+@media (max-width: 639px), (hover: none) and (pointer: coarse) {
   button,
   a,
   input,
@@ -151,4 +182,60 @@ body {
   input:not([type="checkbox"]):not([type="color"]):not([type="file"]) {
     min-height: 44px;
   }
+
+  /* iOS zooms focused form controls when their font is smaller than 16px. */
+  .app-page :where(input, select, textarea) {
+    font-size: 16px;
+    min-width: 0;
+  }
+
+  .theme-toggle {
+    min-width: 44px;
+  }
+
+  .app-page a:not(:has(img)) {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  .dashboard-sidebar nav a {
+    display: flex;
+    justify-content: center;
+  }
+
+  .app-page label:has(input[type="checkbox"]) {
+    min-height: 44px;
+  }
+
+  .app-page input[type="checkbox"] {
+    flex-shrink: 0;
+  }
+
+  .login-page {
+    position: relative;
+    padding-top: max(80px, calc(env(safe-area-inset-top, 0px) + 64px));
+    padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  .login-card {
+    padding: 24px;
+    margin-block: auto;
+  }
+
+  .login-logo {
+    max-width: 100%;
+  }
+
+  .login-logo img {
+    max-width: 100%;
+  }
+
+  .login-controls {
+    top: max(16px, env(safe-area-inset-top, 0px));
+    right: max(16px, env(safe-area-inset-right, 0px));
+  }
 }
+

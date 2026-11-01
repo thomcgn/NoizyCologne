@@ -175,7 +175,7 @@ export default function CalendarPage() {
         )}
 
         <section className="mt-8 rounded-2xl border border-white/10 bg-neutral-950 p-3 sm:p-6">
-          <div className="mb-6 flex items-center justify-between gap-3">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-semibold capitalize sm:text-2xl">
               {month.toLocaleDateString("de-DE", {
                 month: "long",
@@ -386,3 +386,4 @@ export default function CalendarPage() {
     </main>
   );
 }
+

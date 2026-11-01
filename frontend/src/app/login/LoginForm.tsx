@@ -43,7 +43,7 @@ export default function LoginForm() {
 
   return (
     <main className="login-page app-page flex min-h-dvh items-center justify-center px-5 py-10">
-      <div className="fixed right-4 top-4 sm:right-8 sm:top-8">
+      <div className="login-controls absolute right-4 top-4 sm:right-8 sm:top-8">
         <ThemeToggle />
       </div>
       <section className="login-card w-full max-w-md rounded-2xl border p-7 sm:p-10">
@@ -136,3 +136,4 @@ export default function LoginForm() {
     </main>
   );
 }
+
