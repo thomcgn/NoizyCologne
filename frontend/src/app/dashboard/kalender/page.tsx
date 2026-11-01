@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   toDateKey,
   useCatalog,
@@ -33,6 +33,50 @@ export default function CalendarPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [entrySearch, setEntrySearch] = useState("");
   const [calendarOpen, setCalendarOpen] = useState(true);
+  const [viewport, setViewport] = useState({ width: 0, height: 0 });
+  const [editorScale, setEditorScale] = useState(1);
+  const editorModalRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const updateViewport = () => {
+      const visualViewport = window.visualViewport;
+      setViewport({
+        width: Math.round(visualViewport?.width ?? window.innerWidth),
+        height: Math.round(visualViewport?.height ?? window.innerHeight),
+      });
+    };
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    window.visualViewport?.addEventListener("resize", updateViewport);
+    return () => {
+      window.removeEventListener("resize", updateViewport);
+      window.visualViewport?.removeEventListener("resize", updateViewport);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    const modal = editorModalRef.current;
+    if (!editorOpen || !modal || viewport.width === 0 || viewport.height === 0) {
+      setEditorScale(1);
+      return;
+    }
+
+    const updateScale = () => {
+      const availableWidth = Math.max(1, viewport.width - 32);
+      const availableHeight = Math.max(1, viewport.height - 32);
+      const scale = Math.min(
+        1,
+        availableWidth / modal.offsetWidth,
+        availableHeight / modal.offsetHeight,
+      );
+      setEditorScale(scale);
+    };
+
+    updateScale();
+    const observer = new ResizeObserver(updateScale);
+    observer.observe(modal);
+    return () => observer.disconnect();
+  }, [editorOpen, editingId, selectedDate, viewport.width, viewport.height]);
 
   const days = useMemo(() => {
     const year = month.getFullYear();
@@ -229,6 +273,12 @@ export default function CalendarPage() {
         <section className="mt-8 rounded-2xl border border-white/10 bg-neutral-950 p-3 sm:p-6">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-semibold capitalize sm:text-2xl">
+              {!calendarOpen && selectedDate
+                ? `${selectedDate.toLocaleDateString("de-DE", {
+                    weekday: "long",
+                    day: "numeric",
+                  })} `
+                : ""}
               {month.toLocaleDateString("de-DE", {
                 month: "long",
                 year: "numeric",
@@ -458,11 +508,13 @@ export default function CalendarPage() {
 
         {editorOpen && selectedDate && (
           <div
-            className="fixed inset-0 z-50 overflow-y-auto bg-black/80 p-4 backdrop-blur-sm sm:p-8"
+            className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black/80 p-4 backdrop-blur-sm sm:p-8"
             role="presentation"
           >
             <div
-              className="mx-auto max-h-[calc(100dvh-2rem)] max-w-3xl overflow-y-auto rounded-2xl border border-white/15 bg-black p-1 shadow-2xl sm:max-h-[calc(100dvh-4rem)]"
+              ref={editorModalRef}
+              className="w-full max-w-3xl rounded-2xl border border-white/15 bg-black p-1 shadow-2xl"
+              style={{ transform: `scale(${editorScale})`, transformOrigin: "center center" }}
               role="dialog"
               aria-modal="true"
               aria-labelledby="calendar-entry-dialog-title"
