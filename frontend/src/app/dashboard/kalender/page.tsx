@@ -23,6 +23,7 @@ export default function CalendarPage() {
     deleteEntry: deleteCalendarEntry,
     parties,
     venues,
+    actors,
   } = useCatalog();
   const [month, setMonth] = useState(new Date(2027, 0, 1));
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -30,6 +31,7 @@ export default function CalendarPage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [actionError, setActionError] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [entrySearch, setEntrySearch] = useState("");
 
   const days = useMemo(() => {
     const year = month.getFullYear();
@@ -69,6 +71,59 @@ export default function CalendarPage() {
     if (entry.type === "closure") return "#9CA3AF";
     return parties.find((party) => party.id === entry.partyId)?.color ??
       "#9CA3AF";
+  }
+
+  const filteredEntries = useMemo(() => {
+    const query = entrySearch.trim().toLocaleLowerCase("de-DE");
+    const matchingEntries = entries.filter((entry) => {
+      if (!query) return true;
+
+      const partyName =
+        entry.type === "event"
+          ? parties.find((party) => party.id === entry.partyId)?.name ?? ""
+          : "";
+      const locationName =
+        venues.find((venue) => venue.id === entry.locationId)?.name ?? "";
+      const mentionedDjs =
+        entry.type === "event"
+          ? actors
+              .filter((actor) => entry.mentionDjIds.includes(actor.id))
+              .map((actor) => `${actor.name} ${actor.instagram ?? ""}`)
+              .join(" ")
+          : "";
+      const searchableText = [
+        entry.date,
+        entry.type === "closure" ? entry.reason : "Party",
+        partyName,
+        locationName,
+        entry.notes,
+        mentionedDjs,
+        entry.type === "event" ? entry.startTime : "",
+      ]
+        .join(" ")
+        .toLocaleLowerCase("de-DE");
+
+      return searchableText.includes(query);
+    });
+
+    return [...matchingEntries].sort((first, second) => {
+      const firstKey = `${first.date} ${first.type === "event" ? first.startTime : "23:59"}`;
+      const secondKey = `${second.date} ${second.type === "event" ? second.startTime : "23:59"}`;
+      return firstKey.localeCompare(secondKey);
+    });
+  }, [actors, entrySearch, entries, parties, venues]);
+
+  function dateFromKey(dateKey: string): Date {
+    const [year, monthIndex, day] = dateKey.split("-").map(Number);
+    return new Date(year, monthIndex - 1, day);
+  }
+
+  function editFromList(entry: CalendarEntry) {
+    const date = dateFromKey(entry.date);
+    setMonth(new Date(date.getFullYear(), date.getMonth(), 1));
+    setSelectedDate(date);
+    setEditingId(entry.id);
+    setEditorOpen(true);
   }
 
   function changeMonth(amount: number) {
@@ -267,6 +322,106 @@ export default function CalendarPage() {
                 </button>
               );
             })}
+          </div>
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-white/10 bg-neutral-950 p-4 sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold sm:text-2xl">
+                Eingetragene Parties
+              </h2>
+              <p className="mt-1 text-sm text-neutral-400">
+                Alle Veranstaltungen und Location-Sperren direkt bearbeiten oder löschen.
+              </p>
+            </div>
+            <label className="w-full sm:max-w-sm">
+              <span className="sr-only">Kalendereinträge durchsuchen</span>
+              <input
+                type="search"
+                value={entrySearch}
+                onChange={(event) => setEntrySearch(event.target.value)}
+                placeholder="Partys, Locations oder Datum suchen ..."
+                className="min-h-12 w-full rounded-lg border border-white/15 bg-neutral-900 px-3 py-2.5 text-sm text-white outline-none focus:border-white/60"
+              />
+            </label>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            {entriesLoading ? (
+              <p className="text-sm text-neutral-400" role="status">
+                Einträge werden geladen ...
+              </p>
+            ) : entriesError ? (
+              <p className="text-sm text-red-300" role="alert">
+                Die Liste ist wegen des Ladefehlers nicht verfügbar.
+              </p>
+            ) : filteredEntries.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-white/10 p-4 text-sm text-neutral-400">
+                {entrySearch.trim()
+                  ? "Keine passenden Einträge gefunden."
+                  : "Noch keine Einträge vorhanden."}
+              </p>
+            ) : (
+              filteredEntries.map((entry) => {
+                const locationName =
+                  venues.find((venue) => venue.id === entry.locationId)?.name ??
+                  "Unbekannte Location";
+                const entryDate = dateFromKey(entry.date).toLocaleDateString("de-DE", {
+                  weekday: "short",
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "numeric",
+                });
+
+                return (
+                  <article
+                    key={entry.id}
+                    className="flex flex-col gap-4 rounded-xl border border-white/10 bg-neutral-900 p-4 sm:flex-row sm:items-center sm:justify-between"
+                    style={{ borderLeftColor: getEntryColor(entry), borderLeftWidth: 4 }}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-medium">
+                          {getEntryName(entry)}
+                        </p>
+                        <span className="rounded-full border border-white/15 px-2 py-0.5 text-[11px] text-neutral-400">
+                          {entry.type === "event" ? "Party" : "Sperre"}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm text-neutral-300">
+                        {entryDate} · {locationName}
+                        {entry.type === "event" && entry.startTime
+                          ? ` · ${entry.startTime} Uhr`
+                          : ""}
+                      </p>
+                      {entry.type === "closure" && (
+                        <p className="mt-1 text-xs text-neutral-500">
+                          Grund: {entry.reason}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => editFromList(entry)}
+                        className="min-h-11 rounded-lg border border-white/20 px-3 py-2 text-xs hover:bg-white/10"
+                      >
+                        Bearbeiten
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void deleteEntry(entry)}
+                        disabled={deletingId === entry.id}
+                        className="min-h-11 rounded-lg border border-white/20 px-3 py-2 text-xs hover:bg-white/10 disabled:cursor-wait disabled:opacity-50"
+                      >
+                        {deletingId === entry.id ? "Löschen ..." : "Löschen"}
+                      </button>
+                    </div>
+                  </article>
+                );
+              })
+            )}
           </div>
         </section>
 
