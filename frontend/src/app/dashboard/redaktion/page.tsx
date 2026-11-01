@@ -103,6 +103,48 @@ type GateState = {
   feedOrderReviewed: boolean;
 };
 
+type FeedInstagramPreviewProps = {
+  flyerUrl: string | null;
+  partyName: string;
+  caption: string;
+  hashtags: string;
+};
+
+function FeedInstagramPreview({ flyerUrl, partyName, caption, hashtags }: FeedInstagramPreviewProps) {
+  return (
+    <div className="pointer-events-none absolute inset-2 z-20 overflow-hidden rounded-lg border border-white/20 bg-black/95 text-white shadow-2xl ring-1 ring-black">
+      <div className="flex items-center gap-1.5 border-b border-white/10 px-2 py-1.5">
+        <div className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white p-0.5">
+          <Image src="/noizy-logo-black.png" alt="" width={16} height={16} className="size-full object-contain" />
+        </div>
+        <span className="truncate text-[9px] font-semibold">noizycologne</span>
+        <span className="ml-auto text-[9px] text-neutral-400" aria-hidden="true">•••</span>
+      </div>
+      {flyerUrl ? (
+        <div className="relative aspect-square w-full bg-neutral-950">
+          <Image
+            src={flyerUrl}
+            alt={`${partyName} Vorschau`}
+            fill
+            sizes="180px"
+            unoptimized
+            className="object-contain"
+          />
+        </div>
+      ) : (
+        <div className="flex aspect-square items-center justify-center bg-neutral-900 px-3 text-center text-[9px] text-neutral-400">
+          Kein Flyer hinterlegt
+        </div>
+      )}
+      <div className="space-y-1 px-2 py-1.5 text-[9px] leading-3">
+        <p className="font-semibold">noizycologne</p>
+        {caption && <p className="line-clamp-3 text-neutral-300">{caption}</p>}
+        {hashtags && <p className="line-clamp-2 text-blue-300">{hashtags}</p>}
+      </div>
+    </div>
+  );
+}
+
 export default function RedaktionPage() {
   const {
     entries,
@@ -152,6 +194,8 @@ export default function RedaktionPage() {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [hoveredPreviewId, setHoveredPreviewId] = useState<string | null>(null);
+  const feedPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragStartRef = useRef<{ id: string; x: number; y: number; pointerId: number } | null>(null);
   const dragMovedRef = useRef(false);
   useEffect(() => {
@@ -181,6 +225,9 @@ export default function RedaktionPage() {
     }
     void loadGenres();
     return () => { cancelled = true; };
+  }, []);
+  useEffect(() => () => {
+    if (feedPreviewTimerRef.current) clearTimeout(feedPreviewTimerRef.current);
   }, []);
   const orderedEventEntries = useMemo(() => {
     const byId = new Map(eventEntries.map((entry) => [entry.id, entry]));
@@ -486,6 +533,24 @@ export default function RedaktionPage() {
     setIsDragging(false);
   }
 
+  function startFeedPreview(entryId: string) {
+    if (isDragging) return;
+    if (feedPreviewTimerRef.current) clearTimeout(feedPreviewTimerRef.current);
+    setHoveredPreviewId(null);
+    feedPreviewTimerRef.current = setTimeout(() => {
+      setHoveredPreviewId(entryId);
+      feedPreviewTimerRef.current = null;
+    }, 3000);
+  }
+
+  function stopFeedPreview(entryId: string) {
+    if (feedPreviewTimerRef.current) {
+      clearTimeout(feedPreviewTimerRef.current);
+      feedPreviewTimerRef.current = null;
+    }
+    setHoveredPreviewId((current) => current === entryId ? null : current);
+  }
+
   return (
     <main className="app-page min-h-dvh bg-black px-4 py-6 text-white sm:py-8 md:px-10">
       <div className="mx-auto max-w-7xl">
@@ -576,6 +641,24 @@ export default function RedaktionPage() {
                   const isActive = entry.id === activeId;
                   const isDragged = entry.id === draggedId;
                   const isDropTarget = entry.id === dropTargetId && isDragging && !isDragged;
+                  const persistedEntryDraft = persistedDrafts.find((item) => item.calendarEntryId === entry.id);
+                  const localEntryDraft = localDrafts[entry.id];
+                  const previewDraft = localEntryDraft ?? (persistedEntryDraft ? {
+                    caption: persistedEntryDraft.caption,
+                    hashtags: persistedEntryDraft.hashtags,
+                    mentionIds: persistedEntryDraft.mentionActorIds,
+                    genres: persistedEntryDraft.genres,
+                    status: persistedEntryDraft.status,
+                  } : null);
+                  const previewVenue = venues.find((venue) => venue.id === entry.locationId) ?? null;
+                  const previewMentionIds = previewDraft?.mentionIds
+                    ?? (entry.mentionDjIds.length > 0
+                      ? entry.mentionDjIds
+                      : party?.djMentionDefault === "residents" ? party.residentDjIds : []);
+                  const previewCaption = previewDraft?.caption
+                    || (previewVenue && party
+                      ? buildCaption(entry, previewVenue, actors, captionPreText, previewDraft?.genres ?? [], previewMentionIds)
+                      : "");
                   return (
                     <button
                       key={entry.id}
@@ -588,6 +671,8 @@ export default function RedaktionPage() {
                         isDropTarget ? "scale-[0.96] ring-2 ring-inset ring-blue-400" : ""
                       }`}
                       onPointerDown={(event) => startPointerDrag(event, entry.id)}
+                      onPointerEnter={() => startFeedPreview(entry.id)}
+                      onPointerLeave={() => stopFeedPreview(entry.id)}
                       onPointerMove={updatePointerDrag}
                       onPointerUp={finishPointerDrag}
                       onPointerCancel={cancelPointerDrag}
@@ -639,6 +724,14 @@ export default function RedaktionPage() {
                           <span className="mt-2 line-clamp-3 text-xs text-neutral-300">{party?.name ?? "Kein Flyer"}</span>
                           <span className="mt-1 text-[10px] text-neutral-500">Flyer fehlt</span>
                         </span>
+                      )}
+                      {hoveredPreviewId === entry.id && !isDragging && (
+                        <FeedInstagramPreview
+                          flyerUrl={entryFlyerUrl}
+                          partyName={party?.name ?? "Partyreihe"}
+                          caption={previewCaption}
+                          hashtags={previewDraft?.hashtags ?? ""}
+                        />
                       )}
                       <span className="sr-only">{party?.name ?? "Unbekannte Partyreihe"}, {entry.date}</span>
                     </button>
