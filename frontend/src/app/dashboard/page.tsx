@@ -15,7 +15,7 @@ const modules = [
   {
     title: "Redaktionsplanung",
     description: "Flyer, Captions, Mentions und Feed-Reihenfolge organisieren.",
-    status: "In Vorbereitung",
+    status: "Entwurfsansicht verfügbar",
   },
 ];
 
@@ -61,14 +61,12 @@ export default function DashboardPage() {
   Party-Portfolio
 </Link>
 
-{["Redaktion"].map((item) => (
-  <div
-    key={item}
-    className="hidden rounded-lg px-4 py-3 text-neutral-500 sm:block"
-  >
-    {item}
-  </div>
-))}
+<Link
+  href="/dashboard/redaktion"
+  className="block rounded-lg px-3 py-3 text-center text-neutral-300 hover:bg-white/10 sm:px-4 lg:text-left"
+>
+  Redaktion
+</Link>
 
           </nav>
         </aside>
@@ -105,7 +103,11 @@ export default function DashboardPage() {
                 </p>
 
                 <div className="mt-5 border-t border-white/10 pt-4 text-xs text-neutral-500">
-                  {module.status}
+                  {module.title === "Redaktionsplanung" ? (
+                    <Link href="/dashboard/redaktion" className="text-neutral-300 hover:text-white">
+                      {module.status} →
+                    </Link>
+                  ) : module.status}
                 </div>
               </article>
             ))}
