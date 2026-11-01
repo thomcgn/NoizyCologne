@@ -826,8 +826,12 @@ export default function RedaktionPage() {
                     className="flex min-h-11 w-full items-center justify-between rounded-lg border border-white/10 px-3 text-left text-sm text-neutral-200 hover:bg-white/5"
                   >
                     <span>Genres</span>
-                    <span className="text-xs text-neutral-500">
-                      {genresOpen ? "Einklappen" : `${draft.genres.length} ausgewählt · Einblenden`}
+                    <span className="max-w-[70%] text-right text-xs text-neutral-500">
+                      {genresOpen
+                        ? "Einklappen"
+                        : draft.genres.length > 0
+                          ? `${draft.genres.join(", ")} · Einblenden`
+                          : "Keine ausgewählt · Einblenden"}
                     </span>
                   </button>
                 </legend>
