@@ -717,15 +717,6 @@ export default function RedaktionPage() {
                     <p className="font-semibold">noizycologne</p>
                     <p className="whitespace-pre-wrap text-neutral-300">{draft.caption || "Caption hier vorbereiten ..."}</p>
                     {draft.hashtags.trim() && <p className="whitespace-pre-wrap text-blue-300">{draft.hashtags}</p>}
-                    {draft.mentionIds.length > 0 && (
-                      <p className="text-blue-300">
-                        {draft.mentionIds
-                          .map((id) => actors.find((actor) => actor.id === id))
-                          .filter((actor): actor is Actor => Boolean(actor?.instagram))
-                          .map((actor) => displayHandle(actor))
-                          .join(" ")}
-                      </p>
-                    )}
                   </div>
                 </div>
               </article>
