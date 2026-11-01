@@ -499,6 +499,7 @@ export default function RedaktionPage() {
                       alt={`${eventFlyer ? "Event-Flyer" : "Dauerflyer"} ${selectedParty?.name ?? "Partyreihe"}`}
                       fill
                       sizes="(max-width: 640px) 100vw, 470px"
+                      loading="eager"
                       unoptimized
                       className="object-contain"
                     />
