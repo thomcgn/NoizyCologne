@@ -466,10 +466,6 @@ export default function RedaktionPage() {
   return (
     <main className="app-page min-h-dvh bg-black px-4 py-6 text-white sm:py-8 md:px-10">
       <div className="mx-auto max-w-7xl">
-        <Link href="/dashboard" className="text-sm text-neutral-400 hover:text-white">
-          ← Dashboard
-        </Link>
-
         <header className="mt-6 border-b border-white/10 pb-8">
           <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">
             NoizyCologne / Redaktion

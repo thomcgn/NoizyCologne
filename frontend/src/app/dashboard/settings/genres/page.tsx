@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   CAPTION_PRETEXT_STORAGE_KEY,
@@ -167,8 +166,7 @@ export default function GenresPage() {
 
   return <main className="app-page min-h-dvh bg-black px-4 py-6 text-white sm:py-8 md:px-10">
     <div className="mx-auto max-w-5xl">
-      <Link href="/dashboard" className="text-sm text-neutral-400 hover:text-white">← Übersicht</Link>
-      <header className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div><p className="text-xs uppercase tracking-[0.2em] text-neutral-500">NoizyCologne / Einstellungen</p><h1 className="mt-2 text-3xl font-bold">Genres</h1><p className="mt-3 text-neutral-400">Aktive Genres und OCR-Aliase für die lokale Flyer-Erkennung.</p></div>
         <button type="button" onClick={newGenre} className="min-h-12 rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black">+ Genre anlegen</button>
       </header>

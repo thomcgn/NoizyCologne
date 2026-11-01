@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   toDateKey,
@@ -125,13 +124,6 @@ export default function CalendarPage() {
   return (
     <main className="app-page min-h-dvh bg-black px-4 py-6 text-white sm:py-8 md:px-10">
       <div className="mx-auto max-w-6xl">
-        <Link
-          href="/dashboard"
-          className="text-sm text-neutral-400 hover:text-white"
-        >
-          ← Dashboard
-        </Link>
-
         <header className="mt-6 flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">
@@ -386,4 +378,3 @@ export default function CalendarPage() {
     </main>
   );
 }
-
