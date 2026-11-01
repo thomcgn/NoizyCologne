@@ -25,6 +25,26 @@ function formatDate(date: string) {
   }).format(new Date(`${date}T12:00:00`));
 }
 
+function formatLocalIsoDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getFeedDateRange(view: "all" | "month" | "week", today: string) {
+  if (view === "all") return { start: today, end: "9999-12-31" };
+  const current = new Date(`${today}T12:00:00`);
+  if (view === "month") {
+    const monthEnd = new Date(current.getFullYear(), current.getMonth() + 1, 0, 12);
+    return { start: today, end: formatLocalIsoDate(monthEnd) };
+  }
+  const mondayIndex = (current.getDay() + 6) % 7;
+  const weekEnd = new Date(current);
+  weekEnd.setDate(current.getDate() + (6 - mondayIndex));
+  return { start: today, end: formatLocalIsoDate(weekEnd) };
+}
+
 function displayHandle(actor: Actor) {
   return actor.instagram ? `@${actor.instagram.replace(/^@/, "")}` : "Kein Handle";
 }
@@ -196,6 +216,12 @@ export default function RedaktionPage() {
       .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)),
     [entries]
   );
+  const today = formatLocalIsoDate(new Date());
+  const [feedView, setFeedView] = useState<"all" | "month" | "week">("all");
+  const feedEntries = useMemo(() => {
+    const range = getFeedDateRange(feedView, today);
+    return eventEntries.filter((entry) => entry.date >= range.start && entry.date <= range.end);
+  }, [eventEntries, feedView, today]);
   const [selectedId, setSelectedId] = useState("");
   const [localDrafts, setLocalDrafts] = useState<Record<string, DraftState>>({});
   const [gateStates, setGateStates] = useState<Record<string, GateState>>({});
@@ -273,13 +299,13 @@ export default function RedaktionPage() {
     };
   }, []);
   const orderedEventEntries = useMemo(() => {
-    const byId = new Map(eventEntries.map((entry) => [entry.id, entry]));
+    const byId = new Map(feedEntries.map((entry) => [entry.id, entry]));
     const knownIds = feedOrder.filter((id) => byId.has(id));
-    const newIds = eventEntries.map((entry) => entry.id).filter((id) => !knownIds.includes(id));
+    const newIds = feedEntries.map((entry) => entry.id).filter((id) => !knownIds.includes(id));
     return [...knownIds, ...newIds]
       .map((id) => byId.get(id))
       .filter((entry): entry is Extract<CalendarEntry, { type: "event" }> => Boolean(entry));
-  }, [eventEntries, feedOrder]);
+  }, [feedEntries, feedOrder]);
   const activeId = selectedId && eventEntries.some((entry) => entry.id === selectedId)
     ? selectedId
     : orderedEventEntries[0]?.id ?? eventEntries[0]?.id ?? "";
@@ -715,7 +741,21 @@ export default function RedaktionPage() {
                     Ziehe die Kacheln in die gewünschte Instagram-Reihenfolge. Die Anordnung bleibt vorerst nur in dieser Ansicht und verändert keine Kalenderdaten.
                   </p>
                 </div>
-                <span className="rounded-full border border-blue-400/30 px-3 py-1 text-xs text-blue-300">nur lokal</span>
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="flex items-center gap-2 text-sm text-neutral-300">
+                    <span className="sr-only">Feed-Zeitraum</span>
+                    <select
+                      value={feedView}
+                      onChange={(event) => setFeedView(event.target.value as "all" | "month" | "week")}
+                      className="min-h-10 rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-sm text-white outline-none focus:border-white/60"
+                    >
+                      <option value="all">Alle ab heute</option>
+                      <option value="month">Monatsübersicht</option>
+                      <option value="week">Wochenweise</option>
+                    </select>
+                  </label>
+                  <span className="rounded-full border border-blue-400/30 px-3 py-1 text-xs text-blue-300">nur lokal</span>
+                </div>
               </div>
               <p className="sr-only" id="feed-order-help">
                 Tastatur: Pfeiltasten verschieben die ausgewählte Kachel, Home und Ende setzen sie an den Anfang oder das Ende. Enter öffnet den zugehörigen Entwurf.
@@ -800,6 +840,11 @@ export default function RedaktionPage() {
                   );
                 })}
               </div>
+              {orderedEventEntries.length === 0 && (
+                <p className="p-6 text-center text-sm text-neutral-400">
+                  Für diesen Zeitraum sind ab heute keine Veranstaltungen vorhanden.
+                </p>
+              )}
               <p className="p-4 text-xs text-neutral-500 sm:px-6 sm:pb-6">
                 Kachel anklicken = Entwurf auswählen · Ziehen = umsortieren · Pfeiltasten/Home/Ende = Tastaturalternative
               </p>
