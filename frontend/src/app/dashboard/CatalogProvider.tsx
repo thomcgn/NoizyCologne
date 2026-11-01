@@ -167,7 +167,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     return `Die Partyreihen-API antwortete mit HTTP ${response.status}.`;
   }
 
-  function parsePartyFlyer(body: unknown): PartyFlyer {
+  const parsePartyFlyer = useCallback((body: unknown): PartyFlyer => {
     if (typeof body !== "object" || body === null) {
       throw new Error("Die Flyer-API lieferte ungültige Metadaten.");
     }
@@ -189,9 +189,9 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       fileSize: flyer.fileSize,
       url: flyer.url,
     };
-  }
+  }, []);
 
-  function parsePartyResponse(body: unknown): PartySeries {
+  const parsePartyResponse = useCallback((body: unknown): PartySeries => {
     if (typeof body !== "object" || body === null) {
       throw new Error("Die Partyreihen-API lieferte ein unerwartetes Antwortformat.");
     }
@@ -265,7 +265,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       recurrence,
       defaultFlyer,
     };
-  }
+  }, [parsePartyFlyer]);
 
   const reloadParties = useCallback(async () => {
     setPartiesLoading(true);
@@ -296,7 +296,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     } finally {
       setPartiesLoading(false);
     }
-  }, []);
+  }, [parsePartyResponse]);
 
   useEffect(() => {
     const loadTimer = window.setTimeout(() => {
