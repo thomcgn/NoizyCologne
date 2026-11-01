@@ -64,6 +64,26 @@ class GenreLexiconTests {
                 .doesNotContain("Ska");
     }
 
+    @Test
+    void recognizesElectronicoreAndEmoInFromToGenreLists() {
+        List<GenreLexicon.GenreMatch> matches = lexicon.findGenreMatches(List.of(
+                word("FROM", 95, 0), word("Electronicore", 93, 20), word("TO", 95, 140),
+                word("Hardcore", 92, 170), word("FROM", 95, 0), word("Emo", 91, 20),
+                word("TO", 95, 140), word("Metalcore", 94, 170)
+        ));
+
+        assertThat(matches).extracting(GenreLexicon.GenreMatch::genre)
+                .contains("Electronicore", "Hardcore", "Emo", "Metalcore");
+    }
+
+    @Test
+    void doesNotTreatPromotionalLetsRockAsGenreButKeepsRockInAList() {
+        assertThat(lexicon.findGenres(List.of(word("let's"), word("rock"))))
+                .doesNotContain("Rock");
+        assertThat(lexicon.findGenres(List.of(word("Rock"), word("Punk"))))
+                .contains("Rock");
+    }
+
     private TesseractOcrService.OcrWord word(String text) {
         return word(text, 90, 0);
     }

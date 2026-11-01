@@ -1,5 +1,10 @@
 package de.noizycologne.backend.media;
 
+import de.noizycologne.backend.genre.Genre;
+import de.noizycologne.backend.genre.GenreAlias;
+import de.noizycologne.backend.genre.GenreAliasRepository;
+import de.noizycologne.backend.genre.GenreRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.text.Normalizer;
@@ -13,27 +18,34 @@ import java.util.stream.Collectors;
 
 @Component
 public class GenreLexicon {
-    private static final Map<String, List<String>> ENTRIES = new LinkedHashMap<>();
-    static {
-        add("Rock", "rock"); add("Alternative", "alternative"); add("Indie", "indie"); add("Punk", "punk");
-        add("Punkrock", "punkrock", "punk rock"); add("Garage Rock", "garage rock", "garage-rock");
-        add("Garage-Punk", "garage punk", "garage-punk", "garagepunk");
-        add("Rock’n’Roll", "rock'n'roll", "rock n roll", "rock'n roll", "rock and roll", "rnr", "r&r");
-        add("50s Rock’n’Roll", "50s rnr", "50's rnr", "50s rock n roll");
-        add("Wild R&B", "wild rnb", "wild r&b", "wild rhythm and blues");
-        add("Rockabilly", "rockabilly"); add("Psychobilly", "psychobilly"); add("Emo", "emo"); add("Hardcore", "hardcore");
-        add("Metal", "metal"); add("Metalcore", "metalcore", "metal core"); add("Heavy Metal", "heavy metal");
-        add("Thrash Metal", "thrash metal", "thrash-metal"); add("Death Metal", "death metal", "death-metal");
-        add("Black Metal", "black metal", "black-metal"); add("Doom", "doom"); add("Hard Rock", "hard rock", "hard-rock");
-        add("Psych", "psych", "psychedelic"); add("Ska", "ska"); add("Soul", "soul"); add("Northern Soul", "northern soul");
-        add("Popcorn", "popcorn"); add("Rhythm & Blues", "rhythm and blues", "rhythm & blues", "rnb");
-        add("Post-Punk", "post-punk", "post punk"); add("New Wave", "new wave"); add("Darkwave", "darkwave", "dark wave");
-        add("Gothic Rock", "gothic rock"); add("Britpop", "britpop");
-        add("Singer-Songwriter", "singer-songwriter", "singer songwriter"); add("Folk", "folk"); add("Pop", "pop");
-        add("Sonstiges", "sonstiges", "other");
+    private final GenreRepository genreRepository;
+    private final GenreAliasRepository aliasRepository;
+    private volatile List<Entry> entries;
+
+    public GenreLexicon() {
+        this.genreRepository = null;
+        this.aliasRepository = null;
+        this.entries = defaultEntries();
     }
 
-    private static void add(String canonical, String... aliases) { ENTRIES.put(canonical, List.of(aliases)); }
+    @Autowired
+    public GenreLexicon(GenreRepository genreRepository, GenreAliasRepository aliasRepository) {
+        this.genreRepository = genreRepository;
+        this.aliasRepository = aliasRepository;
+        this.entries = List.of();
+        refresh();
+    }
+
+    public synchronized void refresh() {
+        if (genreRepository == null || aliasRepository == null) return;
+        List<Genre> genres = genreRepository.findAllByActiveTrueOrderByCanonicalNameAsc();
+        Map<String, List<String>> aliases = new LinkedHashMap<>();
+        for (GenreAlias alias : aliasRepository.findAllByGenreIdIn(genres.stream().map(Genre::getId).toList())) {
+            aliases.computeIfAbsent(alias.getGenreId(), ignored -> new java.util.ArrayList<>()).add(alias.getValue());
+        }
+        entries = genres.stream().map(genre -> new Entry(genre.getCanonicalName(),
+                List.copyOf(aliases.getOrDefault(genre.getId(), List.of())))).toList();
+    }
 
     public List<String> findGenres(List<TesseractOcrService.OcrWord> words) {
         return findGenreMatches(words).stream().map(match -> match.genre()).toList();
@@ -43,11 +55,11 @@ public class GenreLexicon {
         List<TextLine> lines = lines(words);
         String text = normalize(lines.stream().map(line -> line.text()).collect(Collectors.joining(" ")));
         Map<String, GenreMatch> found = new LinkedHashMap<>();
-        ENTRIES.entrySet().stream()
-                .sorted((left, right) -> Integer.compare(longestAlias(right.getValue()), longestAlias(left.getValue())))
+        entries.stream()
+                .sorted((left, right) -> Integer.compare(longestAlias(right.aliases()), longestAlias(left.aliases())))
                 .forEach(entry -> {
-                    GenreMatch match = bestMatch(entry.getKey(), entry.getValue(), text, lines);
-                    if (match != null) found.put(entry.getKey(), match);
+                    GenreMatch match = bestMatch(entry.canonicalName(), entry.aliases(), text, lines);
+                    if (match != null) found.put(entry.canonicalName(), match);
                 });
         // Specific compound genres are evidence for the compound label, not an
         // additional generic label. This avoids turning "Garage-Punk" into
@@ -65,6 +77,8 @@ public class GenreLexicon {
             String alias = normalize(aliasValue);
             List<String> aliasTokens = List.of(alias.split(" "));
             if (contains(text, alias)) {
+                if ("rock".equals(alias) && lines.stream().anyMatch(this::isPromotionalRockLine)
+                        && lines.stream().noneMatch(line -> isGenreListLine(line, alias))) continue;
                 double evidence = evidenceConfidence(aliasTokens, lines);
                 best = better(best, new GenreMatch(genre, evidence, false));
                 continue;
@@ -151,7 +165,45 @@ public class GenreLexicon {
         return Pattern.compile("(?<![\\p{L}\\p{N}])" + Pattern.quote(phrase) + "(?![\\p{L}\\p{N}])").matcher(text).find();
     }
 
+    private boolean isPromotionalRockLine(TextLine line) {
+        String value = normalize(line.text());
+        return value.matches(".*\\b(let's|lets|let us) rock\\b.*") || value.matches(".*\\brock on\\b.*");
+    }
+
+    private boolean isGenreListLine(TextLine line, String alias) {
+        String value = normalize(line.text());
+        return value.contains(" from ") || value.startsWith("from ") || value.contains(" to ")
+                || value.contains("/") || value.contains(",") || value.contains(" genre ")
+                || value.contains(" genres ");
+    }
+
+    private List<Entry> defaultEntries() {
+        Map<String, List<String>> values = new LinkedHashMap<>();
+        add(values, "Rock", "rock"); add(values, "Alternative", "alternative"); add(values, "Indie", "indie"); add(values, "Punk", "punk");
+        add(values, "Punkrock", "punkrock", "punk rock"); add(values, "Garage Rock", "garage rock", "garage-rock");
+        add(values, "Garage-Punk", "garage punk", "garage-punk", "garagepunk");
+        add(values, "Rock’n’Roll", "rock'n'roll", "rock n roll", "rock'n roll", "rock and roll", "rnr", "r&r");
+        add(values, "50s Rock’n’Roll", "50s rnr", "50's rnr", "50s rock n roll");
+        add(values, "Wild R&B", "wild rnb", "wild r&b", "wild rhythm and blues");
+        add(values, "Rockabilly", "rockabilly"); add(values, "Psychobilly", "psychobilly"); add(values, "Emo", "emo"); add(values, "Hardcore", "hardcore");
+        add(values, "Metal", "metal"); add(values, "Metalcore", "metalcore", "metal core"); add(values, "Electronicore", "electronicore"); add(values, "Heavy Metal", "heavy metal");
+        add(values, "Thrash Metal", "thrash metal", "thrash-metal"); add(values, "Death Metal", "death metal", "death-metal");
+        add(values, "Black Metal", "black metal", "black-metal"); add(values, "Doom", "doom"); add(values, "Hard Rock", "hard rock", "hard-rock");
+        add(values, "Psych", "psych", "psychedelic"); add(values, "Ska", "ska"); add(values, "Soul", "soul"); add(values, "Northern Soul", "northern soul");
+        add(values, "Popcorn", "popcorn"); add(values, "Rhythm & Blues", "rhythm and blues", "rhythm & blues", "rnb");
+        add(values, "Post-Punk", "post-punk", "post punk"); add(values, "New Wave", "new wave"); add(values, "Darkwave", "darkwave", "dark wave");
+        add(values, "Gothic Rock", "gothic rock"); add(values, "Britpop", "britpop");
+        add(values, "Singer-Songwriter", "singer-songwriter", "singer songwriter"); add(values, "Folk", "folk"); add(values, "Pop", "pop");
+        add(values, "Sonstiges", "sonstiges", "other");
+        return values.entrySet().stream().map(item -> new Entry(item.getKey(), item.getValue())).toList();
+    }
+
+    private void add(Map<String, List<String>> values, String canonical, String... aliases) {
+        values.put(canonical, List.of(aliases));
+    }
+
     public record GenreMatch(String genre, double confidence, boolean uncertain) { }
 
     private record TextLine(String text, List<TesseractOcrService.OcrWord> words) { }
+    private record Entry(String canonicalName, List<String> aliases) { }
 }

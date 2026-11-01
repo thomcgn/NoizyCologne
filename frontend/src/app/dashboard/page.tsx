@@ -68,6 +68,13 @@ export default function DashboardPage() {
   Redaktion
 </Link>
 
+<Link
+  href="/dashboard/settings/genres"
+  className="block rounded-lg px-3 py-3 text-center text-neutral-300 hover:bg-white/10 sm:px-4 lg:text-left"
+>
+  Einstellungen
+</Link>
+
           </nav>
         </aside>
 
@@ -143,4 +150,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
