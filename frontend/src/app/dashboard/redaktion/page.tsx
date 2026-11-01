@@ -60,9 +60,18 @@ export default function RedaktionPage() {
   const [selectedId, setSelectedId] = useState("");
   const [drafts, setDrafts] = useState<Record<string, DraftState>>({});
   const [gateStates, setGateStates] = useState<Record<string, GateState>>({});
+  const [feedOrder, setFeedOrder] = useState<string[]>([]);
+  const orderedEventEntries = useMemo(() => {
+    const byId = new Map(eventEntries.map((entry) => [entry.id, entry]));
+    const knownIds = feedOrder.filter((id) => byId.has(id));
+    const newIds = eventEntries.map((entry) => entry.id).filter((id) => !knownIds.includes(id));
+    return [...knownIds, ...newIds]
+      .map((id) => byId.get(id))
+      .filter((entry): entry is Extract<CalendarEntry, { type: "event" }> => Boolean(entry));
+  }, [eventEntries, feedOrder]);
   const activeId = selectedId && eventEntries.some((entry) => entry.id === selectedId)
     ? selectedId
-    : eventEntries[0]?.id ?? "";
+    : orderedEventEntries[0]?.id ?? "";
 
   const selectedEntry = eventEntries.find((entry) => entry.id === activeId) ?? null;
   const selectedParty = selectedEntry
@@ -119,6 +128,27 @@ export default function RedaktionPage() {
     setGateStates((current) => ({
       ...current,
       [activeId]: { ...gates, [gate]: !gates[gate] },
+    }));
+  }
+
+  function moveEvent(entryId: string, direction: -1 | 1) {
+    const currentOrder = orderedEventEntries.map((entry) => entry.id);
+    const currentIndex = currentOrder.indexOf(entryId);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= currentOrder.length) return;
+    [currentOrder[currentIndex], currentOrder[nextIndex]] = [currentOrder[nextIndex], currentOrder[currentIndex]];
+    setFeedOrder(currentOrder);
+    setGateStates((current) => ({
+      ...current,
+      [entryId]: {
+        ...(current[entryId] ?? {
+          captionReviewed: false,
+          hashtagsReviewed: false,
+          mentionsReviewed: false,
+          feedOrderReviewed: false,
+        }),
+        feedOrderReviewed: false,
+      },
     }));
   }
 
@@ -185,7 +215,7 @@ export default function RedaktionPage() {
                   value={selectedId}
                   onChange={(event) => setSelectedId(event.target.value)}
                 >
-                  {eventEntries.map((entry) => {
+                  {orderedEventEntries.map((entry) => {
                     const party = parties.find((item) => item.id === entry.partyId);
                     return (
                       <option key={entry.id} value={entry.id}>
@@ -195,6 +225,57 @@ export default function RedaktionPage() {
                   })}
                 </select>
               </label>
+
+              <div className="mt-6 border-t border-white/10 pt-5">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold">Feed-Reihenfolge</h3>
+                  <span className="text-xs text-neutral-500">nur lokal</span>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-neutral-500">
+                  Die Reihenfolge wird nicht gespeichert und verändert keine Kalenderdaten.
+                </p>
+                <ol className="mt-3 space-y-2">
+                  {orderedEventEntries.map((entry, index) => {
+                    const party = parties.find((item) => item.id === entry.partyId);
+                    const isActive = entry.id === activeId;
+                    return (
+                      <li
+                        key={entry.id}
+                        className={`rounded-lg border p-2 ${isActive ? "border-white/40 bg-white/10" : "border-white/10 bg-neutral-900"}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            className="min-h-10 min-w-10 rounded-md border border-white/15 text-sm text-neutral-300 disabled:cursor-not-allowed disabled:opacity-30"
+                            onClick={() => moveEvent(entry.id, -1)}
+                            disabled={index === 0}
+                            aria-label={`${party?.name ?? "Veranstaltung"} nach oben verschieben`}
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            className="min-h-10 min-w-10 rounded-md border border-white/15 text-sm text-neutral-300 disabled:cursor-not-allowed disabled:opacity-30"
+                            onClick={() => moveEvent(entry.id, 1)}
+                            disabled={index === orderedEventEntries.length - 1}
+                            aria-label={`${party?.name ?? "Veranstaltung"} nach unten verschieben`}
+                          >
+                            ↓
+                          </button>
+                          <button
+                            type="button"
+                            className="min-w-0 flex-1 text-left"
+                            onClick={() => setSelectedId(entry.id)}
+                          >
+                            <span className="block text-xs text-neutral-500">{index + 1}. · {entry.date}</span>
+                            <span className="block truncate text-sm">{party?.name ?? "Unbekannte Partyreihe"}</span>
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
 
               {selectedEntry && selectedParty && (
                 <div className="mt-6 space-y-3 border-t border-white/10 pt-5 text-sm">
