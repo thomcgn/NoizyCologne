@@ -29,6 +29,17 @@ function displayHandle(actor: Actor) {
   return actor.instagram ? `@${actor.instagram.replace(/^@/, "")}` : "Kein Handle";
 }
 
+function captionContainsMentions(
+  caption: string,
+  actors: Actor[],
+  mentionIds: string[],
+) {
+  return mentionIds.every((id) => {
+    const actor = actors.find((item) => item.id === id);
+    return !actor?.instagram || caption.includes(displayHandle(actor));
+  });
+}
+
 function formatCaptionDate(date: string) {
   const [year, month, day] = date.split("-");
   const weekday = new Intl.DateTimeFormat("de-DE", {
@@ -221,11 +232,13 @@ export default function RedaktionPage() {
         initialMentionIds,
       )
     : "";
+  const persistedCaptionIsCurrent = selectedEntry !== null && persistedDraft !== null
+    && !isLegacyCaption(persistedDraft.caption, selectedEntry)
+    && captionContainsMentions(persistedDraft.caption, actors, initialMentionIds);
 
   const defaultDraft: DraftState = selectedEntry && selectedParty
     ? {
-        caption: persistedDraft
-          && !isLegacyCaption(persistedDraft.caption, selectedEntry)
+        caption: persistedCaptionIsCurrent
           ? persistedDraft.caption
           : generatedCaption,
         hashtags: persistedDraft?.hashtags ?? "",
