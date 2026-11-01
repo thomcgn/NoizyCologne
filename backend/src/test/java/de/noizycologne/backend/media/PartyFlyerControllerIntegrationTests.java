@@ -85,19 +85,19 @@ class PartyFlyerControllerIntegrationTests {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andReturn().getResponse().getContentAsString();
         JsonNode firstJson = objectMapper.readTree(firstResponse);
-        String firstAssetId = firstJson.get("id").asText();
+        String firstAssetId = firstJson.get("id").stringValue();
         assetIds.add(firstAssetId);
-        assertThat(firstJson.get("originalFilename").asText()).isEqualTo("first.png");
+        assertThat(firstJson.get("originalFilename").stringValue()).isEqualTo("first.png");
 
         JsonNode parties = objectMapper.readTree(mockMvc.perform(get("/api/v1/parties"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString());
         JsonNode persisted = null;
         for (JsonNode item : parties) {
-            if (party.getId().equals(item.get("id").asText())) persisted = item;
+            if (party.getId().equals(item.get("id").stringValue())) persisted = item;
         }
         assertThat(persisted).isNotNull();
-        assertThat(persisted.get("defaultFlyer").get("id").asText()).isEqualTo(firstAssetId);
+        assertThat(persisted.get("defaultFlyer").get("id").stringValue()).isEqualTo(firstAssetId);
 
         mockMvc.perform(get("/api/v1/parties/{id}/default-flyer", party.getId()))
                 .andExpect(status().isOk())
@@ -110,7 +110,7 @@ class PartyFlyerControllerIntegrationTests {
                         .file(replacement))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-        String replacementAssetId = objectMapper.readTree(replacementResponse).get("id").asText();
+        String replacementAssetId = objectMapper.readTree(replacementResponse).get("id").stringValue();
         assertThat(replacementAssetId).isNotEqualTo(firstAssetId);
         assetIds.add(replacementAssetId);
 

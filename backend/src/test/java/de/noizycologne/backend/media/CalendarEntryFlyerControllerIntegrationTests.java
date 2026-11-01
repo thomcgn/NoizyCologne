@@ -132,23 +132,23 @@ class CalendarEntryFlyerControllerIntegrationTests {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andReturn().getResponse().getContentAsString();
         JsonNode uploaded = objectMapper.readTree(uploadBody);
-        String assetId = uploaded.get("id").asText();
+        String assetId = uploaded.get("id").stringValue();
         assetIds.add(assetId);
-        assertThat(uploaded.get("originalFilename").asText()).isEqualTo("event.jpg");
-        assertThat(uploaded.get("mediaType").asText()).isEqualTo(MediaType.IMAGE_JPEG_VALUE);
+        assertThat(uploaded.get("originalFilename").stringValue()).isEqualTo("event.jpg");
+        assertThat(uploaded.get("mediaType").stringValue()).isEqualTo(MediaType.IMAGE_JPEG_VALUE);
 
         JsonNode entries = objectMapper.readTree(mockMvc.perform(get("/api/v1/calendar-entries"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString());
         JsonNode persisted = null;
         for (JsonNode item : entries) {
-            if (entry.getId().equals(item.get("id").asText())) {
+            if (entry.getId().equals(item.get("id").stringValue())) {
                 persisted = item;
                 break;
             }
         }
         assertThat(persisted).isNotNull();
-        assertThat(persisted.get("eventFlyer").get("id").asText()).isEqualTo(assetId);
+        assertThat(persisted.get("eventFlyer").get("id").stringValue()).isEqualTo(assetId);
 
         mockMvc.perform(get("/api/v1/calendar-entries/{id}/flyer", entry.getId()))
                 .andExpect(status().isOk())
