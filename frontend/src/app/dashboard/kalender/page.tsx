@@ -56,10 +56,6 @@ export default function CalendarPage() {
     return result;
   }, [entries]);
 
-  const selectedKey = selectedDate ? toDateKey(selectedDate) : null;
-  const selectedEntries = selectedKey
-    ? (entriesByDate.get(selectedKey) ?? [])
-    : [];
   const editingEntry = entries.find((item) => item.id === editingId) ?? null;
 
   function getEntryName(entry: CalendarEntry) {
@@ -124,6 +120,14 @@ export default function CalendarPage() {
     setMonth(new Date(date.getFullYear(), date.getMonth(), 1));
     setSelectedDate(date);
     setEditingId(entry.id);
+    setEditorOpen(true);
+  }
+
+  function openNewEntry() {
+    const date = selectedDate ?? new Date();
+    setMonth(new Date(date.getFullYear(), date.getMonth(), 1));
+    setSelectedDate(date);
+    setEditingId(null);
     setEditorOpen(true);
   }
 
@@ -353,16 +357,25 @@ export default function CalendarPage() {
                 Alle Veranstaltungen und Location-Sperren direkt bearbeiten oder löschen.
               </p>
             </div>
-            <label className="w-full sm:max-w-sm">
-              <span className="sr-only">Kalendereinträge durchsuchen</span>
-              <input
-                type="search"
-                value={entrySearch}
-                onChange={(event) => setEntrySearch(event.target.value)}
-                placeholder="Partys, Locations oder Datum suchen ..."
-                className="min-h-12 w-full rounded-lg border border-white/15 bg-neutral-900 px-3 py-2.5 text-sm text-white outline-none focus:border-white/60"
-              />
-            </label>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <label className="w-full sm:w-72">
+                <span className="sr-only">Kalendereinträge durchsuchen</span>
+                <input
+                  type="search"
+                  value={entrySearch}
+                  onChange={(event) => setEntrySearch(event.target.value)}
+                  placeholder="Partys, Locations oder Datum suchen ..."
+                  className="min-h-12 w-full rounded-lg border border-white/15 bg-neutral-900 px-3 py-2.5 text-sm text-white outline-none focus:border-white/60"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={openNewEntry}
+                className="min-h-12 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black hover:bg-neutral-200"
+              >
+                + Neuer Eintrag
+              </button>
+            </div>
           </div>
 
           <div className="mt-5 space-y-3">
@@ -443,84 +456,32 @@ export default function CalendarPage() {
           </div>
         </section>
 
-        {selectedDate ? (
-          <>
-            <section className="mt-6 rounded-xl border border-white/10 bg-neutral-950 p-5 sm:p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-semibold">
-                    {selectedDate.toLocaleDateString("de-DE", {
-                      weekday: "long",
-                      day: "numeric",
-                      month: "long",
-                      year: "numeric",
-                    })}
-                  </h2>
-                  <p className="mt-1 text-sm text-neutral-400">
-                    {selectedEntries.length === 0
-                      ? entriesError
-                        ? "Kalendereinträge sind derzeit nicht verfügbar."
-                        : "Noch keine Einträge für diesen Tag."
-                      : `${selectedEntries.length} Eintrag/Einträge`}
-                  </p>
-                </div>
+        {editorOpen && selectedDate && (
+          <div
+            className="fixed inset-0 z-50 overflow-y-auto bg-black/80 p-4 backdrop-blur-sm sm:p-8"
+            role="presentation"
+          >
+            <div
+              className="mx-auto max-h-[calc(100dvh-2rem)] max-w-3xl overflow-y-auto rounded-2xl border border-white/15 bg-black p-1 shadow-2xl sm:max-h-[calc(100dvh-4rem)]"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="calendar-entry-dialog-title"
+            >
+              <div className="flex justify-end px-4 pt-4 sm:px-6">
                 <button
                   type="button"
                   onClick={() => {
+                    setEditorOpen(false);
                     setEditingId(null);
-                    setEditorOpen(true);
                   }}
-                  className="rounded-lg border border-white/20 px-4 py-2 text-sm hover:bg-white/10"
+                  className="rounded-lg border border-white/20 px-3 py-2 text-sm text-neutral-300 hover:bg-white/10 hover:text-white"
                 >
-                  + Neuer Eintrag
+                  Schließen
                 </button>
               </div>
-
-              {selectedEntries.length > 0 && (
-                <div className="mt-4 space-y-3">
-                  {selectedEntries.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 bg-neutral-900 p-3"
-                      style={{ borderLeftColor: getEntryColor(entry), borderLeftWidth: 4 }}
-                    >
-                      <div className="min-w-0">
-                        <p className="font-medium">{getEntryName(entry)}</p>
-                        <p className="mt-1 text-xs text-neutral-400">
-                          {venues.find((venue) => venue.id === entry.locationId)
-                            ?.name ?? "Unbekannte Location"}
-                          {entry.type === "event" && entry.startTime
-                            ? ` · ${entry.startTime} Uhr`
-                            : ""}
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingId(entry.id);
-                            setEditorOpen(true);
-                          }}
-                          className="rounded-lg border border-white/20 px-3 py-2 text-xs hover:bg-white/10"
-                        >
-                          Bearbeiten
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void deleteEntry(entry)}
-                          disabled={deletingId === entry.id}
-                          className="rounded-lg border border-white/20 px-3 py-2 text-xs hover:bg-white/10"
-                        >
-                          {deletingId === entry.id ? "Löschen ..." : "Löschen"}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            {editorOpen && (
+              <div id="calendar-entry-dialog-title" className="sr-only">
+                Kalendereintrag {editingEntry ? "bearbeiten" : "anlegen"}
+              </div>
               <EntryEditor
                 key={`${toDateKey(selectedDate)}-${editingId ?? "new"}`}
                 date={selectedDate}
@@ -534,14 +495,8 @@ export default function CalendarPage() {
                   setEditingId(null);
                 }}
               />
-            )}
-          </>
-        ) : (
-          <section className="mt-6 rounded-xl border border-white/10 bg-neutral-950 p-6">
-            <p className="text-sm text-neutral-400">
-              Wähle einen Tag aus, um Kalendereinträge anzulegen oder zu bearbeiten.
-            </p>
-          </section>
+            </div>
+          </div>
         )}
 
         <p className="mt-6 text-xs text-neutral-500">
