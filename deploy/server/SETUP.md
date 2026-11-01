@@ -49,7 +49,7 @@ openssl rand -hex 32
 
 Der zufällig erzeugte Wert kommt als `TEAM_SESSION_SECRET` in die VPS-`.env`. `TEAM_USER` und `TEAM_PASSWORD_HASH` bleiben die bestehenden Team-Zugangsdaten; der bcrypt-Hash wird nicht geändert. Weder das Klartextpasswort noch der Session-Schlüssel werden in Repository, Shell-History oder GitHub-Logs geschrieben. Danach nur prüfen:
 
-Die optionale Flyer-Genreanalyse verwendet ausschließlich den Backend-Container. Trage den OpenAI-Schlüssel nur in der VPS-Datei `.env` als `OPENAI_API_KEY` ein; er wird nicht an den Browser weitergegeben und nicht in GitHub-Logs ausgegeben. Ohne diesen Wert bleibt die Analyse deaktiviert und die manuelle Genre-Auswahl funktioniert unverändert. `OPENAI_VISION_MODEL` kann bei Bedarf angepasst werden.
+Die Flyer-Genreanalyse verwendet ausschließlich lokale Tesseract-OCR im Backend-Container. Es werden keine Flyer an einen externen KI-Dienst übertragen und kein API-Schlüssel benötigt. Für das Container-Image muss Tesseract inklusive der Sprachdaten `deu` und `eng` installiert sein; die Analyse bleibt bei fehlender Installation mit einer verständlichen Fehlermeldung deaktiviert.
 
 ```bash
 cd /opt/noizycologne/deploy/server

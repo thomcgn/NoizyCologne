@@ -27,8 +27,6 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       NOIZY_PUBLISH_ENABLED: "false"
       NOIZY_MEDIA_ROOT: /app/uploads
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_VISION_MODEL: ${OPENAI_VISION_MODEL:-gpt-4.1-mini}
     depends_on:
       db:
         condition: service_healthy
