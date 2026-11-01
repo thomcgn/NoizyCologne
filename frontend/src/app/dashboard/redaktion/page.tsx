@@ -475,41 +475,62 @@ export default function RedaktionPage() {
                 </span>
               </div>
 
-              <article className="overflow-hidden rounded-xl border border-white/10 bg-black">
-                <div className="flex items-center gap-3 border-b border-white/10 p-4">
-                  <div className="flex size-9 items-center justify-center rounded-full bg-white text-xs font-black text-black">N</div>
-                  <div>
-                    <p className="text-sm font-semibold">noizycologne</p>
+              <article className="mx-auto max-w-[470px] overflow-hidden rounded-xl border border-white/10 bg-black">
+                <div className="flex items-center gap-3 border-b border-white/10 p-3">
+                  <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white p-1">
+                    <Image
+                      src="/noizy-logo-black.png"
+                      alt=""
+                      width={36}
+                      height={36}
+                      className="size-full object-contain"
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">noizycologne</p>
                     <p className="text-xs text-neutral-500">Team-Entwurf</p>
                   </div>
+                  <span className="text-lg leading-none text-neutral-300" aria-hidden="true">•••</span>
                 </div>
                 {flyerUrl ? (
-                  <Image
-                    src={flyerUrl}
-                    alt={`${eventFlyer ? "Event-Flyer" : "Dauerflyer"} ${selectedParty?.name ?? "Partyreihe"}`}
-                    width={900}
-                    height={900}
-                    unoptimized
-                    className="aspect-square w-full object-cover"
-                  />
+                  <div className="relative aspect-[4/5] w-full bg-neutral-950">
+                    <Image
+                      src={flyerUrl}
+                      alt={`${eventFlyer ? "Event-Flyer" : "Dauerflyer"} ${selectedParty?.name ?? "Partyreihe"}`}
+                      fill
+                      sizes="(max-width: 640px) 100vw, 470px"
+                      unoptimized
+                      className="object-contain"
+                    />
+                  </div>
                 ) : (
-                  <div className="flex aspect-square items-center justify-center bg-neutral-900 p-8 text-center text-sm text-neutral-500">
-                    Kein Dauerflyer hinterlegt. Ein Event-Flyer kann später separat ergänzt werden.
+                  <div className="flex aspect-[4/5] items-center justify-center bg-neutral-900 p-8 text-center text-sm text-neutral-500">
+                    Für diesen Entwurf ist noch kein Bild hinterlegt. Lade einen Event-Flyer hoch oder hinterlege einen Dauerflyer.
                   </div>
                 )}
-                <div className="space-y-3 p-4">
-                  <p className="text-sm font-semibold">noizycologne</p>
-                  <p className="whitespace-pre-wrap text-sm leading-6 text-neutral-300">{draft.caption || "Caption hier vorbereiten ..."}</p>
-                  {draft.hashtags.trim() && <p className="whitespace-pre-wrap text-sm text-blue-300">{draft.hashtags}</p>}
-                  {draft.mentionIds.length > 0 && (
-                    <p className="text-sm text-blue-300">
-                      {draft.mentionIds
-                        .map((id) => actors.find((actor) => actor.id === id))
-                        .filter((actor): actor is Actor => Boolean(actor?.instagram))
-                        .map((actor) => displayHandle(actor))
-                        .join(" ")}
-                    </p>
-                  )}
+                <div className="p-3">
+                  <div className="mb-3 flex items-center justify-between text-xl leading-none text-neutral-200" aria-hidden="true">
+                    <div className="flex items-center gap-4">
+                      <span>♡</span>
+                      <span className="text-lg">▢</span>
+                      <span>⌁</span>
+                    </div>
+                    <span>⌑</span>
+                  </div>
+                  <div className="space-y-2 text-sm leading-5">
+                    <p className="font-semibold">noizycologne</p>
+                    <p className="whitespace-pre-wrap text-neutral-300">{draft.caption || "Caption hier vorbereiten ..."}</p>
+                    {draft.hashtags.trim() && <p className="whitespace-pre-wrap text-blue-300">{draft.hashtags}</p>}
+                    {draft.mentionIds.length > 0 && (
+                      <p className="text-blue-300">
+                        {draft.mentionIds
+                          .map((id) => actors.find((actor) => actor.id === id))
+                          .filter((actor): actor is Actor => Boolean(actor?.instagram))
+                          .map((actor) => displayHandle(actor))
+                          .join(" ")}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </article>
             </section>
