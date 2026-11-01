@@ -44,9 +44,10 @@ function buildCaption(
   actors: Actor[],
   preText: string,
   genres: string[] = [],
+  mentionIds: string[] = entry.type === "event" ? entry.mentionDjIds : [],
 ) {
   if (entry.type !== "event") return "";
-  const djHandles = entry.mentionDjIds
+  const djHandles = mentionIds
     .map((id) => actors.find((actor) => actor.id === id)?.instagram)
     .filter((handle): handle is string => Boolean(handle?.trim()))
     .map((handle) => `@${handle.replace(/^@/, "")}`);
@@ -208,6 +209,7 @@ export default function RedaktionPage() {
         actors,
         captionPreText,
         persistedDraft?.genres ?? [],
+        persistedDraft?.mentionActorIds ?? selectedEntry.mentionDjIds,
       )
     : "";
 
@@ -249,7 +251,7 @@ export default function RedaktionPage() {
     updateDraft({
       genres,
       caption: selectedEntry && selectedParty && selectedVenue
-        ? buildCaption(selectedEntry, selectedVenue, actors, captionPreText, genres)
+        ? buildCaption(selectedEntry, selectedVenue, actors, captionPreText, genres, draft.mentionIds)
         : draft.caption,
     });
   }
@@ -259,7 +261,7 @@ export default function RedaktionPage() {
     updateDraft({
       genres,
       caption: selectedEntry && selectedParty && selectedVenue
-        ? buildCaption(selectedEntry, selectedVenue, actors, captionPreText, genres)
+        ? buildCaption(selectedEntry, selectedVenue, actors, captionPreText, genres, draft.mentionIds)
         : draft.caption,
     });
   }
@@ -315,10 +317,14 @@ export default function RedaktionPage() {
   }
 
   function toggleMention(id: string) {
+    const mentionIds = draft.mentionIds.includes(id)
+      ? draft.mentionIds.filter((item) => item !== id)
+      : [...draft.mentionIds, id];
     updateDraft({
-      mentionIds: draft.mentionIds.includes(id)
-        ? draft.mentionIds.filter((item) => item !== id)
-        : [...draft.mentionIds, id],
+      mentionIds,
+      caption: selectedEntry && selectedVenue
+        ? buildCaption(selectedEntry, selectedVenue, actors, captionPreText, draft.genres, mentionIds)
+        : draft.caption,
     });
   }
 
