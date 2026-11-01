@@ -42,8 +42,8 @@ public class TesseractOcrService {
         try {
             OCR_SLOT.acquire();
             acquired = true;
-            ProcessBuilder processBuilder = new ProcessBuilder(command, image.path().toString(), "stdout", "--tsv", "-l", languages,
-                    "--oem", "1", "--psm", Integer.toString(psm)).redirectErrorStream(true);
+            ProcessBuilder processBuilder = new ProcessBuilder(command, image.path().toString(), "stdout", "-l", languages,
+                    "--oem", "1", "--psm", Integer.toString(psm), "tsv").redirectErrorStream(true);
             processBuilder.environment().put("OMP_THREAD_LIMIT", "1");
             process = processBuilder.start();
             Process running = process;
