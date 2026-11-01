@@ -582,7 +582,7 @@ export default function RedaktionPage() {
                       type="button"
                       data-feed-tile-id={entry.id}
                       title={`${index + 1}. ${party?.name ?? "Unbekannte Partyreihe"} · ${entry.date}`}
-                      className={`group relative aspect-square min-h-0 overflow-hidden rounded-none border-0 bg-neutral-900 text-left outline-none transition duration-150 touch-none focus-visible:z-20 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white ${
+                      className={`group relative aspect-square min-h-0 cursor-grab overflow-hidden rounded-none border-0 bg-neutral-900 text-left outline-none transition duration-150 touch-none select-none focus-visible:z-20 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white active:cursor-grabbing ${
                         isActive ? "ring-2 ring-inset ring-white" : ""
                       } ${isDragged ? "z-10 scale-[1.03] opacity-60 shadow-2xl" : "hover:brightness-110"} ${
                         isDropTarget ? "scale-[0.96] ring-2 ring-inset ring-blue-400" : ""
@@ -630,10 +630,11 @@ export default function RedaktionPage() {
                           fill
                           sizes="(max-width: 640px) 33vw, (max-width: 1280px) 25vw, 20vw"
                           unoptimized
-                          className="object-cover"
+                          draggable={false}
+                          className="pointer-events-none select-none object-cover"
                         />
                       ) : (
-                        <span className="flex size-full flex-col items-center justify-center bg-gradient-to-br from-neutral-800 via-neutral-950 to-blue-950/50 p-3 text-center">
+                        <span className="pointer-events-none flex size-full select-none flex-col items-center justify-center bg-gradient-to-br from-neutral-800 via-neutral-950 to-blue-950/50 p-3 text-center">
                           <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-300">NoizyCologne</span>
                           <span className="mt-2 line-clamp-3 text-xs text-neutral-300">{party?.name ?? "Kein Flyer"}</span>
                           <span className="mt-1 text-[10px] text-neutral-500">Flyer fehlt</span>
