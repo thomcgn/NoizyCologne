@@ -94,7 +94,7 @@ class CalendarEntryControllerIntegrationTests {
 
         CalendarEntryResponse[] afterReload = getEntries();
         assertThat(List.of(afterReload))
-                .extracting(CalendarEntryResponse::id)
+                .extracting(entry -> entry.id())
                 .contains(created.id(), second.id());
         assertThat(List.of(afterReload).stream()
                 .filter(entry -> entry.id().equals(created.id()))
@@ -140,7 +140,7 @@ class CalendarEntryControllerIntegrationTests {
                                 "2027-02-15", venue.getId(), "closure", "Geändert", null, null, "Geschlossen", Set.of()
                         ))))
                 .andExpect(status().isOk());
-        assertThat(getEntries()).extracting(CalendarEntryResponse::reason).contains("Geschlossen");
+        assertThat(getEntries()).extracting(entry -> entry.reason()).contains("Geschlossen");
 
         mockMvc.perform(delete("/api/v1/calendar-entries/{id}", created.id()))
                 .andExpect(status().isNoContent());

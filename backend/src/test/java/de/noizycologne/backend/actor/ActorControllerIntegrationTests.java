@@ -71,7 +71,7 @@ class ActorControllerIntegrationTests {
         assertThat(person.collectiveIds()).containsExactly(collective.id());
 
         ActorResponse[] getResponse = getActors();
-        assertThat(getResponse).extracting(ActorResponse::id).contains(person.id(), collective.id());
+        assertThat(getResponse).extracting(response -> response.id()).contains(person.id(), collective.id());
 
         ActorRequest updateRequest = new ActorRequest(
                 person.name() + " Updated",
@@ -92,7 +92,7 @@ class ActorControllerIntegrationTests {
         assertThat(updated.collectiveIds()).containsExactly(collective.id());
         assertThat(updated.instagram()).isEqualTo("nc_person_updated");
         assertThat(actorRepository.findById(person.id())).get()
-                .extracting(Actor::getInstagram).isEqualTo("nc_person_updated");
+                .extracting(actor -> actor.getInstagram()).isEqualTo("nc_person_updated");
     }
 
     @Test

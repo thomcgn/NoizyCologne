@@ -28,6 +28,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -148,7 +149,8 @@ class CalendarEntryFlyerControllerIntegrationTests {
             }
         }
         assertThat(persisted).isNotNull();
-        assertThat(persisted.get("eventFlyer").get("id").stringValue()).isEqualTo(assetId);
+        JsonNode persistedEntry = Objects.requireNonNull(persisted, "Persisted calendar entry was not returned by the API");
+        assertThat(persistedEntry.get("eventFlyer").get("id").stringValue()).isEqualTo(assetId);
 
         mockMvc.perform(get("/api/v1/calendar-entries/{id}/flyer", entry.getId()))
                 .andExpect(status().isOk())

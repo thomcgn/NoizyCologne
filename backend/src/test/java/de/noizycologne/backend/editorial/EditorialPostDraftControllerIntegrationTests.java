@@ -99,7 +99,7 @@ class EditorialPostDraftControllerIntegrationTests {
                         .andExpect(status().isOk())
                         .andReturn().getResponse().getContentAsString(),
                 EditorialPostDraftResponse[].class);
-        assertThat(List.of(reloaded)).extracting(EditorialPostDraftResponse::id).contains(created.id());
+        assertThat(List.of(reloaded)).extracting(response -> response.id()).contains(created.id());
 
         EditorialPostDraftRequest updateRequest = new EditorialPostDraftRequest(
                 "Überarbeitete Caption", "#team", "READY_FOR_REVIEW", Set.of(), Set.of("Techno"));

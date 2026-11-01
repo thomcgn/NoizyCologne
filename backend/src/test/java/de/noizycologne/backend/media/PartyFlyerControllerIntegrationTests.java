@@ -19,6 +19,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -97,7 +98,8 @@ class PartyFlyerControllerIntegrationTests {
             if (party.getId().equals(item.get("id").stringValue())) persisted = item;
         }
         assertThat(persisted).isNotNull();
-        assertThat(persisted.get("defaultFlyer").get("id").stringValue()).isEqualTo(firstAssetId);
+        JsonNode persistedParty = Objects.requireNonNull(persisted, "Persisted party was not returned by the API");
+        assertThat(persistedParty.get("defaultFlyer").get("id").stringValue()).isEqualTo(firstAssetId);
 
         mockMvc.perform(get("/api/v1/parties/{id}/default-flyer", party.getId()))
                 .andExpect(status().isOk())
