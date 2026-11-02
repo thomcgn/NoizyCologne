@@ -38,6 +38,7 @@ export default function EntryEditor({
 
   const [type, setType] = useState<EntryType>(entry?.type ?? "event");
   const [entryDate, setEntryDate] = useState(() => date);
+  const [entryPrice, setEntryPrice] = useState(entry?.entryPrice ?? "");
   const [locationId, setLocationId] = useState(entry?.locationId ?? "");
   const [partyId, setPartyId] = useState(
     entry?.type === "event" ? entry.partyId : ""
@@ -113,6 +114,7 @@ export default function EntryEditor({
       date: toDateKey(entryDate),
       locationId,
       notes: notes.trim(),
+      entryPrice: type === "event" ? entryPrice.trim() : "",
     };
 
     let updated: CalendarEntryPayload;
@@ -264,6 +266,19 @@ export default function EntryEditor({
                 type="time"
                 value={startTime}
                 onChange={(event) => setStartTime(event.target.value)}
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-sm text-neutral-300">
+                Eintrittspreis (optional)
+              </span>
+              <input
+                className={inputStyle}
+                value={entryPrice}
+                onChange={(event) => setEntryPrice(event.target.value)}
+                maxLength={100}
+                placeholder="z. B. 8 € AK / 6 € VVK oder frei"
               />
             </label>
           </>

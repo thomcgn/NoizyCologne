@@ -103,6 +103,7 @@ type EntryBase = {
   date: string; // Lokales Kalenderdatum: YYYY-MM-DD (ohne Zeitzonen-Verschiebung)
   locationId: string;
   notes: string;
+  entryPrice: string;
 };
 
 export type CalendarEntry = EntryBase &
@@ -605,7 +606,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     const response = await fetch("/api/v1/venues", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(venue),
+      body: JSON.stringify({ name: venue.name, instagram: venue.instagram }),
     });
 
     if (!response.ok) {
@@ -812,6 +813,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       typeof value.locationId !== "string" ||
       typeof value.type !== "string" ||
       typeof value.notes !== "string" ||
+      typeof value.entryPrice !== "string" ||
       !Array.isArray(value.mentionDjIds) ||
       !value.mentionDjIds.every((id) => typeof id === "string")
     ) {
@@ -830,6 +832,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         date: value.date,
         locationId: value.locationId,
         notes: value.notes,
+        entryPrice: value.entryPrice,
         eventFlyer,
         type: "event",
         partyId: value.partyId,
@@ -844,6 +847,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         date: value.date,
         locationId: value.locationId,
         notes: value.notes,
+        entryPrice: value.entryPrice,
         eventFlyer: null,
         type: "closure",
         reason: value.reason,

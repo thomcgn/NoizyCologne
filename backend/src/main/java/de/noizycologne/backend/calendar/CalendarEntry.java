@@ -37,6 +37,9 @@ public class CalendarEntry {
     @Column(nullable = false)
     private String notes;
 
+    @Column(name = "entry_price", nullable = false, length = 100)
+    private String entryPrice;
+
     @Column(name = "party_id", length = 100)
     private String partyId;
 
@@ -63,10 +66,17 @@ public class CalendarEntry {
     public CalendarEntry(LocalDate eventDate, String locationId, String entryType,
                          String notes, String partyId, LocalTime startTime,
                          String reason, Collection<String> mentionDjIds) {
+        this(eventDate, locationId, entryType, notes, "", partyId, startTime, reason, mentionDjIds);
+    }
+
+    public CalendarEntry(LocalDate eventDate, String locationId, String entryType,
+                         String notes, String entryPrice, String partyId, LocalTime startTime,
+                         String reason, Collection<String> mentionDjIds) {
         this.eventDate = eventDate;
         this.locationId = locationId;
         this.entryType = entryType;
         this.notes = notes;
+        this.entryPrice = entryPrice;
         this.partyId = partyId;
         this.startTime = startTime;
         this.reason = reason;
@@ -104,6 +114,10 @@ public class CalendarEntry {
         return partyId;
     }
 
+    public String getEntryPrice() {
+        return entryPrice;
+    }
+
     public LocalTime getStartTime() {
         return startTime;
     }
@@ -125,12 +139,13 @@ public class CalendarEntry {
     }
 
     public void update(LocalDate eventDate, String locationId, String entryType,
-                       String notes, String partyId, LocalTime startTime,
+                       String notes, String entryPrice, String partyId, LocalTime startTime,
                        String reason, Collection<String> mentionDjIds) {
         this.eventDate = eventDate;
         this.locationId = locationId;
         this.entryType = entryType;
         this.notes = notes;
+        this.entryPrice = entryPrice;
         this.partyId = partyId;
         this.startTime = startTime;
         this.reason = reason;

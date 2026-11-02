@@ -33,6 +33,7 @@ export default function CalendarPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [entrySearch, setEntrySearch] = useState("");
   const [calendarOpen, setCalendarOpen] = useState(true);
+  const [infoEntryId, setInfoEntryId] = useState<string | null>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [editorScale, setEditorScale] = useState(1);
   const editorModalRef = useRef<HTMLDivElement | null>(null);
@@ -101,6 +102,11 @@ export default function CalendarPage() {
   }, [entries]);
 
   const editingEntry = entries.find((item) => item.id === editingId) ?? null;
+  const infoEntry = entries.find((item) => item.id === infoEntryId) ?? null;
+  const infoVenue = infoEntry ? venues.find((venue) => venue.id === infoEntry.locationId) : undefined;
+  const infoParty = infoEntry?.type === "event"
+    ? parties.find((party) => party.id === infoEntry.partyId)
+    : undefined;
 
   function getEntryName(entry: CalendarEntry) {
     if (entry.type === "closure") return entry.reason;
@@ -339,10 +345,17 @@ export default function CalendarPage() {
                   const dayEntries = entriesByDate.get(toDateKey(date)) ?? [];
 
                   return (
-                    <button
+                    <div
                       key={toDateKey(date)}
-                      type="button"
                       onClick={() => selectDay(date)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          selectDay(date);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
                       aria-pressed={isSelected}
                       aria-label={`${date.toLocaleDateString("de-DE", {
                         weekday: "long",
@@ -368,8 +381,13 @@ export default function CalendarPage() {
 
                       <span className="mt-1 block space-y-1">
                         {dayEntries.slice(0, 2).map((entry) => (
-                          <span
+                          <button
                             key={entry.id}
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setInfoEntryId(entry.id);
+                            }}
                             className="block truncate rounded-sm border-l-[3px] bg-white/5 px-1 py-1 text-[10px] leading-tight text-white sm:text-xs"
                             style={{
                               borderLeftColor: getEntryColor(entry),
@@ -381,7 +399,7 @@ export default function CalendarPage() {
                               ? `${entry.startTime} `
                               : ""}
                             {getEntryName(entry)}
-                          </span>
+                          </button>
                         ))}
                         {dayEntries.length > 2 && (
                           <span className="block text-[10px] text-neutral-400 sm:text-xs">
@@ -389,7 +407,7 @@ export default function CalendarPage() {
                           </span>
                         )}
                       </span>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -547,6 +565,42 @@ export default function CalendarPage() {
                   setEditingId(null);
                 }}
               />
+            </div>
+          </div>
+        )}
+
+        {infoEntry && (
+          <div
+            className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+            role="presentation"
+            onClick={() => setInfoEntryId(null)}
+          >
+            <div
+              className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/15 bg-neutral-950 p-5 shadow-2xl sm:p-6"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="calendar-entry-info-title"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">{infoEntry.type === "event" ? "Veranstaltung" : "Location-Sperre"}</p>
+                  <h2 id="calendar-entry-info-title" className="mt-1 text-2xl font-semibold">{getEntryName(infoEntry)}</h2>
+                  <p className="mt-1 text-sm text-neutral-400">{dateFromKey(infoEntry.date).toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "long", year: "numeric" })}</p>
+                </div>
+                <button type="button" onClick={() => setInfoEntryId(null)} className="rounded-lg border border-white/20 px-3 py-2 text-sm hover:bg-white/10">Schließen</button>
+              </div>
+              <dl className="mt-5 space-y-3 text-sm">
+                <div><dt className="text-neutral-500">Location</dt><dd className="mt-1 text-white">{infoVenue?.name ?? "Unbekannte Location"}</dd></div>
+                {infoEntry.type === "event" && infoEntry.startTime && <div><dt className="text-neutral-500">Beginn</dt><dd className="mt-1 text-white">{infoEntry.startTime} Uhr</dd></div>}
+                {infoParty && <div><dt className="text-neutral-500">Partyreihe</dt><dd className="mt-1 text-white">{infoParty.name}</dd></div>}
+                {infoEntry.type === "event" && infoEntry.entryPrice && <div><dt className="text-neutral-500">Eintritt</dt><dd className="mt-1 text-white">{infoEntry.entryPrice}</dd></div>}
+                {infoEntry.type === "closure" && <div><dt className="text-neutral-500">Grund</dt><dd className="mt-1 text-white">{infoEntry.reason}</dd></div>}
+                {infoEntry.notes && <div><dt className="text-neutral-500">Notizen</dt><dd className="mt-1 whitespace-pre-wrap text-white">{infoEntry.notes}</dd></div>}
+              </dl>
+              <div className="mt-6 flex justify-end gap-2">
+                <button type="button" onClick={() => { setInfoEntryId(null); editFromList(infoEntry); }} className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black hover:bg-neutral-200">Bearbeiten</button>
+              </div>
             </div>
           </div>
         )}

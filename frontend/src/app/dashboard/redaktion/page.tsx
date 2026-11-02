@@ -60,6 +60,11 @@ function captionContainsMentions(
   });
 }
 
+function captionContainsEntryPrice(caption: string, entryPrice: string) {
+  const normalizedPrice = entryPrice.trim();
+  return !normalizedPrice || caption.includes(`Eintritt: ${normalizedPrice}`);
+}
+
 function formatCaptionDate(date: string) {
   const [year, month, day] = date.split("-");
   const weekday = new Intl.DateTimeFormat("de-DE", {
@@ -76,6 +81,7 @@ function buildCaption(
   preText: string,
   genres: string[] = [],
   mentionIds: string[] = entry.type === "event" ? entry.mentionDjIds : [],
+  entryPrice = "",
 ) {
   if (entry.type !== "event") return "";
   const djHandles = mentionIds
@@ -89,6 +95,7 @@ function buildCaption(
     preText.trim() || DEFAULT_CAPTION_PRETEXT,
     formatCaptionDate(entry.date),
     genres.length > 0 ? genres.join(", ") : null,
+    entryPrice.trim() ? `Eintritt: ${entryPrice.trim()}` : null,
     djHandles.length > 0 ? `mit ${djHandles.join(" & ")}` : null,
     locationHandle ? `im ${locationHandle}` : null,
   ]
@@ -347,11 +354,13 @@ export default function RedaktionPage() {
         captionPreText,
         persistedDraft?.genres ?? [],
         initialMentionIds,
+        selectedEntry?.entryPrice ?? "",
       )
     : "";
   const persistedCaptionIsCurrent = selectedEntry !== null && persistedDraft !== null
     && !isLegacyCaption(persistedDraft.caption, selectedEntry)
-    && captionContainsMentions(persistedDraft.caption, actors, initialMentionIds);
+    && captionContainsMentions(persistedDraft.caption, actors, initialMentionIds)
+    && captionContainsEntryPrice(persistedDraft.caption, selectedEntry?.entryPrice ?? "");
 
   const defaultDraft: DraftState = selectedEntry && selectedParty
     ? {
@@ -407,6 +416,7 @@ export default function RedaktionPage() {
         captionPreText,
         hoveredDraft?.genres ?? [],
         hoveredMentionIds,
+        hoveredEntry?.entryPrice ?? "",
       )
     : "";
   useLayoutEffect(() => {
@@ -436,7 +446,7 @@ export default function RedaktionPage() {
     updateDraft({
       genres,
       caption: selectedEntry && selectedParty && selectedVenue
-        ? buildCaption(selectedEntry, selectedVenue, actors, captionPreText, genres, draft.mentionIds)
+        ? buildCaption(selectedEntry, selectedVenue, actors, captionPreText, genres, draft.mentionIds, selectedEntry.entryPrice)
         : draft.caption,
     });
   }
@@ -446,7 +456,7 @@ export default function RedaktionPage() {
     updateDraft({
       genres,
       caption: selectedEntry && selectedParty && selectedVenue
-        ? buildCaption(selectedEntry, selectedVenue, actors, captionPreText, genres, draft.mentionIds)
+        ? buildCaption(selectedEntry, selectedVenue, actors, captionPreText, genres, draft.mentionIds, selectedEntry.entryPrice)
         : draft.caption,
     });
   }
@@ -508,7 +518,7 @@ export default function RedaktionPage() {
     updateDraft({
       mentionIds,
       caption: selectedEntry && selectedVenue
-        ? buildCaption(selectedEntry, selectedVenue, actors, captionPreText, draft.genres, mentionIds)
+        ? buildCaption(selectedEntry, selectedVenue, actors, captionPreText, draft.genres, mentionIds, selectedEntry.entryPrice)
         : draft.caption,
     });
   }

@@ -70,6 +70,7 @@ public class CalendarEntryService {
                 validated.locationId(),
                 validated.type(),
                 validated.notes(),
+                validated.entryPrice(),
                 validated.partyId(),
                 validated.startTime(),
                 validated.reason(),
@@ -88,6 +89,7 @@ public class CalendarEntryService {
                 validated.locationId(),
                 validated.type(),
                 validated.notes(),
+                validated.entryPrice(),
                 validated.partyId(),
                 validated.startTime(),
                 validated.reason(),
@@ -108,6 +110,7 @@ public class CalendarEntryService {
         String type = request.type().trim();
         String locationId = request.locationId().trim();
         String notes = request.notes().trim();
+        String entryPrice = request.entryPrice().trim();
         String partyId = optional(request.partyId());
         String startTimeValue = optional(request.startTime());
         String reason = optional(request.reason());
@@ -130,6 +133,9 @@ public class CalendarEntryService {
             }
             validateDjMentions(mentionDjIds);
         } else {
+            if (!entryPrice.isBlank()) {
+                throw badRequest("Eine closure darf keinen Eintrittspreis enthalten");
+            }
             if (partyId != null) {
                 throw badRequest("Eine closure darf keine Partyreihe enthalten");
             }
@@ -144,7 +150,7 @@ public class CalendarEntryService {
             }
         }
 
-        return new ValidatedEntry(date, locationId, type, notes, partyId, startTime, reason, mentionDjIds);
+        return new ValidatedEntry(date, locationId, type, notes, entryPrice, partyId, startTime, reason, mentionDjIds);
     }
 
     private void validateDjMentions(Set<String> mentionDjIds) {
@@ -211,6 +217,7 @@ public class CalendarEntryService {
             String locationId,
             String type,
             String notes,
+            String entryPrice,
             String partyId,
             LocalTime startTime,
             String reason,
