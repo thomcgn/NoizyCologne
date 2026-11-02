@@ -213,6 +213,13 @@ export default function CalendarPage() {
     selectDay(new Date());
   }
 
+  function toggleCalendar() {
+    if (calendarOpen) {
+      goToToday();
+    }
+    setCalendarOpen((open) => !open);
+  }
+
   async function deleteEntry(entry: CalendarEntry) {
     if (!window.confirm(`„${getEntryName(entry)}“ wirklich löschen?`)) {
       return;
@@ -322,7 +329,7 @@ export default function CalendarPage() {
               )}
               <button
                 type="button"
-                onClick={() => setCalendarOpen((open) => !open)}
+                onClick={toggleCalendar}
                 aria-expanded={calendarOpen}
                 aria-controls="calendar-month-view"
                 className="rounded-lg border border-white/20 px-4 py-2 text-sm hover:bg-white/10"
