@@ -5,6 +5,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.lang.Nullable;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -66,7 +67,7 @@ public class ApiExceptionHandler {
         return ResponseEntity.status(status).body(new ApiErrorResponse(code, message, status.value(), retryable));
     }
 
-    private String responseStatusCode(HttpStatus status, String reason) {
+    private String responseStatusCode(HttpStatus status, @Nullable String reason) {
         if (containsAny(reason, "Tesseract", "Texterkennung")) {
             return status == HttpStatus.GATEWAY_TIMEOUT ? "OCR_TIMEOUT" : "OCR_UNAVAILABLE";
         }
@@ -84,7 +85,7 @@ public class ApiExceptionHandler {
         };
     }
 
-    private String responseStatusMessage(HttpStatus status, String reason) {
+    private String responseStatusMessage(HttpStatus status, @Nullable String reason) {
         if (reason != null && !reason.isBlank()) {
             if (containsAny(reason, "lokale Flyer-Texterkennung", "Tesseract ist", "Tesseract hat")) {
                 return status == HttpStatus.GATEWAY_TIMEOUT
@@ -101,7 +102,7 @@ public class ApiExceptionHandler {
         };
     }
 
-    private boolean containsAny(String value, String... candidates) {
+    private boolean containsAny(@Nullable String value, String... candidates) {
         if (value == null) return false;
         for (String candidate : candidates) if (value.contains(candidate)) return true;
         return false;

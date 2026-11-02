@@ -9,6 +9,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import org.springframework.lang.Nullable;
 
 import java.util.Collection;
 import java.util.LinkedHashSet;
@@ -82,6 +83,7 @@ public class EditorialPostDraft {
     public String getStatus() { return status; }
     public Set<String> getMentionActorIds() { return mentionActorIds; }
     public Set<String> getGenres() { return genres; }
+    @Nullable
     public String getMusicTrackId() { return musicTrackId; }
 
     public void update(String caption, String hashtags, String status,

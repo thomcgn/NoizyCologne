@@ -11,6 +11,7 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import org.springframework.lang.Nullable;
 
 import java.util.Collection;
 import java.util.LinkedHashSet;
@@ -127,22 +128,27 @@ public class PartySeries {
         return djMentionDefault;
     }
 
+    @Nullable
     public String getRecurrenceKind() {
         return recurrenceKind;
     }
 
+    @Nullable
     public Short getRecurrenceWeekday() {
         return recurrenceWeekday;
     }
 
+    @Nullable
     public Short getRecurrenceOccurrence() {
         return recurrenceOccurrence;
     }
 
+    @Nullable
     public String getRecurrenceDescription() {
         return recurrenceDescription;
     }
 
+    @Nullable
     public String getDefaultFlyerMediaId() {
         return defaultFlyerMediaId;
     }

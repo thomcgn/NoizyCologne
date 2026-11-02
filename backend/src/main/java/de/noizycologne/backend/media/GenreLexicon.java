@@ -6,6 +6,7 @@ import de.noizycologne.backend.genre.GenreAliasRepository;
 import de.noizycologne.backend.genre.GenreRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.lang.Nullable;
 
 import java.text.Normalizer;
 import java.util.LinkedHashMap;
@@ -18,7 +19,9 @@ import java.util.stream.Collectors;
 
 @Component
 public class GenreLexicon {
+    @Nullable
     private final GenreRepository genreRepository;
+    @Nullable
     private final GenreAliasRepository aliasRepository;
     private volatile List<Entry> entries;
 

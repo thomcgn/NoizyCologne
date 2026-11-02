@@ -1,5 +1,7 @@
 package de.noizycologne.backend.party;
 
+import org.springframework.lang.Nullable;
+
 public record PartyRecurrenceResponse(
         String kind,
         Integer weekday,
@@ -7,6 +9,7 @@ public record PartyRecurrenceResponse(
         String description
 ) {
 
+    @Nullable
     public static PartyRecurrenceResponse from(PartySeries party) {
         if (party.getRecurrenceKind() == null) {
             return null;

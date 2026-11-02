@@ -9,6 +9,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import org.springframework.lang.Nullable;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -110,6 +111,7 @@ public class CalendarEntry {
         return notes;
     }
 
+    @Nullable
     public String getPartyId() {
         return partyId;
     }
@@ -118,10 +120,12 @@ public class CalendarEntry {
         return entryPrice;
     }
 
+    @Nullable
     public LocalTime getStartTime() {
         return startTime;
     }
 
+    @Nullable
     public String getReason() {
         return reason;
     }
@@ -130,6 +134,7 @@ public class CalendarEntry {
         return mentionDjIds;
     }
 
+    @Nullable
     public String getEventFlyerMediaId() {
         return eventFlyerMediaId;
     }
