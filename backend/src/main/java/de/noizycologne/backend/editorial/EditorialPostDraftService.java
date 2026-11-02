@@ -134,7 +134,7 @@ public class EditorialPostDraftService {
         }
         return entry.getPartyId() != null && partySeriesRepository.findById(entry.getPartyId())
                 .map(party -> party.getDefaultFlyerMediaId())
-                .filter(mediaAssetRepository::existsById)
+                .filter(mediaId -> mediaAssetRepository.existsById(mediaId))
                 .isPresent();
     }
 

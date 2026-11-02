@@ -13,7 +13,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -127,7 +126,7 @@ public class GenreLexicon {
 
     private List<TextLine> lines(List<TesseractOcrService.OcrWord> words) {
         Map<String, List<TesseractOcrService.OcrWord>> grouped = words.stream()
-                .filter(Objects::nonNull)
+                .filter(word -> word != null)
                 .sorted(java.util.Comparator.comparingInt((TesseractOcrService.OcrWord word) -> word.top())
                         .thenComparingInt(word -> word.left()))
                 .collect(Collectors.groupingBy(word -> word.block() + ":" + word.line(), LinkedHashMap::new, Collectors.toList()));
