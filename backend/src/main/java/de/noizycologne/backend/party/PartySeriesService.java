@@ -2,6 +2,7 @@ package de.noizycologne.backend.party;
 
 import de.noizycologne.backend.actor.Actor;
 import de.noizycologne.backend.actor.ActorRepository;
+import de.noizycologne.backend.calendar.CalendarEntryRepository;
 import de.noizycologne.backend.media.MediaAssetRepository;
 import de.noizycologne.backend.media.PartyFlyerResponse;
 import de.noizycologne.backend.genre.GenreRepository;
@@ -26,13 +27,16 @@ public class PartySeriesService {
     private final ActorRepository actorRepository;
     private final MediaAssetRepository mediaAssetRepository;
     private final GenreRepository genreRepository;
+    private final CalendarEntryRepository calendarEntryRepository;
 
     public PartySeriesService(PartySeriesRepository partySeriesRepository, ActorRepository actorRepository,
-                              MediaAssetRepository mediaAssetRepository, GenreRepository genreRepository) {
+                              MediaAssetRepository mediaAssetRepository, GenreRepository genreRepository,
+                              CalendarEntryRepository calendarEntryRepository) {
         this.partySeriesRepository = partySeriesRepository;
         this.actorRepository = actorRepository;
         this.mediaAssetRepository = mediaAssetRepository;
         this.genreRepository = genreRepository;
+        this.calendarEntryRepository = calendarEntryRepository;
     }
 
     @Transactional(readOnly = true)
@@ -88,6 +92,17 @@ public class PartySeriesService {
                 request.standardGenres()
         );
         return toResponse(partySeriesRepository.save(party));
+    }
+
+    @Transactional
+    public void deleteParty(String id) {
+        PartySeries party = partySeriesRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Partyreihe nicht gefunden"));
+        if (calendarEntryRepository.countByPartyId(id) > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Die Partyreihe wird noch von Kalendereinträgen verwendet und kann nicht gelöscht werden");
+        }
+        partySeriesRepository.delete(party);
     }
 
     private PartySeriesResponse toResponse(PartySeries party) {

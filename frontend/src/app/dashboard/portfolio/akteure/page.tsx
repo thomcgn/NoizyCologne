@@ -23,6 +23,7 @@ export default function ActorsPage() {
     reloadActors,
     createActor,
     updateActor,
+    deleteActor,
   } = useCatalog();
 
   const [editorOpen, setEditorOpen] = useState(false);
@@ -35,6 +36,8 @@ export default function ActorsPage() {
   const [collectiveIds, setCollectiveIds] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState("");
   const [search, setSearch] = useState("");
 
   const collectives = actors.filter(
@@ -163,6 +166,19 @@ export default function ActorsPage() {
     setError("");
   }
 
+  async function removeActor(actor: Actor) {
+    if (!window.confirm(`„${actor.name}“ wirklich löschen? Verwendete Zuordnungen werden geschützt.`)) return;
+    setDeleteError("");
+    setDeletingId(actor.id);
+    try {
+      await deleteActor(actor.id);
+    } catch (cause) {
+      setDeleteError(cause instanceof Error ? cause.message : "Der Akteur konnte nicht gelöscht werden.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <main className="app-page min-h-dvh bg-black px-4 py-6 text-white sm:py-8 md:px-10">
       <div className="mx-auto max-w-5xl">
@@ -188,6 +204,12 @@ export default function ActorsPage() {
             + Neu anlegen
           </button>
         </header>
+
+        {deleteError && (
+          <p role="alert" className="mt-5 rounded-lg border border-red-400/40 bg-red-950/30 p-3 text-sm text-red-300">
+            {deleteError}
+          </p>
+        )}
 
         {/* Akteursliste */}
         <section className="mt-8 rounded-xl border border-white/10 bg-neutral-950 p-5">
@@ -265,13 +287,23 @@ export default function ActorsPage() {
                     )}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => editActor(actor)}
-                    className="min-h-11 rounded-lg border border-white/15 px-4 py-2 text-sm hover:bg-white/10"
-                  >
-                    Bearbeiten
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => editActor(actor)}
+                      className="min-h-11 rounded-lg border border-white/15 px-4 py-2 text-sm hover:bg-white/10"
+                    >
+                      Bearbeiten
+                    </button>
+                    <button
+                      type="button"
+                      disabled={deletingId === actor.id}
+                      onClick={() => void removeActor(actor)}
+                      className="min-h-11 rounded-lg border border-red-400/40 px-4 py-2 text-sm text-red-300 hover:bg-red-950/30 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {deletingId === actor.id ? "Löschen ..." : "Löschen"}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

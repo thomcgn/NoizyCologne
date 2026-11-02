@@ -68,6 +68,23 @@ public class ActorService {
         return ActorResponse.from(actorRepository.save(actor));
     }
 
+    @Transactional
+    public void deleteActor(String id) {
+        Actor actor = actorRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Akteur nicht gefunden"));
+        long references = actorRepository.countPartyDjReferences(id)
+                + actorRepository.countPartyOrganizerReferences(id)
+                + actorRepository.countCalendarMentionReferences(id)
+                + actorRepository.countEditorialMentionReferences(id)
+                + actorRepository.countMembershipsAsPerson(id)
+                + actorRepository.countMembershipsAsCollective(id);
+        if (references > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Der Akteur wird noch von Partys, Kalendern, Entwürfen oder Kollektivmitgliedschaften verwendet");
+        }
+        actorRepository.delete(actor);
+    }
+
     private void validateRequest(ActorRequest request) {
         if (!KINDS.contains(request.kind())) {
             throw badRequest("kind muss person oder collective sein");

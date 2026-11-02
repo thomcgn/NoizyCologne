@@ -169,6 +169,7 @@ type CatalogContextValue = {
   reloadParties: () => Promise<void>;
   createParty: (party: Omit<PartySeries, "id">) => Promise<PartySeries>;
   updateParty: (party: PartySeries) => Promise<PartySeries>;
+  deleteParty: (id: string) => Promise<void>;
   uploadPartyFlyer: (partyId: string, file: File) => Promise<PartyFlyer>;
   deletePartyFlyer: (partyId: string) => Promise<void>;
   uploadEventFlyer: (entryId: string, file: File) => Promise<PartyFlyer>;
@@ -192,12 +193,14 @@ type CatalogContextValue = {
   reloadVenues: () => Promise<void>;
   createVenue: (venue: Omit<CatalogItem, "id">) => Promise<CatalogItem>;
   updateVenue: (venue: CatalogItem) => Promise<CatalogItem>;
+  deleteVenue: (id: string) => Promise<void>;
   actors: Actor[];
   actorsLoading: boolean;
   actorsError: string | null;
   reloadActors: () => Promise<void>;
   createActor: (actor: Omit<Actor, "id">) => Promise<Actor>;
   updateActor: (actor: Actor) => Promise<Actor>;
+  deleteActor: (id: string) => Promise<void>;
   entries: CalendarEntry[];
   entriesLoading: boolean;
   entriesError: string | null;
@@ -587,6 +590,15 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     return updated;
   }
 
+  async function deleteParty(id: string) {
+    const response = await fetch(`/api/v1/parties/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      credentials: "same-origin",
+    });
+    if (!response.ok) throw new Error(await readPartyError(response));
+    setParties((current) => current.filter((party) => party.id !== id));
+  }
+
   async function uploadPartyFlyer(partyId: string, file: File) {
     const formData = new FormData();
     formData.append("file", file);
@@ -741,6 +753,15 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     return updated;
   }
 
+  async function deleteVenue(id: string) {
+    const response = await fetch(`/api/v1/venues/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      credentials: "same-origin",
+    });
+    if (!response.ok) throw new Error(await readVenueError(response));
+    setVenues((current) => current.filter((venue) => venue.id !== id));
+  }
+
   const [actors, setActors] = useState<Actor[]>([]);
   const [actorsLoading, setActorsLoading] = useState(true);
   const [actorsError, setActorsError] = useState<string | null>(null);
@@ -874,6 +895,15 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       current.map((item) => (item.id === updated.id ? updated : item))
     );
     return updated;
+  }
+
+  async function deleteActor(id: string) {
+    const response = await fetch(`/api/v1/actors/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      credentials: "same-origin",
+    });
+    if (!response.ok) throw new Error(await readActorError(response));
+    setActors((current) => current.filter((actor) => actor.id !== id));
   }
 
   const [entries, setEntries] = useState<CalendarEntry[]>([]);
@@ -1114,6 +1144,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         reloadParties,
         createParty,
         updateParty,
+        deleteParty,
         uploadPartyFlyer,
         deletePartyFlyer,
         uploadEventFlyer,
@@ -1137,12 +1168,14 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         reloadVenues,
         createVenue,
         updateVenue,
+        deleteVenue,
         actors,
         actorsLoading,
         actorsError,
         reloadActors,
         createActor,
         updateActor,
+        deleteActor,
         entries,
         entriesLoading,
         entriesError,

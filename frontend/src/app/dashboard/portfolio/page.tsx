@@ -59,6 +59,7 @@ export default function PortfolioPage({
     reloadParties,
     createParty,
     updateParty,
+    deleteParty,
     uploadPartyFlyer,
     deletePartyFlyer,
     venues,
@@ -67,6 +68,7 @@ export default function PortfolioPage({
     reloadVenues,
     createVenue,
     updateVenue,
+    deleteVenue,
     actors,
   } = useCatalog();
 
@@ -80,6 +82,8 @@ export default function PortfolioPage({
   const [color, setColor] = useState<string>(PARTY_COLORS[0]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState("");
   const [flyerFile, setFlyerFile] = useState<File | null>(null);
   const [removeFlyer, setRemoveFlyer] = useState(false);
 
@@ -222,6 +226,23 @@ export default function PortfolioPage({
     }
 
     setEditorOpen(true);
+  }
+
+  async function deleteItem(item: CatalogItem) {
+    if (!window.confirm(`„${item.name}“ wirklich löschen? Verwendete Einträge werden geschützt.`)) return;
+    setDeleteError("");
+    setDeletingId(item.id);
+    try {
+      if (category === "parties") {
+        await deleteParty(item.id);
+      } else {
+        await deleteVenue(item.id);
+      }
+    } catch (cause) {
+      setDeleteError(cause instanceof Error ? cause.message : "Der Eintrag konnte nicht gelöscht werden.");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   function setDjAssignment(
@@ -441,6 +462,12 @@ export default function PortfolioPage({
           </div>
         )}
 
+        {deleteError && (
+          <p role="alert" className="mt-5 rounded-lg border border-red-400/40 bg-red-950/30 p-3 text-sm text-red-300">
+            {deleteError}
+          </p>
+        )}
+
         {/* Suche und Liste */}
         <section className="mt-6 rounded-xl border border-white/10 bg-neutral-950 p-5">
           <div className="flex flex-wrap gap-3">
@@ -537,13 +564,23 @@ export default function PortfolioPage({
                       )}
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => editItem(item)}
-                      className="min-h-11 rounded-lg border border-white/15 px-4 py-2 text-sm hover:bg-white/10"
-                    >
-                      Bearbeiten
-                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => editItem(item)}
+                        className="min-h-11 rounded-lg border border-white/15 px-4 py-2 text-sm hover:bg-white/10"
+                      >
+                        Bearbeiten
+                      </button>
+                      <button
+                        type="button"
+                        disabled={deletingId === item.id}
+                        onClick={() => void deleteItem(item)}
+                        className="min-h-11 rounded-lg border border-red-400/40 px-4 py-2 text-sm text-red-300 hover:bg-red-950/30 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {deletingId === item.id ? "Löschen ..." : "Löschen"}
+                      </button>
+                    </div>
                   </div>
                 );
               })

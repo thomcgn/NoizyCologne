@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -21,9 +22,11 @@ import java.util.List;
 public class VenueController {
 
     private final VenueRepository venueRepository;
+    private final VenueService venueService;
 
-    public VenueController(VenueRepository venueRepository) {
+    public VenueController(VenueRepository venueRepository, VenueService venueService) {
         this.venueRepository = venueRepository;
+        this.venueService = venueService;
     }
 
     @GetMapping
@@ -46,5 +49,11 @@ public class VenueController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Venue nicht gefunden"));
         venue.update(request.name().trim(), request.instagram());
         return VenueResponse.from(venueRepository.save(venue));
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteVenue(@PathVariable String id) {
+        venueService.deleteVenue(id);
     }
 }
