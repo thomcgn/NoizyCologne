@@ -284,18 +284,24 @@ export default function CalendarPage() {
 
         <section className="mt-8 rounded-2xl border border-white/10 bg-neutral-950 p-3 sm:p-6">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold capitalize sm:text-2xl">
-              {!calendarOpen && selectedDate
-                ? `${selectedDate.toLocaleDateString("de-DE", {
+            <div>
+              <h2 className="text-xl font-semibold capitalize sm:text-2xl">
+                {month.toLocaleDateString("de-DE", {
+                  month: "long",
+                  year: "numeric",
+                })}
+              </h2>
+              {selectedDate && (
+                <p className="mt-1 text-sm capitalize text-neutral-400">
+                  Ausgewählt: {selectedDate.toLocaleDateString("de-DE", {
                     weekday: "long",
                     day: "numeric",
-                  })} `
-                : ""}
-              {month.toLocaleDateString("de-DE", {
-                month: "long",
-                year: "numeric",
-              })}
-            </h2>
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </p>
+              )}
+            </div>
             <div className="flex flex-wrap justify-end gap-1.5 sm:gap-2">
               {calendarOpen && (
                 <>
@@ -348,6 +354,7 @@ export default function CalendarPage() {
                   const isWeekend = [0, 6].includes(date.getDay());
                   const isSelected =
                     selectedDate !== null && sameDay(date, selectedDate);
+                  const isToday = sameDay(date, new Date());
                   const dayEntries = entriesByDate.get(toDateKey(date)) ?? [];
 
                   return (
@@ -378,8 +385,12 @@ export default function CalendarPage() {
                             : "bg-neutral-950"
                           : "bg-black text-neutral-600",
                         isSelected
-                          ? "ring-2 ring-inset ring-white"
-                          : "hover:bg-neutral-800",
+                          ? isToday
+                            ? "ring-1 ring-inset ring-red-400"
+                            : "ring-2 ring-inset ring-white"
+                          : isToday
+                            ? "ring-1 ring-inset ring-red-400"
+                            : "hover:bg-neutral-800",
                       ].join(" ")}
                     >
                       <span className="block text-sm font-medium">
