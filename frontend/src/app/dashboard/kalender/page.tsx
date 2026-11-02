@@ -203,6 +203,12 @@ export default function CalendarPage() {
     }
   }
 
+  function openNewEntryForDay(date: Date) {
+    selectDay(date);
+    setEditingId(null);
+    setEditorOpen(true);
+  }
+
   function goToToday() {
     selectDay(new Date());
   }
@@ -348,6 +354,7 @@ export default function CalendarPage() {
                     <div
                       key={toDateKey(date)}
                       onClick={() => selectDay(date)}
+                      onDoubleClick={() => openNewEntryForDay(date)}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();
@@ -362,7 +369,7 @@ export default function CalendarPage() {
                         day: "numeric",
                         month: "long",
                         year: "numeric",
-                      })}, ${dayEntries.length} Einträge`}
+                      })}, ${dayEntries.length} Einträge. Doppelklick öffnet einen neuen Eintrag.`}
                       className={[
                         "min-h-16 min-w-0 p-1 text-left transition-colors sm:min-h-28 sm:p-2",
                         inMonth
@@ -388,6 +395,7 @@ export default function CalendarPage() {
                               event.stopPropagation();
                               setInfoEntryId(entry.id);
                             }}
+                            onDoubleClick={(event) => event.stopPropagation()}
                             className="block truncate rounded-sm border-l-[3px] bg-white/5 px-1 py-1 text-[10px] leading-tight text-white sm:text-xs"
                             style={{
                               borderLeftColor: getEntryColor(entry),
