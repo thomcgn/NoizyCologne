@@ -378,20 +378,29 @@ export default function PortfolioPage({
   return (
     <main className="app-page min-h-dvh bg-black px-4 py-6 text-white sm:py-8 md:px-10">
       <div className="mx-auto max-w-6xl">
-        <header className="mt-6">
-          <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">
-            NoizyCologne / Stammdaten
-          </p>
+        <header className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">
+              NoizyCologne / Stammdaten
+            </p>
 
-          <h1 className="mt-2 text-3xl font-bold">
-            {category === "parties" ? "Partys" : "Locations"}
-          </h1>
+            <h1 className="mt-2 text-3xl font-bold">
+              {category === "parties" ? "Partys" : "Locations"}
+            </h1>
 
-          <p className="mt-3 text-neutral-400">
-            {category === "parties"
-              ? "Partyreihen, Farben, Turnus und Beteiligte verwalten."
-              : "Locations und ihre Instagram-Accounts verwalten."}
-          </p>
+            <p className="mt-3 text-neutral-400">
+              {category === "parties"
+                ? "Partyreihen, Farben, Turnus und Beteiligte verwalten."
+                : "Locations und ihre Instagram-Accounts verwalten."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={createNew}
+            className="min-h-11 rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black hover:bg-neutral-200"
+          >
+            + Neu anlegen
+          </button>
         </header>
 
         {category === "parties" && !standalone && (
@@ -443,13 +452,6 @@ export default function PortfolioPage({
               placeholder="Nach Namen suchen ..."
             />
 
-            <button
-              type="button"
-              onClick={createNew}
-              className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black"
-            >
-              + Neu anlegen
-            </button>
           </div>
 
           <div className="mt-6 divide-y divide-white/10">

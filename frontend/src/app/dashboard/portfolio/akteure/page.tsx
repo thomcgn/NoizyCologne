@@ -180,7 +180,13 @@ export default function ActorsPage() {
               Personen, Kollektive und ihre Rollen verwalten.
             </p>
           </div>
-
+          <button
+            type="button"
+            onClick={createNew}
+            className="min-h-11 rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black hover:bg-neutral-200"
+          >
+            + Neu anlegen
+          </button>
         </header>
 
         {/* Akteursliste */}
@@ -193,13 +199,6 @@ export default function ActorsPage() {
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Nach DJs, Kollektiven oder Handles suchen ..."
             />
-            <button
-              type="button"
-              onClick={createNew}
-              className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black"
-            >
-              + Neu anlegen
-            </button>
           </div>
 
           <div className="mt-6">
