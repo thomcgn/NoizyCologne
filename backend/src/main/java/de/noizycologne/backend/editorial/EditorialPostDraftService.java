@@ -8,6 +8,7 @@ import de.noizycologne.backend.media.MediaAssetRepository;
 import de.noizycologne.backend.music.MusicTrack;
 import de.noizycologne.backend.music.MusicTrackRepository;
 import de.noizycologne.backend.party.PartySeriesRepository;
+import de.noizycologne.backend.party.PartySeries;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,10 +56,11 @@ public class EditorialPostDraftService {
             throw conflict("Für diese Veranstaltung existiert bereits ein Redaktionsentwurf");
         }
         MusicTrack musicTrack = validate(entry, request);
+        Set<String> genres = normalizedGenres(request, partyStandardGenres(entry));
         EditorialPostDraft draft = new EditorialPostDraft(calendarEntryId, request.caption().trim(),
-                request.hashtags().trim(), request.status(), request.mentionActorIds(), normalizedGenres(request));
+                request.hashtags().trim(), request.status(), request.mentionActorIds(), genres);
         draft.update(request.caption().trim(), request.hashtags().trim(), request.status(),
-                request.mentionActorIds(), normalizedGenres(request), musicTrack == null ? null : musicTrack.getId());
+                request.mentionActorIds(), genres, musicTrack == null ? null : musicTrack.getId());
         if (musicTrack != null) musicTrack.markUsed(java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC));
         return EditorialPostDraftResponse.from(draftRepository.save(draft));
     }
@@ -70,7 +72,7 @@ public class EditorialPostDraftService {
         CalendarEntry entry = findEvent(draft.getCalendarEntryId());
         MusicTrack musicTrack = validate(entry, request);
         draft.update(request.caption().trim(), request.hashtags().trim(), request.status(), request.mentionActorIds(),
-                normalizedGenres(request), musicTrack == null ? null : musicTrack.getId());
+                normalizedGenres(request, Set.of()), musicTrack == null ? null : musicTrack.getId());
         if (musicTrack != null) musicTrack.markUsed(java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC));
         return EditorialPostDraftResponse.from(draftRepository.save(draft));
     }
@@ -112,8 +114,16 @@ public class EditorialPostDraftService {
                 .orElseThrow(() -> badRequest("Der ausgewählte Song wurde nicht gefunden"));
     }
 
-    private Set<String> normalizedGenres(EditorialPostDraftRequest request) {
+    private Set<String> partyStandardGenres(CalendarEntry entry) {
+        if (entry.getPartyId() == null) return Set.of();
+        return partySeriesRepository.findById(entry.getPartyId())
+                .map(PartySeries::getStandardGenres)
+                .orElse(Set.of());
+    }
+
+    private Set<String> normalizedGenres(EditorialPostDraftRequest request, Set<String> defaults) {
         Set<String> genres = new LinkedHashSet<>();
+        defaults.forEach(genre -> genres.add(genre.trim()));
         request.genres().forEach(genre -> genres.add(genre.trim()));
         return genres;
     }

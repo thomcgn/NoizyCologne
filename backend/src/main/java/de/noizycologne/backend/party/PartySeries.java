@@ -54,6 +54,11 @@ public class PartySeries {
     private String defaultFlyerMediaId;
 
     @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "party_series_genres", joinColumns = @JoinColumn(name = "party_id"))
+    @Column(name = "genre", nullable = false, length = 100)
+    private Set<String> standardGenres = new LinkedHashSet<>();
+
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "party_djs", joinColumns = @JoinColumn(name = "party_id"))
     private Set<PartyDjAssignment> djAssignments = new LinkedHashSet<>();
 
@@ -70,7 +75,8 @@ public class PartySeries {
                        Short recurrenceWeekday, Short recurrenceOccurrence,
                        String recurrenceDescription,
                        Collection<PartyDjAssignment> djAssignments,
-                       Collection<String> organizerIds) {
+                       Collection<String> organizerIds,
+                       Collection<String> standardGenres) {
         this.name = name;
         this.instagram = instagram;
         this.color = color;
@@ -81,6 +87,17 @@ public class PartySeries {
         this.recurrenceDescription = recurrenceDescription;
         this.djAssignments = new LinkedHashSet<>(djAssignments);
         this.organizerIds = new LinkedHashSet<>(organizerIds);
+        this.standardGenres = new LinkedHashSet<>(standardGenres);
+    }
+
+    public PartySeries(String name, String instagram, String color,
+                       String djMentionDefault, String recurrenceKind,
+                       Short recurrenceWeekday, Short recurrenceOccurrence,
+                       String recurrenceDescription,
+                       Collection<PartyDjAssignment> djAssignments,
+                       Collection<String> organizerIds) {
+        this(name, instagram, color, djMentionDefault, recurrenceKind, recurrenceWeekday,
+                recurrenceOccurrence, recurrenceDescription, djAssignments, organizerIds, Set.of());
     }
 
     @PrePersist
@@ -142,12 +159,17 @@ public class PartySeries {
         return organizerIds;
     }
 
+    public Set<String> getStandardGenres() {
+        return standardGenres;
+    }
+
     public void update(String name, String instagram, String color,
                        String djMentionDefault, String recurrenceKind,
                        Short recurrenceWeekday, Short recurrenceOccurrence,
                        String recurrenceDescription,
                        Collection<PartyDjAssignment> djAssignments,
-                       Collection<String> organizerIds) {
+                       Collection<String> organizerIds,
+                       Collection<String> standardGenres) {
         this.name = name;
         this.instagram = instagram;
         this.color = color;
@@ -160,5 +182,7 @@ public class PartySeries {
         this.djAssignments.addAll(djAssignments);
         this.organizerIds.clear();
         this.organizerIds.addAll(organizerIds);
+        this.standardGenres.clear();
+        this.standardGenres.addAll(standardGenres);
     }
 }

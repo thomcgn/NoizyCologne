@@ -353,13 +353,13 @@ export default function RedaktionPage() {
   const eventFlyer = selectedEntry?.eventFlyer ?? null;
   const flyerUrl = eventFlyer?.url ?? selectedParty?.defaultFlyer?.url ?? null;
   const currentGenreSuggestions = selectedEntry ? genreAnalysis[selectedEntry.id] ?? [] : [];
-  const generatedCaption = selectedEntry && selectedVenue
+  const generatedCaption = selectedEntry && selectedVenue && selectedParty
     ? buildCaption(
         selectedEntry,
         selectedVenue,
         actors,
         captionPreText,
-        persistedDraft?.genres ?? [],
+        persistedDraft?.genres ?? selectedParty.standardGenres,
         initialMentionIds,
         selectedEntry?.entryPrice ?? "",
       )
@@ -376,7 +376,7 @@ export default function RedaktionPage() {
           : generatedCaption,
         hashtags: persistedDraft?.hashtags ?? "",
         mentionIds: initialMentionIds,
-        genres: persistedDraft?.genres ?? [],
+        genres: persistedDraft?.genres ?? selectedParty.standardGenres,
         status: persistedDraft?.status ?? "DRAFT",
         musicTrackId: persistedDraft?.musicTrackId ?? null,
       }

@@ -81,6 +81,7 @@ export type PartySeries = CatalogItem & {
   residentDjIds: string[];
   otherDjIds: string[];
   organizerIds: string[];
+  standardGenres: string[];
   djMentionDefault: DjMentionDefault;
   recurrence: RecurrenceRule | null;
   defaultFlyer: PartyFlyer | null;
@@ -277,6 +278,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       !validIds(party.residentDjIds) ||
       !validIds(party.otherDjIds) ||
       !validIds(party.organizerIds) ||
+      !validIds(party.standardGenres) ||
       (party.djMentionDefault !== "residents" && party.djMentionDefault !== "manual")
     ) {
       throw new Error("Die Partyreihen-API lieferte ein unerwartetes Antwortformat.");
@@ -325,6 +327,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       residentDjIds: party.residentDjIds,
       otherDjIds: party.otherDjIds,
       organizerIds: party.organizerIds,
+      standardGenres: party.standardGenres,
       djMentionDefault: party.djMentionDefault,
       recurrence,
       defaultFlyer,
@@ -566,6 +569,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
           residentDjIds: party.residentDjIds,
           otherDjIds: party.otherDjIds,
           organizerIds: party.organizerIds,
+          standardGenres: party.standardGenres,
           djMentionDefault: party.djMentionDefault,
           recurrence: party.recurrence,
         }),

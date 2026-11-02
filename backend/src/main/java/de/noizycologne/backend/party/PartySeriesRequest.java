@@ -35,13 +35,29 @@ public record PartySeriesRequest(
         Set<@NotBlank @Size(max = 100) String> organizerIds,
 
         @Valid
-        PartyRecurrenceRequest recurrence
+        PartyRecurrenceRequest recurrence,
+
+        @Size(max = 50)
+        Set<@NotBlank @Size(max = 100) String> standardGenres
 ) {
+
+    public PartySeriesRequest(String name, String instagram, String color, String djMentionDefault,
+                              Set<String> residentDjIds, Set<String> otherDjIds, Set<String> organizerIds,
+                              PartyRecurrenceRequest recurrence) {
+        this(name, instagram, color, djMentionDefault, residentDjIds, otherDjIds, organizerIds, recurrence, Set.of());
+    }
 
     public PartySeriesRequest {
         instagram = instagram == null ? "" : instagram;
         residentDjIds = residentDjIds == null ? Set.of() : new LinkedHashSet<>(residentDjIds);
         otherDjIds = otherDjIds == null ? Set.of() : new LinkedHashSet<>(otherDjIds);
         organizerIds = organizerIds == null ? Set.of() : new LinkedHashSet<>(organizerIds);
+        standardGenres = standardGenres == null ? Set.of() : normalize(standardGenres);
+    }
+
+    private static Set<String> normalize(Set<String> values) {
+        Set<String> normalized = new LinkedHashSet<>();
+        values.forEach(value -> normalized.add(value.trim()));
+        return normalized;
     }
 }

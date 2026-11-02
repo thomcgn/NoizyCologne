@@ -6,6 +6,7 @@ import de.noizycologne.backend.calendar.CalendarEntry;
 import de.noizycologne.backend.calendar.CalendarEntryRepository;
 import de.noizycologne.backend.party.PartySeries;
 import de.noizycologne.backend.party.PartySeriesRepository;
+import de.noizycologne.backend.genre.GenreRepository;
 import de.noizycologne.backend.venue.Venue;
 import de.noizycologne.backend.venue.VenueRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -43,6 +44,7 @@ class EditorialPostDraftControllerIntegrationTests {
     @Autowired private PartySeriesRepository partyRepository;
     @Autowired private VenueRepository venueRepository;
     @Autowired private ActorRepository actorRepository;
+    @Autowired private GenreRepository genreRepository;
 
     private final List<String> draftIds = new ArrayList<>();
     private final List<String> entryIds = new ArrayList<>();
@@ -74,6 +76,9 @@ class EditorialPostDraftControllerIntegrationTests {
         PartySeries party = partyRepository.saveAndFlush(new PartySeries(
                 "Draft Party " + suffix, "draft_party", "#123456", "manual", null,
                 null, null, null, Set.of(), Set.of()));
+        String standardGenre = genreRepository.findAllByActiveTrueOrderByCanonicalNameAsc().get(0).getDisplayName();
+        party.getStandardGenres().add(standardGenre);
+        party = partyRepository.saveAndFlush(party);
         partyIds.add(party.getId());
         CalendarEntry entry = entryRepository.saveAndFlush(new CalendarEntry(
                 LocalDate.of(2027, 4, 12), venue.getId(), "event", "", party.getId(),
@@ -92,7 +97,7 @@ class EditorialPostDraftControllerIntegrationTests {
         draftIds.add(created.id());
         assertThat(created.status()).isEqualTo("DRAFT");
         assertThat(created.mentionActorIds()).containsExactly(dj.getId());
-        assertThat(created.genres()).containsExactlyInAnyOrder("House", "Disco");
+        assertThat(created.genres()).containsExactlyInAnyOrder("House", "Disco", standardGenre);
 
         EditorialPostDraftResponse[] reloaded = objectMapper.readValue(
                 mockMvc.perform(get("/api/v1/editorial-drafts"))

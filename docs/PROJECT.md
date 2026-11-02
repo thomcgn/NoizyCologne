@@ -3244,3 +3244,9 @@ Die Redaktion kann verifizierte Songs in einer persistenten PostgreSQL-Musikbibl
 Für einen Kalendereintrag liefert `GET /api/v1/music/tracks?calendarEntryId=...` priorisierte Vorschläge. Partyreihen-Favoriten und bestätigte Genres des gespeicherten Redaktionsentwurfs erhöhen die Priorität; kürzlich verwendete Songs werden abgewertet. Eine Auswahl wird über `musicTrackId` am `EditorialPostDraft` gespeichert und aktualisiert den letzten Verwendungszeitpunkt. Der Song bleibt eine redaktionelle Auswahl und löst weder Instagram-Audio noch Veröffentlichung aus.
 
 Die Oberfläche zeigt genau einen sichtbaren YouTube-IFrame-Player. Es gibt kein Autoplay beim Laden, keinen Download und keine Audio-Extraktion. Die Hörposition wird manuell gesetzt und als Hook-Position gespeichert. Die Team-Redaktion muss externe Song-Metadaten und die offizielle Videoquelle vor dem Hinzufügen prüfen.
+
+## 23.14 Standardgenres je Partyreihe
+
+Partys können optionale Standardgenres aus dem bestehenden aktiven Genre-Katalog erhalten. Sie werden in `party_series_genres` gespeichert und beim Anlegen eines neuen `EditorialPostDraft` mit den veranstaltungsbezogenen Genres dedupliziert vereinigt. Die resultierende Genre-Menge wird im Entwurf und damit in der Caption gespeichert.
+
+Event-spezifische Zusatzgenres verändern die Partyreihe nicht. Änderungen an Party-Standardgenres wirken nicht rückwirkend auf bereits gespeicherte Entwürfe. Die Musikvorschläge verwenden die Genres des konkreten Entwurfs; es gibt dafür keine zweite Genrequelle und keine zusätzliche Musik-API.

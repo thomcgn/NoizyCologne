@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import {
   useCatalog,
@@ -15,6 +15,7 @@ import {
 export type Category = "parties" | "locations";
 type DjAssignment = "none" | "resident" | "other";
 type RecurrenceChoice = "none" | "weekly" | "monthly_weekday" | "other";
+type ActiveGenre = { id: string; displayName: string; active: boolean };
 
 const weekdayNames = [
   "Sonntag",
@@ -85,6 +86,10 @@ export default function PortfolioPage({
   const [residentDjIds, setResidentDjIds] = useState<string[]>([]);
   const [otherDjIds, setOtherDjIds] = useState<string[]>([]);
   const [organizerIds, setOrganizerIds] = useState<string[]>([]);
+  const [standardGenres, setStandardGenres] = useState<string[]>([]);
+  const [availableGenres, setAvailableGenres] = useState<ActiveGenre[]>([]);
+  const [genresLoading, setGenresLoading] = useState(true);
+  const [genresError, setGenresError] = useState("");
 
   const [djMentionDefault, setDjMentionDefault] =
     useState<DjMentionDefault>("manual");
@@ -96,6 +101,32 @@ export default function PortfolioPage({
   const [weekday, setWeekday] = useState(5);
   const [occurrence, setOccurrence] = useState(3);
   const [recurrenceNote, setRecurrenceNote] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadGenres() {
+      setGenresLoading(true);
+      setGenresError("");
+      try {
+        const response = await fetch("/api/v1/genres", { credentials: "same-origin", cache: "no-store" });
+        if (!response.ok) throw new Error(`Die Genreverwaltung antwortete mit HTTP ${response.status}.`);
+        const body: unknown = await response.json();
+        if (!Array.isArray(body)) throw new Error("Die Genreverwaltung lieferte kein gültiges Listenformat.");
+        const genres = body.filter((item): item is ActiveGenre => {
+          if (typeof item !== "object" || item === null) return false;
+          const value = item as Record<string, unknown>;
+          return typeof value.id === "string" && typeof value.displayName === "string" && value.active === true;
+        }).sort((a, b) => a.displayName.localeCompare(b.displayName, "de-DE"));
+        if (!cancelled) setAvailableGenres(genres);
+      } catch (cause) {
+        if (!cancelled) setGenresError(cause instanceof Error ? cause.message : "Genres konnten nicht geladen werden.");
+      } finally {
+        if (!cancelled) setGenresLoading(false);
+      }
+    }
+    void loadGenres();
+    return () => { cancelled = true; };
+  }, []);
 
 
   const items: CatalogItem[] =
@@ -138,6 +169,7 @@ export default function PortfolioPage({
     setResidentDjIds([]);
     setOtherDjIds([]);
     setOrganizerIds([]);
+    setStandardGenres([]);
     setDjMentionDefault("manual");
     setColor(PARTY_COLORS[parties.length % PARTY_COLORS.length]);
     setFlyerFile(null);
@@ -172,6 +204,7 @@ export default function PortfolioPage({
         setResidentDjIds([...party.residentDjIds]);
         setOtherDjIds([...party.otherDjIds]);
         setOrganizerIds([...party.organizerIds]);
+        setStandardGenres([...party.standardGenres]);
         setDjMentionDefault(party.djMentionDefault);
 
         const rule = party.recurrence;
@@ -275,6 +308,7 @@ export default function PortfolioPage({
         residentDjIds: [...residentDjIds],
         otherDjIds: [...otherDjIds],
         organizerIds: [...organizerIds],
+        standardGenres: [...standardGenres],
         djMentionDefault,
         color,
         recurrence,
@@ -642,6 +676,25 @@ export default function PortfolioPage({
                     </span>
                   </span>
                 </label>
+
+                {/* Optionaler Turnus */}
+                <fieldset className="mt-6 rounded-xl border border-white/10 p-5">
+                  <legend className="px-2 text-lg font-semibold">Standardgenres</legend>
+                  <p className="mt-1 text-sm text-neutral-400">
+                    Diese Genres werden bei neuen Redaktionsentwürfen vorausgewählt. Special-Event-Zusätze bleiben eventbezogen.
+                  </p>
+                  {genresLoading && <p className="mt-4 text-sm text-neutral-500" role="status">Genres werden geladen ...</p>}
+                  {genresError && <p className="mt-4 text-sm text-red-300" role="alert">{genresError}</p>}
+                  {!genresLoading && !genresError && availableGenres.length === 0 && <p className="mt-4 text-sm text-neutral-500">Keine aktiven Genres in den Einstellungen vorhanden.</p>}
+                  <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {availableGenres.map((genre) => (
+                      <label key={genre.id} className="flex min-h-11 items-center gap-2 rounded-lg bg-neutral-900 px-3 py-2 text-sm">
+                        <input type="checkbox" className="size-4 accent-white" checked={standardGenres.includes(genre.displayName)} onChange={() => setStandardGenres((current) => current.includes(genre.displayName) ? current.filter((item) => item !== genre.displayName) : [...current, genre.displayName])} disabled={saving} />
+                        <span>{genre.displayName}</span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
 
                 {/* Optionaler Turnus */}
                 <div className="mt-6 rounded-xl border border-white/10 p-5">

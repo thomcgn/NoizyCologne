@@ -11,6 +11,7 @@ public record PartySeriesResponse(
         List<String> residentDjIds,
         List<String> otherDjIds,
         List<String> organizerIds,
+        List<String> standardGenres,
         String djMentionDefault,
         PartyRecurrenceResponse recurrence,
         PartyFlyerResponse defaultFlyer
@@ -33,6 +34,7 @@ public record PartySeriesResponse(
                         .sorted()
                         .toList(),
                 party.getOrganizerIds().stream().sorted().toList(),
+                party.getStandardGenres().stream().sorted().toList(),
                 party.getDjMentionDefault(),
                 PartyRecurrenceResponse.from(party),
                 null
@@ -43,7 +45,7 @@ public record PartySeriesResponse(
         PartySeriesResponse response = from(party);
         return new PartySeriesResponse(response.id(), response.name(), response.instagram(),
                 response.color(), response.residentDjIds(), response.otherDjIds(),
-                response.organizerIds(), response.djMentionDefault(), response.recurrence(),
+                response.organizerIds(), response.standardGenres(), response.djMentionDefault(), response.recurrence(),
                 defaultFlyer);
     }
 }

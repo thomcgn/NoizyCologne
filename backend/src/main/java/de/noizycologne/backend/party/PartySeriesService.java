@@ -4,6 +4,7 @@ import de.noizycologne.backend.actor.Actor;
 import de.noizycologne.backend.actor.ActorRepository;
 import de.noizycologne.backend.media.MediaAssetRepository;
 import de.noizycologne.backend.media.PartyFlyerResponse;
+import de.noizycologne.backend.genre.GenreRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,12 +25,14 @@ public class PartySeriesService {
     private final PartySeriesRepository partySeriesRepository;
     private final ActorRepository actorRepository;
     private final MediaAssetRepository mediaAssetRepository;
+    private final GenreRepository genreRepository;
 
     public PartySeriesService(PartySeriesRepository partySeriesRepository, ActorRepository actorRepository,
-                              MediaAssetRepository mediaAssetRepository) {
+                              MediaAssetRepository mediaAssetRepository, GenreRepository genreRepository) {
         this.partySeriesRepository = partySeriesRepository;
         this.actorRepository = actorRepository;
         this.mediaAssetRepository = mediaAssetRepository;
+        this.genreRepository = genreRepository;
     }
 
     @Transactional(readOnly = true)
@@ -44,6 +47,7 @@ public class PartySeriesService {
         validateRequest(request);
         ensureNameAvailable(request.name(), null);
         validateActorReferences(request);
+        validateStandardGenres(request.standardGenres());
 
         PartySeries party = new PartySeries(
                 request.name().trim(),
@@ -55,7 +59,8 @@ public class PartySeriesService {
                 recurrenceOccurrence(request),
                 recurrenceDescription(request),
                 djAssignments(request),
-                request.organizerIds()
+                request.organizerIds(),
+                request.standardGenres()
         );
         return toResponse(partySeriesRepository.save(party));
     }
@@ -67,6 +72,7 @@ public class PartySeriesService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Partyreihe nicht gefunden"));
         ensureNameAvailable(request.name(), id);
         validateActorReferences(request);
+        validateStandardGenres(request.standardGenres());
 
         party.update(
                 request.name().trim(),
@@ -78,7 +84,8 @@ public class PartySeriesService {
                 recurrenceOccurrence(request),
                 recurrenceDescription(request),
                 djAssignments(request),
-                request.organizerIds()
+                request.organizerIds(),
+                request.standardGenres()
         );
         return toResponse(partySeriesRepository.save(party));
     }
@@ -171,6 +178,14 @@ public class PartySeriesService {
         request.residentDjIds().forEach(id -> assignments.add(new PartyDjAssignment(id, "resident")));
         request.otherDjIds().forEach(id -> assignments.add(new PartyDjAssignment(id, "other")));
         return assignments;
+    }
+
+    private void validateStandardGenres(Set<String> standardGenres) {
+        if (standardGenres.isEmpty()) return;
+        var genres = genreRepository.findAllById(standardGenres);
+        if (genres.size() != standardGenres.size() || genres.stream().anyMatch(genre -> !genre.isActive())) {
+            throw badRequest("Mindestens ein Standardgenre wurde nicht gefunden");
+        }
     }
 
     private String recurrenceKind(PartySeriesRequest request) {
