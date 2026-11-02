@@ -42,7 +42,7 @@ public class PartySeriesService {
     @Transactional(readOnly = true)
     public List<PartySeriesResponse> getParties() {
         return partySeriesRepository.findAll().stream()
-                .map(this::toResponse)
+                .map(party -> toResponse(party))
                 .toList();
     }
 

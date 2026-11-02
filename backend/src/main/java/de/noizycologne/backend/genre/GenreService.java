@@ -92,12 +92,12 @@ public class GenreService {
 
     private GenreResponse response(Genre genre) {
         return GenreResponse.from(genre, aliasRepository.findAllByGenreIdIn(List.of(genre.getId())).stream()
-                .map(GenreAliasResponse::from).toList());
+                .map(alias -> GenreAliasResponse.from(alias)).toList());
     }
 
     private List<GenreResponse> responses(List<Genre> genres) {
         Map<String, List<GenreAliasResponse>> aliases = new LinkedHashMap<>();
-        aliasRepository.findAllByGenreIdIn(genres.stream().map(Genre::getId).toList()).forEach(alias ->
+        aliasRepository.findAllByGenreIdIn(genres.stream().map(genre -> genre.getId()).toList()).forEach(alias ->
                 aliases.computeIfAbsent(alias.getGenreId(), ignored -> new java.util.ArrayList<>()).add(GenreAliasResponse.from(alias)));
         return genres.stream().map(genre -> GenreResponse.from(genre, aliases.getOrDefault(genre.getId(), List.of()))).toList();
     }

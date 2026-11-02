@@ -88,8 +88,8 @@ public class MusicTrackService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Musikvorschläge sind nur für Veranstaltungen möglich");
         }
         Set<String> genres = draftRepository.findByCalendarEntryId(calendarEntryId)
-                .map(draft -> draft.getGenres().stream().map(String::toLowerCase).collect(java.util.stream.Collectors.toSet()))
-                .orElseGet(Set::of);
+                .map(draft -> draft.getGenres().stream().map(genre -> genre.toLowerCase()).collect(java.util.stream.Collectors.toSet()))
+                .orElseGet(() -> Set.of());
         return new SuggestionContext(entry.getPartyId(), genres);
     }
 
@@ -102,7 +102,7 @@ public class MusicTrackService {
         }
         Set<String> trackGenres = new HashSet<>();
         track.getGenres().forEach(genre -> trackGenres.add(genre.toLowerCase()));
-        long genreMatches = trackGenres.stream().filter(context.genres()::contains).count();
+        long genreMatches = trackGenres.stream().filter(genre -> context.genres().contains(genre)).count();
         if (genreMatches > 0) {
             score += (int) genreMatches * 25;
             reasons.add("Bestätigte Event-Genres");

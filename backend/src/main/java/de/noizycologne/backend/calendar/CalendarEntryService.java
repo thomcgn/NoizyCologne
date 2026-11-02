@@ -58,7 +58,7 @@ public class CalendarEntryService {
                     if (timeComparison != 0) return timeComparison;
                     return left.getId().compareTo(right.getId());
                 })
-                .map(this::toResponse)
+                .map(entry -> toResponse(entry))
                 .toList();
     }
 

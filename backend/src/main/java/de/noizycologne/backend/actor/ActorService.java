@@ -24,7 +24,7 @@ public class ActorService {
     @Transactional(readOnly = true)
     public List<ActorResponse> getActors() {
         return actorRepository.findAll().stream()
-                .map(ActorResponse::from)
+                .map(actor -> ActorResponse.from(actor))
                 .toList();
     }
 

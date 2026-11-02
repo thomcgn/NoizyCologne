@@ -97,7 +97,7 @@ class MusicTrackControllerIntegrationTests {
                         .andExpect(status().isOk())
                         .andReturn().getResponse().getContentAsString(),
                 MusicTrackResponse[].class);
-        assertThat(List.of(suggestions)).extracting(MusicTrackResponse::id).contains(created.id());
+        assertThat(List.of(suggestions)).extracting(response -> response.id()).contains(created.id());
         assertThat(List.of(suggestions).stream().filter(item -> item.id().equals(created.id())).findFirst().orElseThrow().matchReasons())
                 .contains("Partyreihen-Favorit");
 

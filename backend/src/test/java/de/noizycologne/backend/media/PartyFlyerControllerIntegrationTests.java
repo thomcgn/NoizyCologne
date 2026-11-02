@@ -56,9 +56,9 @@ class PartyFlyerControllerIntegrationTests {
 
     @AfterEach
     void cleanUp() throws Exception {
-        partyIds.forEach(partySeriesRepository::deleteById);
+        partyIds.forEach(id -> partySeriesRepository.deleteById(id));
         partySeriesRepository.flush();
-        assetIds.forEach(mediaAssetRepository::deleteById);
+        assetIds.forEach(id -> mediaAssetRepository.deleteById(id));
         mediaAssetRepository.flush();
         Path root = Path.of("target/test-party-flyers");
         if (Files.exists(root)) {

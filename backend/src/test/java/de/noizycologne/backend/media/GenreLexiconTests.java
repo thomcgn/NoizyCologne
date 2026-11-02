@@ -77,7 +77,7 @@ class GenreLexiconTests {
                 word("TO", 95, 140), word("Metalcore", 94, 170)
         ));
 
-        assertThat(matches).extracting(GenreLexicon.GenreMatch::genre)
+        assertThat(matches).extracting(match -> match.genre())
                 .contains("Electronicore", "Hardcore", "Emo", "Metalcore");
     }
 

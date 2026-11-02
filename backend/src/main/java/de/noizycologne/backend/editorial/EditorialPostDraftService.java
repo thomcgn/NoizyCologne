@@ -46,7 +46,7 @@ public class EditorialPostDraftService {
 
     @Transactional(readOnly = true)
     public List<EditorialPostDraftResponse> getDrafts() {
-        return draftRepository.findAll().stream().map(EditorialPostDraftResponse::from).toList();
+        return draftRepository.findAll().stream().map(draft -> EditorialPostDraftResponse.from(draft)).toList();
     }
 
     @Transactional
@@ -117,7 +117,7 @@ public class EditorialPostDraftService {
     private Set<String> partyStandardGenres(CalendarEntry entry) {
         if (entry.getPartyId() == null) return Set.of();
         return partySeriesRepository.findById(entry.getPartyId())
-                .map(PartySeries::getStandardGenres)
+                .map(party -> party.getStandardGenres())
                 .orElse(Set.of());
     }
 

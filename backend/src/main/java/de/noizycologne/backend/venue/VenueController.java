@@ -32,7 +32,7 @@ public class VenueController {
     @GetMapping
     public List<VenueResponse> getVenues() {
         return venueRepository.findAll().stream()
-                .map(VenueResponse::from)
+                .map(venue -> VenueResponse.from(venue))
                 .toList();
     }
 

@@ -157,7 +157,7 @@ public class ImagePreprocessor {
 
         public PreparedImage image(String variant) {
             if ("original".equals(variant)) return new PreparedImage(source, variant, 1.0, false);
-            return images.computeIfAbsent(variant, this::createVariant);
+            return images.computeIfAbsent(variant, key -> createVariant(key));
         }
 
         private PreparedImage createVariant(String variant) {

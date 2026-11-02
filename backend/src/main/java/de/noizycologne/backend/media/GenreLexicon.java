@@ -42,7 +42,7 @@ public class GenreLexicon {
         if (genreRepository == null || aliasRepository == null) return;
         List<Genre> genres = genreRepository.findAllByActiveTrueOrderByCanonicalNameAsc();
         Map<String, List<String>> aliases = new LinkedHashMap<>();
-        for (GenreAlias alias : aliasRepository.findAllByGenreIdIn(genres.stream().map(Genre::getId).toList())) {
+        for (GenreAlias alias : aliasRepository.findAllByGenreIdIn(genres.stream().map(genre -> genre.getId()).toList())) {
             aliases.computeIfAbsent(alias.getGenreId(), ignored -> new java.util.ArrayList<>()).add(alias.getValue());
         }
         entries = genres.stream().map(genre -> {
@@ -83,7 +83,7 @@ public class GenreLexicon {
             String alias = normalize(aliasValue);
             List<String> aliasTokens = List.of(alias.split(" "));
             if (contains(text, alias)) {
-                if ("rock".equals(alias) && lines.stream().anyMatch(this::isPromotionalRockLine)
+                if ("rock".equals(alias) && lines.stream().anyMatch(line -> isPromotionalRockLine(line))
                         && lines.stream().noneMatch(line -> isGenreListLine(line, alias))) continue;
                 double evidence = evidenceConfidence(aliasTokens, lines);
                 best = better(best, new GenreMatch(genre, evidence, false));
