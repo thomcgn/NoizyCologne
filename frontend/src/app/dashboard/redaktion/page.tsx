@@ -799,7 +799,7 @@ export default function RedaktionPage() {
             </p>
             <Link
               href="/dashboard/kalender"
-              className="mt-5 inline-flex min-h-11 items-center rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black"
+              className="control-button control-button-secondary mt-5"
             >
               Zum Kalender
             </Link>
