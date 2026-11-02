@@ -183,7 +183,7 @@ export default function ActorsPage() {
           <button
             type="button"
             onClick={createNew}
-            className="min-h-11 rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black hover:bg-neutral-200"
+            className="min-h-11 rounded-lg border border-white/15 px-4 py-2 text-sm hover:bg-white/10"
           >
             + Neu anlegen
           </button>
