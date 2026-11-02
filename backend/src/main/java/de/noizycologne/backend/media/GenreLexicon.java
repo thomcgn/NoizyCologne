@@ -6,7 +6,7 @@ import de.noizycologne.backend.genre.GenreAliasRepository;
 import de.noizycologne.backend.genre.GenreRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.lang.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.text.Normalizer;
 import java.util.LinkedHashMap;

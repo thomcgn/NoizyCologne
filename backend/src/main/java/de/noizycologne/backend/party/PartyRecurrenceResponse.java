@@ -1,6 +1,6 @@
 package de.noizycologne.backend.party;
 
-import org.springframework.lang.Nullable;
+import org.jspecify.annotations.Nullable;
 
 public record PartyRecurrenceResponse(
         String kind,
