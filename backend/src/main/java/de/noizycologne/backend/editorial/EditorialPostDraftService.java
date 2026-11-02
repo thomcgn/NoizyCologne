@@ -5,6 +5,8 @@ import de.noizycologne.backend.actor.ActorRepository;
 import de.noizycologne.backend.calendar.CalendarEntry;
 import de.noizycologne.backend.calendar.CalendarEntryRepository;
 import de.noizycologne.backend.media.MediaAssetRepository;
+import de.noizycologne.backend.music.MusicTrack;
+import de.noizycologne.backend.music.MusicTrackRepository;
 import de.noizycologne.backend.party.PartySeriesRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -25,17 +27,20 @@ public class EditorialPostDraftService {
     private final ActorRepository actorRepository;
     private final PartySeriesRepository partySeriesRepository;
     private final MediaAssetRepository mediaAssetRepository;
+    private final MusicTrackRepository musicTrackRepository;
 
     public EditorialPostDraftService(EditorialPostDraftRepository draftRepository,
                                      CalendarEntryRepository calendarEntryRepository,
                                      ActorRepository actorRepository,
                                      PartySeriesRepository partySeriesRepository,
-                                     MediaAssetRepository mediaAssetRepository) {
+                                     MediaAssetRepository mediaAssetRepository,
+                                     MusicTrackRepository musicTrackRepository) {
         this.draftRepository = draftRepository;
         this.calendarEntryRepository = calendarEntryRepository;
         this.actorRepository = actorRepository;
         this.partySeriesRepository = partySeriesRepository;
         this.mediaAssetRepository = mediaAssetRepository;
+        this.musicTrackRepository = musicTrackRepository;
     }
 
     @Transactional(readOnly = true)
@@ -49,9 +54,12 @@ public class EditorialPostDraftService {
         if (draftRepository.findByCalendarEntryId(calendarEntryId).isPresent()) {
             throw conflict("Für diese Veranstaltung existiert bereits ein Redaktionsentwurf");
         }
-        validate(entry, request);
+        MusicTrack musicTrack = validate(entry, request);
         EditorialPostDraft draft = new EditorialPostDraft(calendarEntryId, request.caption().trim(),
                 request.hashtags().trim(), request.status(), request.mentionActorIds(), normalizedGenres(request));
+        draft.update(request.caption().trim(), request.hashtags().trim(), request.status(),
+                request.mentionActorIds(), normalizedGenres(request), musicTrack == null ? null : musicTrack.getId());
+        if (musicTrack != null) musicTrack.markUsed(java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC));
         return EditorialPostDraftResponse.from(draftRepository.save(draft));
     }
 
@@ -60,8 +68,10 @@ public class EditorialPostDraftService {
         EditorialPostDraft draft = draftRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Redaktionsentwurf nicht gefunden"));
         CalendarEntry entry = findEvent(draft.getCalendarEntryId());
-        validate(entry, request);
-        draft.update(request.caption().trim(), request.hashtags().trim(), request.status(), request.mentionActorIds(), normalizedGenres(request));
+        MusicTrack musicTrack = validate(entry, request);
+        draft.update(request.caption().trim(), request.hashtags().trim(), request.status(), request.mentionActorIds(),
+                normalizedGenres(request), musicTrack == null ? null : musicTrack.getId());
+        if (musicTrack != null) musicTrack.markUsed(java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC));
         return EditorialPostDraftResponse.from(draftRepository.save(draft));
     }
 
@@ -74,7 +84,7 @@ public class EditorialPostDraftService {
         return entry;
     }
 
-    private void validate(CalendarEntry entry, EditorialPostDraftRequest request) {
+    private MusicTrack validate(CalendarEntry entry, EditorialPostDraftRequest request) {
         if (!STATUSES.contains(request.status())) {
             throw badRequest("Unbekannter Redaktionsstatus");
         }
@@ -97,6 +107,9 @@ public class EditorialPostDraftService {
                 throw badRequest("Ein freizugebender Entwurf benötigt einen Dauer- oder Event-Flyer");
             }
         }
+        if (request.musicTrackId() == null) return null;
+        return musicTrackRepository.findById(request.musicTrackId())
+                .orElseThrow(() -> badRequest("Der ausgewählte Song wurde nicht gefunden"));
     }
 
     private Set<String> normalizedGenres(EditorialPostDraftRequest request) {

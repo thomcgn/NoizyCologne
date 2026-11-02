@@ -9,7 +9,8 @@ public record EditorialPostDraftResponse(
         String hashtags,
         List<String> mentionActorIds,
         List<String> genres,
-        String status
+        String status,
+        String musicTrackId
 ) {
     public static EditorialPostDraftResponse from(EditorialPostDraft draft) {
         return new EditorialPostDraftResponse(
@@ -19,7 +20,8 @@ public record EditorialPostDraftResponse(
                 draft.getHashtags(),
                 draft.getMentionActorIds().stream().sorted().toList(),
                 draft.getGenres().stream().sorted().toList(),
-                draft.getStatus()
+                draft.getStatus(),
+                draft.getMusicTrackId()
         );
     }
 }

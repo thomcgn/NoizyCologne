@@ -35,6 +35,9 @@ public class EditorialPostDraft {
     @Column(nullable = false, length = 30)
     private String status;
 
+    @Column(name = "music_track_id", length = 100)
+    private String musicTrackId;
+
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(
             name = "editorial_post_draft_mentions",
@@ -79,9 +82,11 @@ public class EditorialPostDraft {
     public String getStatus() { return status; }
     public Set<String> getMentionActorIds() { return mentionActorIds; }
     public Set<String> getGenres() { return genres; }
+    public String getMusicTrackId() { return musicTrackId; }
 
     public void update(String caption, String hashtags, String status,
-                       Collection<String> mentionActorIds, Collection<String> genres) {
+                       Collection<String> mentionActorIds, Collection<String> genres,
+                       String musicTrackId) {
         this.caption = caption;
         this.hashtags = hashtags;
         this.status = status;
@@ -89,5 +94,6 @@ public class EditorialPostDraft {
         this.mentionActorIds.addAll(mentionActorIds);
         this.genres.clear();
         this.genres.addAll(genres);
+        this.musicTrackId = musicTrackId;
     }
 }

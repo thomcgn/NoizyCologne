@@ -96,7 +96,25 @@ export type EditorialPostDraft = {
   mentionActorIds: string[];
   genres: string[];
   status: EditorialDraftStatus;
+  musicTrackId: string | null;
 };
+
+export type MusicTrack = {
+  id: string;
+  artist: string;
+  title: string;
+  genres: string[];
+  partySeriesIds: string[];
+  youtubeVideoId: string;
+  spotifyTrackUrl: string;
+  previewStartSeconds: number;
+  preferredPositionSeconds: number;
+  lastUsedAt: string | null;
+  score: number;
+  matchReasons: string[];
+};
+
+export type MusicTrackInput = Omit<MusicTrack, "id" | "lastUsedAt" | "score" | "matchReasons">;
 
 type EntryBase = {
   id: string;
@@ -161,6 +179,12 @@ type CatalogContextValue = {
   reloadDrafts: () => Promise<void>;
   createDraft: (calendarEntryId: string, draft: Omit<EditorialPostDraft, "id" | "calendarEntryId">) => Promise<EditorialPostDraft>;
   updateDraft: (draft: EditorialPostDraft) => Promise<EditorialPostDraft>;
+  musicTracks: MusicTrack[];
+  musicTracksLoading: boolean;
+  musicTracksError: string | null;
+  reloadMusicTracks: (calendarEntryId?: string) => Promise<void>;
+  createMusicTrack: (track: MusicTrackInput) => Promise<MusicTrack>;
+  updateMusicTrack: (track: MusicTrack) => Promise<MusicTrack>;
   venues: CatalogItem[];
   venuesLoading: boolean;
   venuesError: string | null;
@@ -350,6 +374,10 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   const [draftsLoading, setDraftsLoading] = useState(true);
   const [draftsError, setDraftsError] = useState<string | null>(null);
 
+  const [musicTracks, setMusicTracks] = useState<MusicTrack[]>([]);
+  const [musicTracksLoading, setMusicTracksLoading] = useState(false);
+  const [musicTracksError, setMusicTracksError] = useState<string | null>(null);
+
   const parseDraftResponse = useCallback((body: unknown): EditorialPostDraft => {
     if (typeof body !== "object" || body === null) {
       throw new Error("Die Redaktions-API lieferte ein unerwartetes Antwortformat.");
@@ -365,6 +393,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       !validIds ||
       !Array.isArray(draft.genres) ||
       !draft.genres.every((genre) => typeof genre === "string") ||
+      !(draft.musicTrackId === null || typeof draft.musicTrackId === "string") ||
       !validStatus
     ) {
       throw new Error("Die Redaktions-API lieferte ein unerwartetes Antwortformat.");
@@ -377,6 +406,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       mentionActorIds: draft.mentionActorIds as string[],
       genres: draft.genres as string[],
       status: draft.status as EditorialDraftStatus,
+      musicTrackId: draft.musicTrackId as string | null,
     };
   }, []);
 
@@ -429,11 +459,79 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         mentionActorIds: draft.mentionActorIds,
         genres: draft.genres,
         status: draft.status,
+        musicTrackId: draft.musicTrackId,
       }),
     });
     if (!response.ok) throw new Error(await readPartyError(response));
     const updated = parseDraftResponse(await response.json());
     setDrafts((current) => current.map((item) => item.id === updated.id ? updated : item));
+    return updated;
+  }
+
+  const parseMusicTrack = useCallback((body: unknown): MusicTrack => {
+    if (typeof body !== "object" || body === null) throw new Error("Die Musik-API lieferte ein unerwartetes Antwortformat.");
+    const value = body as Record<string, unknown>;
+    const validStrings = (key: string) => Array.isArray(value[key]) && value[key].every((item) => typeof item === "string");
+    if (typeof value.id !== "string" || typeof value.artist !== "string" || typeof value.title !== "string"
+      || !validStrings("genres") || !validStrings("partySeriesIds") || typeof value.youtubeVideoId !== "string"
+      || typeof value.spotifyTrackUrl !== "string" || typeof value.previewStartSeconds !== "number"
+      || typeof value.preferredPositionSeconds !== "number" || !(value.lastUsedAt === null || typeof value.lastUsedAt === "string")
+      || typeof value.score !== "number" || !validStrings("matchReasons")) {
+      throw new Error("Die Musik-API lieferte ein unerwartetes Antwortformat.");
+    }
+    return {
+      id: value.id,
+      artist: value.artist,
+      title: value.title,
+      genres: value.genres as string[],
+      partySeriesIds: value.partySeriesIds as string[],
+      youtubeVideoId: value.youtubeVideoId,
+      spotifyTrackUrl: value.spotifyTrackUrl,
+      previewStartSeconds: value.previewStartSeconds,
+      preferredPositionSeconds: value.preferredPositionSeconds,
+      lastUsedAt: value.lastUsedAt as string | null,
+      score: value.score,
+      matchReasons: value.matchReasons as string[],
+    };
+  }, []);
+
+  const reloadMusicTracks = useCallback(async (calendarEntryId?: string) => {
+    setMusicTracksLoading(true);
+    setMusicTracksError(null);
+    try {
+      const query = calendarEntryId ? `?calendarEntryId=${encodeURIComponent(calendarEntryId)}` : "";
+      const response = await fetch(`/api/v1/music/tracks${query}`, { cache: "no-store", credentials: "same-origin" });
+      if (!response.ok) throw new Error(await readPartyError(response));
+      const body: unknown = await response.json();
+      if (!Array.isArray(body)) throw new Error("Die Musik-API lieferte kein gültiges Listenformat.");
+      setMusicTracks(body.map(parseMusicTrack));
+    } catch (cause) {
+      setMusicTracks([]);
+      setMusicTracksError(cause instanceof Error ? cause.message : "Musikvorschläge konnten nicht geladen werden.");
+    } finally {
+      setMusicTracksLoading(false);
+    }
+  }, [parseMusicTrack]);
+
+  async function createMusicTrack(track: MusicTrackInput) {
+    const response = await fetch("/api/v1/music/tracks", {
+      method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
+      body: JSON.stringify(track),
+    });
+    if (!response.ok) throw new Error(await readPartyError(response));
+    const created = parseMusicTrack(await response.json());
+    setMusicTracks((current) => [created, ...current]);
+    return created;
+  }
+
+  async function updateMusicTrack(track: MusicTrack) {
+    const response = await fetch(`/api/v1/music/tracks/${encodeURIComponent(track.id)}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
+      body: JSON.stringify(track),
+    });
+    if (!response.ok) throw new Error(await readPartyError(response));
+    const updated = parseMusicTrack(await response.json());
+    setMusicTracks((current) => current.map((item) => item.id === updated.id ? updated : item));
     return updated;
   }
 
@@ -1023,6 +1121,12 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         reloadDrafts,
         createDraft,
         updateDraft,
+        musicTracks,
+        musicTracksLoading,
+        musicTracksError,
+        reloadMusicTracks,
+        createMusicTrack,
+        updateMusicTrack,
         venues,
         venuesLoading,
         venuesError,

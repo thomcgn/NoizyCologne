@@ -114,6 +114,7 @@ type DraftState = {
   mentionIds: string[];
   genres: string[];
   status: EditorialDraftStatus;
+  musicTrackId: string | null;
 };
 
 type ActiveGenre = {
@@ -211,6 +212,12 @@ export default function RedaktionPage() {
     reloadDrafts,
     createDraft,
     updateDraft: updatePersistedDraft,
+    musicTracks,
+    musicTracksLoading,
+    musicTracksError,
+    reloadMusicTracks,
+    createMusicTrack,
+    updateMusicTrack,
   } = useCatalog();
   const { uploadEventFlyer, deleteEventFlyer } = useCatalog();
   const { analyzeEventFlyerGenres } = useCatalog();
@@ -371,8 +378,9 @@ export default function RedaktionPage() {
         mentionIds: initialMentionIds,
         genres: persistedDraft?.genres ?? [],
         status: persistedDraft?.status ?? "DRAFT",
+        musicTrackId: persistedDraft?.musicTrackId ?? null,
       }
-    : { caption: "", hashtags: "", mentionIds: [], genres: [], status: "DRAFT" };
+    : { caption: "", hashtags: "", mentionIds: [], genres: [], status: "DRAFT", musicTrackId: null };
   const draft = localDrafts[activeId] ?? defaultDraft;
   const gates = gateStates[activeId] ?? {
     captionReviewed: false,
@@ -402,6 +410,7 @@ export default function RedaktionPage() {
         mentionIds: hoveredPersistedDraft.mentionActorIds,
         genres: hoveredPersistedDraft.genres,
         status: hoveredPersistedDraft.status,
+        musicTrackId: hoveredPersistedDraft.musicTrackId,
       } : null)
     : null;
   const hoveredMentionIds = hoveredDraft?.mentionIds
@@ -419,6 +428,23 @@ export default function RedaktionPage() {
         hoveredEntry?.entryPrice ?? "",
       )
     : "";
+  const selectedMusic = musicTracks.find((track) => track.id === draft.musicTrackId) ?? null;
+  const [hookPositionOverride, setHookPositionOverride] = useState<number | null>(null);
+  const [musicLibraryOpen, setMusicLibraryOpen] = useState(true);
+  const [musicSaving, setMusicSaving] = useState(false);
+  const [musicError, setMusicError] = useState("");
+  const [musicForm, setMusicForm] = useState({
+    artist: "",
+    title: "",
+    youtubeVideoId: "",
+    spotifyTrackUrl: "",
+    genres: "",
+    partySeriesId: "",
+  });
+  useEffect(() => {
+    if (selectedEntry) void reloadMusicTracks(selectedEntry.id);
+  }, [reloadMusicTracks, selectedEntry]);
+  const hookPosition = hookPositionOverride ?? selectedMusic?.preferredPositionSeconds ?? 0;
   useLayoutEffect(() => {
     const card = previewCardRef.current;
     if (!hoveredEntry || !hoveredParty || !card || viewport.width === 0 || viewport.height === 0) {
@@ -493,6 +519,7 @@ export default function RedaktionPage() {
             mentionActorIds: draft.mentionIds,
             genres: draft.genres,
             status: draft.status,
+            musicTrackId: draft.musicTrackId,
           });
       setLocalDrafts((current) => ({
         ...current,
@@ -502,12 +529,50 @@ export default function RedaktionPage() {
           mentionIds: saved.mentionActorIds,
           genres: saved.genres,
           status: saved.status,
+          musicTrackId: saved.musicTrackId,
         },
       }));
     } catch (cause) {
       setDraftError(cause instanceof Error ? cause.message : "Der Redaktionsentwurf konnte nicht gespeichert werden.");
     } finally {
       setDraftSaving(false);
+    }
+  }
+
+  async function addMusicTrack() {
+    setMusicSaving(true);
+    setMusicError("");
+    try {
+      const created = await createMusicTrack({
+        artist: musicForm.artist.trim(),
+        title: musicForm.title.trim(),
+        youtubeVideoId: musicForm.youtubeVideoId.trim(),
+        spotifyTrackUrl: musicForm.spotifyTrackUrl.trim(),
+        genres: musicForm.genres.split(",").map((genre) => genre.trim()).filter(Boolean),
+        partySeriesIds: musicForm.partySeriesId ? [musicForm.partySeriesId] : [],
+        previewStartSeconds: 0,
+        preferredPositionSeconds: 0,
+      });
+      updateDraft({ musicTrackId: created.id });
+      setHookPositionOverride(null);
+      setMusicForm({ artist: "", title: "", youtubeVideoId: "", spotifyTrackUrl: "", genres: "", partySeriesId: "" });
+    } catch (cause) {
+      setMusicError(cause instanceof Error ? cause.message : "Der Song konnte nicht gespeichert werden.");
+    } finally {
+      setMusicSaving(false);
+    }
+  }
+
+  async function rememberHook() {
+    if (!selectedMusic) return;
+    setMusicSaving(true);
+    setMusicError("");
+    try {
+      await updateMusicTrack({ ...selectedMusic, preferredPositionSeconds: Math.max(0, Math.floor(hookPosition)) });
+    } catch (cause) {
+      setMusicError(cause instanceof Error ? cause.message : "Die Hörposition konnte nicht gespeichert werden.");
+    } finally {
+      setMusicSaving(false);
     }
   }
 
@@ -993,6 +1058,88 @@ export default function RedaktionPage() {
                         </button>
                       </div>
                     )}
+                  </div>
+                )}
+              </section>
+              <section className="mt-5 rounded-lg border border-white/10 p-4">
+                <button
+                  type="button"
+                  onClick={() => setMusicLibraryOpen((open) => !open)}
+                  aria-expanded={musicLibraryOpen}
+                  className="flex min-h-11 w-full items-center justify-between text-left"
+                >
+                  <span>
+                    <span className="block text-sm font-semibold">Musik / Songvorschläge</span>
+                    <span className="mt-1 block text-xs text-neutral-500">Manuelle Bibliothek mit verifizierten YouTube-Originalquellen. Es wird nichts automatisch veröffentlicht.</span>
+                  </span>
+                  <span className="text-xs text-neutral-500">{musicLibraryOpen ? "Einklappen" : "Einblenden"}</span>
+                </button>
+                {musicLibraryOpen && (
+                  <div className="mt-4 space-y-4">
+                    {musicTracksLoading && <p className="text-sm text-neutral-400" role="status">Songvorschläge werden geladen ...</p>}
+                    {musicTracksError && <p className="text-sm text-red-300" role="alert">{musicTracksError}</p>}
+                    {!musicTracksLoading && !musicTracksError && musicTracks.length === 0 && (
+                      <p className="text-sm text-neutral-500">Noch keine Songs in der Bibliothek. Füge nur offiziell geprüfte Metadaten hinzu.</p>
+                    )}
+                    {musicTracks.length > 0 && (
+                      <div className="space-y-2">
+                        {musicTracks.slice(0, 8).map((track) => (
+                          <button
+                            type="button"
+                            key={track.id}
+                            onClick={() => { updateDraft({ musicTrackId: track.id }); setHookPositionOverride(null); }}
+                            className={`block min-h-12 w-full rounded-lg border px-3 py-2 text-left ${draft.musicTrackId === track.id ? "border-white bg-white/10" : "border-white/10 bg-neutral-900 hover:bg-white/5"}`}
+                          >
+                            <span className="block text-sm font-semibold">{track.artist} – {track.title}</span>
+                            <span className="mt-1 block text-xs text-neutral-500">
+                              {track.matchReasons.length > 0 ? track.matchReasons.join(" · ") : "Manuell hinzugefügt"}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {selectedMusic && (
+                      <div className="rounded-lg border border-white/10 bg-neutral-900/60 p-3">
+                        <p className="mb-3 text-sm font-semibold">{selectedMusic.artist} – {selectedMusic.title}</p>
+                        <div className="aspect-video overflow-hidden rounded-lg bg-black">
+                          <iframe
+                            title={`YouTube-Vorschau: ${selectedMusic.artist} – ${selectedMusic.title}`}
+                            src={`https://www.youtube.com/embed/${encodeURIComponent(selectedMusic.youtubeVideoId)}?start=${selectedMusic.preferredPositionSeconds}&enablejsapi=1&rel=0`}
+                            className="size-full"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                            allowFullScreen
+                          />
+                        </div>
+                        <label className="mt-3 block text-sm">
+                          <span className="mb-2 block text-neutral-300">Hörposition / Hook in Sekunden</span>
+                          <input
+                            type="number"
+                            min={0}
+                            className="min-h-11 w-full rounded-lg border border-white/15 bg-neutral-950 px-3 py-2 text-white"
+                            value={hookPosition}
+                            onChange={(event) => setHookPositionOverride(Number(event.target.value) || 0)}
+                          />
+                        </label>
+                        <button type="button" onClick={() => void rememberHook()} disabled={musicSaving} className="mt-3 min-h-11 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black disabled:opacity-50">
+                          {musicSaving ? "Speichern ..." : "Diese Stelle als Hook merken"}
+                        </button>
+                        {selectedMusic.spotifyTrackUrl && <a href={selectedMusic.spotifyTrackUrl} target="_blank" rel="noreferrer" className="ml-3 text-sm text-neutral-300 underline">Spotify öffnen</a>}
+                      </div>
+                    )}
+                    <details className="rounded-lg border border-white/10 p-3">
+                      <summary className="cursor-pointer text-sm font-semibold">Geprüften Song zur Bibliothek hinzufügen</summary>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        {(["artist", "title", "youtubeVideoId", "spotifyTrackUrl", "genres"] as const).map((field) => (
+                          <label key={field} className={field === "genres" ? "sm:col-span-2" : ""}>
+                            <span className="mb-1 block text-xs text-neutral-400">{field === "youtubeVideoId" ? "YouTube-Video-ID" : field === "spotifyTrackUrl" ? "Spotify-Track-URL (optional)" : field === "genres" ? "Genres, Komma-getrennt" : field === "artist" ? "Interpret" : "Songtitel"}</span>
+                            <input className="min-h-10 w-full rounded-lg border border-white/15 bg-neutral-950 px-3 py-2 text-sm" value={musicForm[field]} onChange={(event) => setMusicForm((current) => ({ ...current, [field]: event.target.value }))} maxLength={field === "youtubeVideoId" ? 11 : undefined} />
+                          </label>
+                        ))}
+                      </div>
+                      <label className="mt-3 block text-sm"><span className="mb-1 block text-xs text-neutral-400">Partyreihen-Favorit (optional)</span><select className="min-h-10 w-full rounded-lg border border-white/15 bg-neutral-950 px-3 py-2 text-sm" value={musicForm.partySeriesId} onChange={(event) => setMusicForm((current) => ({ ...current, partySeriesId: event.target.value }))}><option value="">Keine Zuordnung</option>{parties.map((party) => <option key={party.id} value={party.id}>{party.name}</option>)}</select></label>
+                      <button type="button" onClick={() => void addMusicTrack()} disabled={musicSaving || !musicForm.artist.trim() || !musicForm.title.trim() || musicForm.youtubeVideoId.trim().length !== 11} className="mt-3 min-h-11 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black disabled:opacity-50">Song speichern</button>
+                    </details>
+                    {musicError && <p className="text-sm text-red-300" role="alert">{musicError}</p>}
                   </div>
                 )}
               </section>

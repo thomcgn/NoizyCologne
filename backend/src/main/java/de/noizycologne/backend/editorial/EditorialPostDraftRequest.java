@@ -23,12 +23,21 @@ public record EditorialPostDraftRequest(
         Set<@NotBlank @Size(max = 100) String> mentionActorIds,
 
         @Size(max = 20)
-        Set<@NotBlank @Size(max = 50) String> genres
+        Set<@NotBlank @Size(max = 50) String> genres,
+
+        @Size(max = 100)
+        String musicTrackId
 ) {
+    public EditorialPostDraftRequest(String caption, String hashtags, String status,
+                                     Set<String> mentionActorIds, Set<String> genres) {
+        this(caption, hashtags, status, mentionActorIds, genres, null);
+    }
+
     public EditorialPostDraftRequest {
         caption = caption == null ? "" : caption;
         hashtags = hashtags == null ? "" : hashtags;
         mentionActorIds = mentionActorIds == null ? Set.of() : new LinkedHashSet<>(mentionActorIds);
         genres = genres == null ? Set.of() : new LinkedHashSet<>(genres);
+        musicTrackId = musicTrackId == null || musicTrackId.isBlank() ? null : musicTrackId.trim();
     }
 }
