@@ -270,23 +270,21 @@ html[data-theme="light"] {
 body {
   background: var(--background);
   color: var(--foreground);
+  overflow-x: hidden;
 }
 
 .dashboard-frame {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  display: block;
   min-height: 100dvh;
   max-width: 1440px;
   margin: 0 auto;
 }
 
 .dashboard-sidebar {
-  position: sticky;
-  top: 0;
-  align-self: start;
-  height: 100dvh;
-  padding: 28px 18px;
-  border-right: 1px solid var(--line);
+  position: relative;
+  height: auto;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
   background: var(--background);
 }
 
@@ -297,13 +295,17 @@ body {
   max-width: 100%;
 }
 
-.dashboard-desktop-logo { width: 100%; padding: 4px 8px 24px; }
+.dashboard-desktop-logo { display: none; }
 .dashboard-logo-link .logo { width: 152px; height: auto; object-fit: contain; }
 .logo-light { display: none; }
 html[data-theme="light"] .logo-dark { display: none; }
 html[data-theme="light"] .logo-light { display: block; }
 
-.dashboard-nav { display: grid; gap: 4px; }
+.dashboard-mobile-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.dashboard-mobile-header .dashboard-logo-link { flex: 1; }
+.dashboard-logo-link .logo { width: 138px; }
+.dashboard-nav { display: none; gap: 4px; padding-top: 12px; }
+.dashboard-nav.is-open { display: grid; }
 .dashboard-nav-link {
   display: flex;
   align-items: center;
@@ -322,13 +324,22 @@ html[data-theme="light"] .logo-light { display: block; }
   background: var(--foreground);
   font-weight: 650;
 }
-.dashboard-mobile-header { display: none; }
+.mobile-nav-toggle {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 14px;
+  color: var(--muted-strong);
+  background: var(--surface);
+}
 
 .dashboard-controls {
-  position: fixed;
-  top: max(18px, env(safe-area-inset-top));
-  right: max(22px, env(safe-area-inset-right));
-  z-index: 30;
+  position: static;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: max(10px, env(safe-area-inset-top)) 16px 10px;
+  background: var(--background);
 }
 .control-button {
   display: inline-flex;
@@ -397,27 +408,39 @@ html[data-theme="light"] .logo-light { display: block; }
 }
 .icon-button:hover { background: var(--surface-muted); color: var(--foreground); }
 
-@media (max-width: 1023px) {
-  .dashboard-frame { display: block; }
-  .dashboard-sidebar {
-    position: relative;
-    height: auto;
-    padding: 12px 16px;
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
+@media (min-width: 1024px) {
+  .dashboard-frame {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
   }
-  .dashboard-desktop-logo { display: none; }
-  .dashboard-mobile-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .dashboard-mobile-header .dashboard-logo-link { flex: 1; }
-  .dashboard-logo-link .logo { width: 138px; }
-  .mobile-nav-toggle { min-height: 44px; border: 1px solid var(--line); border-radius: 8px; padding: 0 14px; color: var(--muted-strong); background: var(--surface); }
-  .dashboard-nav { display: none; padding-top: 12px; }
-  .dashboard-nav.is-open { display: grid; }
-  .dashboard-controls { top: 70px; right: 16px; }
+  .dashboard-sidebar {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100dvh;
+    padding: 28px 18px;
+    border-right: 1px solid var(--line);
+    border-bottom: 0;
+  }
+  .dashboard-mobile-header { display: none; }
+  .dashboard-desktop-logo { display: inline-flex; width: 100%; padding: 4px 8px 24px; }
+  .dashboard-logo-link .logo { width: 152px; }
+  .dashboard-nav { display: grid; padding-top: 0; }
+  .dashboard-controls {
+    position: fixed;
+    top: max(18px, env(safe-area-inset-top));
+    right: max(22px, env(safe-area-inset-right));
+    z-index: 30;
+    padding: 0;
+    background: transparent;
+  }
+}
+
+@media (min-width: 640px) {
+  .dashboard-sidebar { padding-left: 24px; padding-right: 24px; }
 }
 
 @media (max-width: 639px) {
-  .dashboard-controls { position: absolute; top: 84px; right: 16px; }
   .dashboard-modal-backdrop { padding: 8px; }
   .dashboard-modal { max-height: calc(100dvh - 16px); border-radius: 12px; }
   .dashboard-modal-header { padding: 16px; }
