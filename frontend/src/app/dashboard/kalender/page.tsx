@@ -462,7 +462,7 @@ export default function CalendarPage() {
               <button
                 type="button"
                 onClick={openNewEntry}
-                className="min-h-12 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black hover:bg-neutral-200"
+                className="min-h-11 rounded-lg border border-white/15 px-4 py-2 text-sm hover:bg-white/10"
               >
                 + Neuer Eintrag
               </button>
@@ -622,7 +622,7 @@ export default function CalendarPage() {
                 {infoEntry.notes && <div><dt className="text-neutral-500">Notizen</dt><dd className="mt-1 whitespace-pre-wrap text-white">{infoEntry.notes}</dd></div>}
               </dl>
               <div className="mt-6 flex justify-end gap-2">
-                <button type="button" onClick={() => { setInfoEntryId(null); editFromList(infoEntry); }} className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black hover:bg-neutral-200">Bearbeiten</button>
+                <button type="button" onClick={() => { setInfoEntryId(null); editFromList(infoEntry); }} className="min-h-11 rounded-lg border border-white/15 px-4 py-2 text-sm hover:bg-white/10">Bearbeiten</button>
               </div>
             </div>
           </div>
