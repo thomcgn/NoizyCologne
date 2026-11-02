@@ -23,7 +23,7 @@ export default function LogoutButton() {
 
   return (
     <button
-      className="rounded-lg border border-white/15 px-3 py-2 text-sm text-neutral-300 transition hover:border-white/40 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/30 disabled:opacity-60"
+      className="control-button control-button-secondary"
       disabled={isLoggingOut}
       onClick={logout}
       type="button"

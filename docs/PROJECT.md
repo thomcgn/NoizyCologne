@@ -3250,3 +3250,9 @@ Die Oberfläche zeigt genau einen sichtbaren YouTube-IFrame-Player. Es gibt kein
 Partys können optionale Standardgenres aus dem bestehenden aktiven Genre-Katalog erhalten. Sie werden in `party_series_genres` gespeichert und beim Anlegen eines neuen `EditorialPostDraft` mit den veranstaltungsbezogenen Genres dedupliziert vereinigt. Die resultierende Genre-Menge wird im Entwurf und damit in der Caption gespeichert.
 
 Event-spezifische Zusatzgenres verändern die Partyreihe nicht. Änderungen an Party-Standardgenres wirken nicht rückwirkend auf bereits gespeicherte Entwürfe. Die Musikvorschläge verwenden die Genres des konkreten Entwurfs; es gibt dafür keine zweite Genrequelle und keine zusätzliche Musik-API.
+
+## 23.15 Kompaktes Frontend-Redesign
+
+Das Dashboard verwendet eine gemeinsame, responsive Navigation mit zugänglichem Logo-Link, aktiver Routemarkierung und mobilem Menü. Dark- und Light-Mode schalten zwischen `noizy-logo-white.png` und `noizy-logo-black.png` um. Die gemeinsamen Fokus-, Touch- und Oberflächen-Tokens liegen in `frontend/src/app/globals.css`.
+
+Portfolio-, Akteur- und Genre-Editoren werden in einem gemeinsamen, fokussierbaren Modal geöffnet. Das Modal unterstützt Escape, Fokusfalle und eine klare Abbrechen-/Schließen-Aktion; die vorhandene API-, Validierungs- und State-Logik bleibt unverändert. Weitere fachliche Formulare werden schrittweise nach demselben Muster umgestellt. Die Redaktions- und Kalenderfunktionen bleiben eigenständige Arbeitsseiten.

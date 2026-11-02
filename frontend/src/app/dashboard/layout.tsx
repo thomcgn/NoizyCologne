@@ -14,12 +14,12 @@ export default async function DashboardLayout({
 
   return (
     <CatalogProvider>
-      <div className="dashboard-shell relative min-h-dvh bg-black text-white">
-        <div className="dashboard-controls flex justify-end gap-2 lg:fixed lg:right-8 lg:top-8 lg:z-20">
+      <div className="dashboard-shell min-h-dvh bg-black text-white">
+        <div className="dashboard-controls flex justify-end gap-2">
           <ThemeToggle />
           <LogoutButton />
         </div>
-        <div className="mx-auto min-h-dvh max-w-7xl lg:grid lg:grid-cols-[240px_1fr]">
+        <div className="dashboard-frame">
           <DashboardNavigation />
           <div className="min-w-0">{children}</div>
         </div>

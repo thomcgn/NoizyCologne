@@ -8,6 +8,7 @@ import {
   type ActorKind,
   type ActorRole,
 } from "../../CatalogProvider";
+import DashboardModal from "../../DashboardModal";
 
 const inputStyle =
   "w-full rounded-lg border border-white/15 bg-neutral-900 " +
@@ -280,15 +281,16 @@ export default function ActorsPage() {
         </section>
 
         {/* Akteur-Editor */}
-        {editorOpen && (
+        <DashboardModal
+          open={editorOpen}
+          onClose={() => setEditorOpen(false)}
+          title={editingId ? "Akteur bearbeiten" : "Neuer Akteur"}
+          description="Personen, Kollektive, Rollen und Instagram-Handles verwalten."
+        >
           <form
             onSubmit={saveActor}
-            className="mt-6 rounded-xl border border-white/20 bg-neutral-950 p-4 sm:p-6"
+            className="space-y-1"
           >
-            <h2 className="text-xl font-semibold">
-              {editingId ? "Akteur bearbeiten" : "Neuer Akteur"}
-            </h2>
-
             <label className="mt-5 block">
               <span className="mb-2 block text-sm text-neutral-300">
                 Name
@@ -409,7 +411,7 @@ export default function ActorsPage() {
               </button>
             </div>
           </form>
-        )}
+        </DashboardModal>
 
         <p className="mt-6 text-xs text-neutral-500">
           Akteure werden dauerhaft in PostgreSQL gespeichert.

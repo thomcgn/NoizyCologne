@@ -11,6 +11,7 @@ import {
   type DjMentionDefault,
   type RecurrenceRule,
 } from "../CatalogProvider";
+import DashboardModal from "../DashboardModal";
 
 export type Category = "parties" | "locations";
 type DjAssignment = "none" | "resident" | "other";
@@ -549,15 +550,19 @@ export default function PortfolioPage({
         </section>
 
         {/* Editor */}
-        {editorOpen && (
+        <DashboardModal
+          open={editorOpen}
+          onClose={() => {
+            setEditorOpen(false);
+            resetForm();
+          }}
+          title={editingId ? "Eintrag bearbeiten" : "Neuer Eintrag"}
+          description={category === "parties" ? "Partyreihe und optionale Standardwerte verwalten." : "Location-Stammdaten verwalten."}
+        >
           <form
             onSubmit={saveItem}
-            className="mt-6 rounded-xl border border-white/20 bg-neutral-950 p-4 sm:p-6"
+            className="space-y-1"
           >
-            <h2 className="text-xl font-semibold">
-              {editingId ? "Eintrag bearbeiten" : "Neuer Eintrag"}
-            </h2>
-
             {/* Basisdaten */}
             <label className="mt-5 block">
               <span className="mb-2 block text-sm text-neutral-300">
@@ -969,7 +974,7 @@ export default function PortfolioPage({
               </button>
             </div>
           </form>
-        )}
+        </DashboardModal>
 
       </div>
     </main>
