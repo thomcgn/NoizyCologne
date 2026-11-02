@@ -1072,7 +1072,7 @@ export default function RedaktionPage() {
                     <span className="block text-sm font-semibold">Musik / Songvorschläge</span>
                     <span className="mt-1 block text-xs text-neutral-500">Manuelle Bibliothek mit verifizierten YouTube-Originalquellen. Es wird nichts automatisch veröffentlicht.</span>
                   </span>
-                  <span className="text-xs text-neutral-500">{musicLibraryOpen ? "Einklappen" : "Einblenden"}</span>
+                  <span className="shrink-0 whitespace-nowrap text-xs text-neutral-500">{musicLibraryOpen ? "Einklappen" : "Einblenden"}</span>
                 </button>
                 {musicLibraryOpen && (
                   <div className="mt-4 space-y-4">
