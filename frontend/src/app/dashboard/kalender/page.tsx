@@ -286,21 +286,18 @@ export default function CalendarPage() {
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-semibold capitalize sm:text-2xl">
-                {month.toLocaleDateString("de-DE", {
-                  month: "long",
-                  year: "numeric",
-                })}
+                {selectedDate
+                  ? selectedDate.toLocaleDateString("de-DE", {
+                      weekday: "long",
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                    })
+                  : month.toLocaleDateString("de-DE", {
+                      month: "long",
+                      year: "numeric",
+                    })}
               </h2>
-              {selectedDate && (
-                <p className="mt-1 text-sm capitalize text-neutral-400">
-                  Ausgewählt: {selectedDate.toLocaleDateString("de-DE", {
-                    weekday: "long",
-                    day: "numeric",
-                    month: "long",
-                    year: "numeric",
-                  })}
-                </p>
-              )}
             </div>
             <div className="flex flex-wrap justify-end gap-1.5 sm:gap-2">
               {calendarOpen && (
