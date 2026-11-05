@@ -1,5 +1,6 @@
 "use client";
 
+import { discoveryStatusLabel } from "../discoveryLabels";
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 
@@ -79,6 +80,24 @@ export default function PortfolioPage({
 
   const [name, setName] = useState("");
   const [instagram, setInstagram] = useState("");
+  const [websiteUrl, setWebsiteUrl] = useState("");
+  const [eventsUrl, setEventsUrl] = useState("");
+  const [discoveryEnabled, setDiscoveryEnabled] = useState(false);
+  const [probeResult, setProbeResult] = useState("");
+  const [probing, setProbing] = useState(false);
+  async function probeSource() {
+    setProbing(true); setProbeResult("");
+    try {
+      const response = await fetch("/api/v1/discovery/probe", {method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({url: eventsUrl || websiteUrl})});
+      if (!response.ok) throw new Error(`Quellenprüfung: HTTP ${response.status}`);
+      const results: {url: string; extraction: {status: string; events: unknown[]}}[] = await response.json();
+      setProbeResult(results.map(r => `${discoveryStatusLabel(r.extraction.status)}: ${r.extraction.events.length} Events (${r.url})`).join("\n"));
+    } catch (e) { setProbeResult(e instanceof Error ? e.message : "Prüfung fehlgeschlagen"); }
+    finally { setProbing(false); }
+  }
+  const [discoveryAliases, setDiscoveryAliases] = useState("");
+  const [aliasesLoading, setAliasesLoading] = useState(false);
+  const [aliasesReady, setAliasesReady] = useState(true);
   const [color, setColor] = useState<string>(PARTY_COLORS[0]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -134,6 +153,17 @@ export default function PortfolioPage({
   }, []);
 
 
+  useEffect(() => {
+    if (category !== "parties" || !editingId) return;
+    let active = true;
+    fetch(`/api/v1/discovery/parties/${encodeURIComponent(editingId)}/aliases`).then(async response => {
+      if (!response.ok) throw new Error("Discovery-Aliase konnten nicht geladen werden.");
+      const aliases: string[] = await response.json();
+      if (active) { setDiscoveryAliases(aliases.join("\n")); setAliasesReady(true); }
+    }).catch(e => { if (active) setError(e.message); }).finally(() => { if (active) setAliasesLoading(false); });
+    return () => { active = false; };
+  }, [category, editingId]);
+
   const items: CatalogItem[] =
     category === "parties" ? parties : venues;
 
@@ -168,9 +198,12 @@ export default function PortfolioPage({
     setWeekday(5);
     setOccurrence(3);
     setRecurrenceNote("");
+    setAliasesReady(true); setAliasesLoading(false);
+    setDiscoveryAliases("");
     setEditingId(null);
     setName("");
     setInstagram("");
+    setWebsiteUrl(""); setEventsUrl(""); setDiscoveryEnabled(false); setProbeResult("");
     setResidentDjIds([]);
     setOtherDjIds([]);
     setOrganizerIds([]);
@@ -200,8 +233,10 @@ export default function PortfolioPage({
     setEditingId(item.id);
     setName(item.name);
     setInstagram(item.instagram);
+    setWebsiteUrl(item.websiteUrl ?? ""); setEventsUrl(item.eventsUrl ?? ""); setDiscoveryEnabled(item.discoveryEnabled ?? false);
 
     if (category === "parties") {
+      setAliasesLoading(true); setAliasesReady(false);
       const party = parties.find((p) => p.id === item.id);
 
       if (party) {
@@ -348,6 +383,10 @@ export default function PortfolioPage({
           // die gerade angelegte Partyreihe aktualisieren statt ein Duplikat anzulegen.
           setEditingId(savedParty.id);
         }
+        const aliasesResponse = await fetch(`/api/v1/discovery/parties/${encodeURIComponent(savedParty.id)}/aliases`, {
+          method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify({aliases: discoveryAliases.split("\n").map(a => a.trim()).filter(Boolean)})
+        });
+        if (!aliasesResponse.ok) throw new Error("Discovery-Aliase konnten nicht gespeichert werden.");
         if (flyerFile) {
           await uploadPartyFlyer(savedParty.id, flyerFile);
         } else if (removeFlyer && savedParty.defaultFlyer) {
@@ -368,6 +407,7 @@ export default function PortfolioPage({
         id: editingId ?? "",
         name: cleanName,
         instagram: cleanInstagram,
+        websiteUrl, eventsUrl, discoveryEnabled,
       };
 
       setSaving(true);
@@ -378,6 +418,7 @@ export default function PortfolioPage({
           await createVenue({
             name: updatedVenue.name,
             instagram: updatedVenue.instagram,
+            websiteUrl, eventsUrl, discoveryEnabled,
           });
         }
       } catch (cause) {
@@ -630,8 +671,21 @@ export default function PortfolioPage({
               />
             </label>
 
+            {category === "locations" && <details className="mt-5 rounded-xl border border-white/10 p-4">
+              <summary className="cursor-pointer font-semibold">Website &amp; Partysuche</summary>
+              <label className="mt-4 block">Offizielle Website<input type="url" maxLength={2048} className={inputStyle} value={websiteUrl} onChange={e => setWebsiteUrl(e.target.value)} placeholder="https://…" /></label>
+              <label className="mt-4 block">Eventübersicht (optional)<input type="url" maxLength={2048} className={inputStyle} value={eventsUrl} onChange={e => setEventsUrl(e.target.value)} placeholder="https://…/programm" /></label>
+              <button type="button" className="mt-4 rounded-lg border px-4 py-2" disabled={probing || !(websiteUrl || eventsUrl)} onClick={() => void probeSource()}>{probing ? "Quelle wird geprüft …" : "Quelle prüfen"}</button>
+              <p className="mt-2 whitespace-pre-wrap text-sm" role="status">{probeResult}</p>
+              <label className="mt-4 flex gap-2"><input type="checkbox" checked={discoveryEnabled} onChange={e => setDiscoveryEnabled(e.target.checked)} />Automatische Suche aktivieren</label>
+              <p className="mt-2 text-sm text-neutral-400">Offizielle Quellen dürfen eindeutige bekannte Partys in den Kalender übernehmen. Externe Quellen und unklare Termine werden geprüft.</p>
+            </details>}
+
             {category === "parties" && (
               <>
+                <details className="mt-5 rounded-xl border border-white/10 p-4"><summary>Alternative Namen für die Partysuche</summary>
+                  <label className="mt-3 block">Explizite Aliase (ein Name pro Zeile)<textarea className={inputStyle} value={discoveryAliases} disabled={aliasesLoading} onChange={e => setDiscoveryAliases(e.target.value)} rows={3} /></label>
+                </details>
                 <section className="mt-8 border-t border-white/10 pt-6">
                   <h3 className="text-lg font-semibold">Standardflyer</h3>
                   <p className="mt-1 text-sm text-neutral-400">
@@ -733,7 +787,7 @@ export default function PortfolioPage({
                   <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {availableGenres.map((genre) => (
                       <label key={genre.id} className="flex min-h-11 items-center gap-2 rounded-lg bg-neutral-900 px-3 py-2 text-sm">
-                        <input type="checkbox" className="size-4 accent-white" checked={standardGenres.includes(genre.displayName)} onChange={() => setStandardGenres((current) => current.includes(genre.displayName) ? current.filter((item) => item !== genre.displayName) : [...current, genre.displayName])} disabled={saving} />
+                        <input type="checkbox" className="size-4 accent-white" checked={standardGenres.includes(genre.displayName)} onChange={() => setStandardGenres((current) => current.includes(genre.displayName) ? current.filter((item) => item !== genre.displayName) : [...current, genre.displayName])} disabled={saving || aliasesLoading || (category === "parties" && !aliasesReady)} />
                         <span>{genre.displayName}</span>
                       </label>
                     ))}
@@ -995,7 +1049,7 @@ export default function PortfolioPage({
             <div className="mt-8 grid grid-cols-2 gap-3 sm:flex">
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || aliasesLoading || (category === "parties" && !aliasesReady)}
                 className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black"
               >
                 {saving ? "Speichern ..." : "Übernehmen"}

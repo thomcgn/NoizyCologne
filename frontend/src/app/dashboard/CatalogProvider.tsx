@@ -10,6 +10,11 @@ import {
 } from "react";
 
 export type CatalogItem = {
+  websiteUrl?: string;
+  eventsUrl?: string;
+  discoveryEnabled?: boolean;
+  lastDiscoveryAt?: string | null;
+  discoveryStatus?: string;
   id: string;
   name: string;
   instagram: string;
@@ -674,6 +679,11 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     }
 
     return {
+      websiteUrl: typeof venue.websiteUrl === "string" ? venue.websiteUrl : "",
+      eventsUrl: typeof venue.eventsUrl === "string" ? venue.eventsUrl : "",
+      discoveryEnabled: venue.discoveryEnabled === true,
+      lastDiscoveryAt: typeof venue.lastDiscoveryAt === "string" ? venue.lastDiscoveryAt : null,
+      discoveryStatus: typeof venue.discoveryStatus === "string" ? venue.discoveryStatus : "NOT_CHECKED",
       id: venue.id,
       name: venue.name,
       instagram: venue.instagram,
@@ -720,7 +730,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     const response = await fetch("/api/v1/venues", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: venue.name, instagram: venue.instagram }),
+      body: JSON.stringify(venue),
     });
 
     if (!response.ok) {
@@ -738,7 +748,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: venue.name, instagram: venue.instagram }),
+        body: JSON.stringify(venue),
       }
     );
 
