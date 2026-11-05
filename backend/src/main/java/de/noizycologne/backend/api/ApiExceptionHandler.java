@@ -57,6 +57,11 @@ public class ApiExceptionHandler {
                 "Die Datenbank ist momentan nicht erreichbar. Bitte später erneut versuchen.", true);
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    ResponseEntity<ApiErrorResponse> handleInvalidArgument(IllegalArgumentException exception) {
+        return error(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", exception.getMessage(), false);
+    }
+
     @ExceptionHandler(Exception.class)
     ResponseEntity<ApiErrorResponse> handleUnexpectedFailure() {
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR",

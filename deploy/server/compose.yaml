@@ -26,6 +26,9 @@ services:
       DB_USER: ${POSTGRES_USER}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       NOIZY_PUBLISH_ENABLED: "false"
+      DISCOVERY_ENABLED: ${DISCOVERY_ENABLED:-true}
+      DISCOVERY_CRON: ${DISCOVERY_CRON:-0 0 9 * * TUE}
+      DISCOVERY_ZONE: ${DISCOVERY_ZONE:-Europe/Berlin}
       NOIZY_MEDIA_ROOT: /app/uploads
     depends_on:
       db:
