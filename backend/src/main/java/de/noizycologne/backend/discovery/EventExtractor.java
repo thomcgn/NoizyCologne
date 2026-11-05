@@ -31,10 +31,11 @@ public class EventExtractor {
         }
         if (events.isEmpty()) {
             String selector = profile.itemSelector().isBlank()
-                    ? "[itemscope][itemtype*=Event], article:has(time), .event:has(time), .event-item:has(time), .event-list-item:has(time)"
+                    ? "[itemscope][itemtype*=Event], article:has(time), article:has(a[href]), .event:has(time), .event:has(a[href]), .event-item, .event-list-item"
                     : profile.itemSelector();
             for (Element item : doc.select(selector).stream().limit(200).toList()) {
                 var title = item.selectFirst(profile.titleSelector().isBlank() ? "[itemprop=name], h1, h2, h3, .title" : profile.titleSelector());
+                if (title == null) title = item.selectFirst("a[href]");
                 if (title == null || title.text().isBlank()) { malformed = true; continue; }
                 String dateSelector = profile.dateSelector().isBlank() ? "time:not([itemprop=endDate]), [itemprop=startDate]" : profile.dateSelector();
                 List<String> dates = item.select(dateSelector).stream().map(e -> e.hasAttr("datetime") ? e.attr("datetime")
@@ -70,7 +71,7 @@ public class EventExtractor {
                 var start = node.path("startDate");
                 if (start.isArray()) for (var value : start) starts.add(value.asText());
                 else if (start.isTextual()) starts.add(start.asText());
-                String url = node.path("url").asText(page);
+                String url = java.net.URI.create(page).resolve(node.path("url").asText(page)).toString();
                 String state = node.path("eventStatus").asText("") + " " + riskyState(node.path("description").asText(""));
                 if (node.has("previousStartDate")) state += " RESCHEDULED " + node.path("previousStartDate").asText();
                 events.add(new Event(node.path("@id").asText(url.equals(page) ? "" : url), clip(title, 500), url, starts,

@@ -10,17 +10,20 @@ import java.io.IOException;
 public class VenueSourceDiscoveryService {
     private final EventPageFetcher fetcher;
     private final EventExtractor extractor;
-    public VenueSourceDiscoveryService(EventPageFetcher fetcher, EventExtractor extractor) {
-        this.fetcher = fetcher; this.extractor = extractor;
+    private final DiscoveryGenreFilter genres;
+    public VenueSourceDiscoveryService(EventPageFetcher fetcher, EventExtractor extractor, DiscoveryGenreFilter genres) {
+        this.fetcher = fetcher; this.extractor = extractor; this.genres = genres;
     }
     public record Found(URI url, EventExtractor.Extraction extraction) { }
     /** Breadth first, one domain, depth <= 2, at most 8 pages and 40 inspected links/page. */
     public List<Found> discover(String input, EventExtractor.Profile profile) throws IOException {
         URI root = SafeUrls.parse(input);
-        record Step(URI url, int depth) { }
-        var queue = new ArrayDeque<Step>(); queue.add(new Step(root, 0));
+        record Step(URI url, int depth, boolean detail) { }
+        var queue = new ArrayDeque<Step>(); queue.add(new Step(root, 0, false));
         Set<URI> seen = new HashSet<>(); Map<String, String> robots = new HashMap<>();
         List<Found> found = new ArrayList<>();
+        Set<String> genreTerms = genres.terms();
+        Set<URI> eligibleDetails = new HashSet<>();
         while (!queue.isEmpty() && seen.size() < 8) {
             Step step = queue.remove(); if (!seen.add(step.url())) continue;
             try {
@@ -28,14 +31,32 @@ public class VenueSourceDiscoveryService {
                 var page = fetcher.fetch(step.url());
                 var extraction = extractor.extract(page, profile);
                 found.add(new Found(step.url(), extraction));
-                if (step.depth() >= 2 || page.body().contains("BEGIN:VCALENDAR")) continue;
+                if (step.depth() >= 2) continue;
+                if (step.detail()) continue;
+                Set<URI> eventLinks = new HashSet<>();
+                for (var event : extraction.events()) {
+                    try {
+                        URI detail = SafeUrls.parse(step.url().resolve(event.url()).toString().split("#", 2)[0]);
+                        eventLinks.add(detail);
+                        if (!DiscoveryGenreFilter.matches(event, genreTerms) || detail.equals(step.url())
+                                || !detail.getHost().equalsIgnoreCase(root.getHost())) continue;
+                        eligibleDetails.add(detail);
+                        if (!seen.contains(detail) && queue.size() < 16)
+                            queue.addFirst(new Step(detail, step.depth() + 1, true));
+                    } catch (IllegalArgumentException ignored) { }
+                }
+                if (page.body().contains("BEGIN:VCALENDAR")) continue;
                 for (var link : Jsoup.parse(page.body(), step.url().toString()).select("a[href], link[href]").stream().limit(40).toList()) {
-                    String hint = (link.text() + " " + link.attr("href") + " " + link.attr("type")).toLowerCase(Locale.ROOT);
-                    if (!hint.matches(".*(event|part(y|ies)|programm|kalender|veranstaltung|\\.ics|calendar).*") ) continue;
                     try {
                         String href = link.absUrl("href").split("#", 2)[0];
                         URI next = SafeUrls.parse(href);
-                        if (next.getHost().equalsIgnoreCase(root.getHost()) && queue.size() < 16 && !seen.contains(next)) queue.add(new Step(next, step.depth() + 1));
+                        String label = EventNormalizer.text(link.text());
+                        boolean overview = label.matches("events|partys|parties|programm|kalender|veranstaltungen|calendar|veranstaltungskalender|alle events|zum programm|mehr events")
+                                || next.getPath().matches("(?i).*/(events|partys|parties|programm|kalender|veranstaltungen|calendar)/?")
+                                || next.getPath().toLowerCase(Locale.ROOT).endsWith(".ics")
+                                || link.attr("type").equalsIgnoreCase("text/calendar");
+                        if (!overview) continue;
+                        if (!eventLinks.contains(next) && next.getHost().equalsIgnoreCase(root.getHost()) && queue.size() < 16 && !seen.contains(next)) queue.add(new Step(next, step.depth() + 1, false));
                     } catch (IllegalArgumentException ignored) { }
                 }
             } catch (IOException e) {
@@ -43,6 +64,52 @@ public class VenueSourceDiscoveryService {
                 found.add(new Found(step.url(), new EventExtractor.Extraction(List.of(), e instanceof EventPageFetcher.FetchFailure f ? f.status : "SCAN_FAILED")));
             }
         }
-        return found;
+        return enrich(found, eligibleDetails);
+    }
+    /** Preserve overview evidence, including date conflicts and cancellation, when adding detail data. */
+    private List<Found> enrich(List<Found> found, Set<URI> eligible) {
+        Map<URI, Found> pages = new HashMap<>();
+        found.forEach(f -> pages.put(f.url(), f));
+        Map<URI, EventExtractor.Event> mergedDetails = new HashMap<>();
+        List<Found> result = new ArrayList<>();
+        for (Found page : found) {
+            List<EventExtractor.Event> events = new ArrayList<>();
+            for (var event : page.extraction().events()) {
+                URI url;
+                try { url = SafeUrls.parse(page.url().resolve(event.url()).toString().split("#", 2)[0]); }
+                catch (IllegalArgumentException e) { events.add(event); continue; }
+                if (!eligible.contains(url) || url.equals(page.url())) { events.add(event); continue; }
+                Found detail = pages.get(url);
+                var matching = detail == null ? List.<EventExtractor.Event>of() : detail.extraction().events().stream()
+                        .filter(e -> EventNormalizer.text(e.title()).equals(EventNormalizer.text(event.title()))).toList();
+                if (matching.size() != 1) {
+                    events.add(new EventExtractor.Event(event.identity(), event.title(), event.url(), event.starts(),
+                            event.evidence(), event.state() + " UNCONFIRMED Detailseite nicht eindeutig auswertbar", event.location()));
+                    continue;
+                }
+                var d = matching.get(0);
+                List<String> starts = new ArrayList<>(event.starts()); starts.addAll(d.starts());
+                String evidence = "Übersicht: " + event.evidence() + "\nDetailseite " + url + ": " + d.evidence();
+                String state = event.state() + " " + d.state();
+                if (!event.location().isBlank() && !d.location().isBlank()
+                        && !EventNormalizer.text(event.location()).equals(EventNormalizer.text(d.location()))) state += " UNCONFIRMED Location-Widerspruch";
+                var merged = new EventExtractor.Event(event.identity().isBlank() ? url.toString() : event.identity(),
+                        event.title(), url.toString(), starts.stream().distinct().toList(),
+                        evidence.substring(0, Math.min(evidence.length(), 8000)), state,
+                        d.location().isBlank() ? event.location() : d.location());
+                events.add(merged); mergedDetails.put(url, merged);
+            }
+            result.add(new Found(page.url(), new EventExtractor.Extraction(events, page.extraction().status())));
+        }
+        // Both source records use the same merged identity/evidence, preventing duplicate proposals.
+        return result.stream().map(f -> {
+            if (mergedDetails.containsKey(f.url()))
+                return new Found(f.url(), new EventExtractor.Extraction(List.of(mergedDetails.get(f.url())), "EVENTS_FOUND"));
+            if (eligible.contains(f.url()))
+                return new Found(f.url(), new EventExtractor.Extraction(f.extraction().events().stream().map(e ->
+                        new EventExtractor.Event(e.identity(), e.title(), e.url(), e.starts(), e.evidence(),
+                                e.state() + " UNCONFIRMED Detailzuordnung unklar", e.location())).toList(), f.extraction().status()));
+            return f;
+        }).toList();
     }
 }

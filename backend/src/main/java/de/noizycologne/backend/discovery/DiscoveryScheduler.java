@@ -2,7 +2,7 @@ package de.noizycologne.backend.discovery;
 
 import de.noizycologne.backend.venue.*;
 import de.noizycologne.backend.party.*;
-import de.noizycologne.backend.genre.GenreRepository;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.*;
@@ -21,14 +21,14 @@ public class DiscoveryScheduler {
     private final DiscoveryStore store;
     private final VenueRepository venues;
     private final PartySeriesRepository parties;
-    private final GenreRepository genres;
+    private final DiscoveryGenreFilter genres;
     private final VenueSourceDiscoveryService discovery;
     private final EventCandidateProcessor processor;
     private final AtomicBoolean busy = new AtomicBoolean();
     private final ExecutorService worker = Executors.newSingleThreadExecutor(r -> { var t = new Thread(r,"venue-discovery"); t.setDaemon(true); return t; });
     @Value("${noizy.discovery.enabled:true}") private boolean enabled;
     public DiscoveryScheduler(DiscoveryStore store, VenueRepository venues, PartySeriesRepository parties,
-            GenreRepository genres, VenueSourceDiscoveryService discovery, EventCandidateProcessor processor) {
+            DiscoveryGenreFilter genres, VenueSourceDiscoveryService discovery, EventCandidateProcessor processor) {
         this.store=store; this.venues=venues; this.parties=parties; this.genres=genres;
         this.discovery=discovery; this.processor=processor;
     }
@@ -76,7 +76,7 @@ public class DiscoveryScheduler {
         for (var s : store.jdbc().queryForList("SELECT * FROM discovery_sources WHERE venue_id=? AND is_seed=true ORDER BY url LIMIT 3",venue.getId()))
             roots.put((String)s.get("url"),new EventExtractor.Profile((String)s.get("item_selector"),(String)s.get("title_selector"),(String)s.get("date_selector")));
         var knownParties=parties.findAll(); var aliases=store.aliases();
-        var knownGenres=genres.findAll().stream().filter(g -> g.isActive()).map(g -> g.getDisplayName()).toList();
+        var knownGenres=List.copyOf(genres.terms());
         record Pending(String sourceId, EventExtractor.Event event, boolean approved) { }
         List<Pending> pending=new ArrayList<>();
         List<String> statuses=new ArrayList<>(); int count=0;

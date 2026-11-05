@@ -2115,6 +2115,7 @@ Bei jeder Ergänzung gleichzeitig **Kapitel 3 (Lastenheft), 4 (Pflichtenheft), 5
 
 | Version | Datum | Änderungen |
 |---|---|---|
+| v1.8 Detailabruf | 05.11.2026 | Veranstaltungslinks erst nach positivem Abgleich mit aktiven Genres/Aliasen abrufen; Übersicht und Detaildaten mit Konflikterhalt zusammenführen. |
 | v1.8 Korrektur | 05.11.2026 | robots.txt: führende Wildcards korrekt auswerten, Allow-Priorität und Bot-Gruppen beachten; Blue-Shell-Regressionsfixture ergänzt. |
 | v1.8 | 05.11.2026 | Location Discovery mit additiver Migration V12, abgesichertem HTTPS-Crawler, persistenten Vorschlägen und Scanberichten, dienstäglicher Suche, Kalender-Matching und manuellem Instagram-Rückfrageworkflow; siehe Kapitel 24. |
 | 0.1 | 29.10.2026 | Grundkonzept Flyer → normaler Instagram-Foto-Post → iOS/Android-Musik-Handoff |
@@ -3381,3 +3382,15 @@ Technische Referenzen: [jsoup-Selektoren](https://jsoup.org/cookbook/extracting-
 Die am 05.11.2026 öffentlich abgerufene [Blue-Shell-robots.txt](https://www.blue-shell.de/robots.txt) erlaubt `/` und sperrt für allgemeine Bots `*?lightbox=`. Der erste Parser hatte den Teil vor `*` als Präfix verwendet. Bei einer führenden Wildcard war dieses Präfix leer und sperrte dadurch irrtümlich sämtliche Seiten. Die Korrektur prüft das gesamte Muster und berücksichtigt Allow-Regeln sowie passende Bot-Gruppen; die Website-Regeln werden weiterhin eingehalten.
 
 Die robots.txt liegt als lokale Regression unter `blue-shell-robots.txt`. Die gezielten `RobotsRulesTests` und bestehenden `DiscoveryTests` laufen ohne Datenbank oder Live-Website. Diese Korrektur beseitigt die falsche robots-Sperre; sie ist kein Nachweis einer vollständigen Wix-Eventextraktion.
+
+## 24.11 Genreprüfung vor Event-Detailabrufen
+
+Die Quellensuche prüft jede erkannte Veranstaltung anhand ihres Titels und ihrer eigenen Übersichtsangaben gegen aktive Datenbank-Genres einschließlich Anzeigenamen und expliziter Aliase. Der Abgleich verwendet vollständige normalisierte Wörter, keine unscharfen Teilworttreffer. Ein positiver Genrebeleg erlaubt den Abruf des zugehörigen Detail-Links, auch bei URLs ohne `event`/`party` im Pfad. Dies gilt für „Quelle prüfen“ und die geplanten/manuellen Suchläufe gleichermaßen. Ohne Genrebeleg wird dieser zusätzliche Detailabruf ausgelassen; das Genre muss daher bereits in der Übersicht erkennbar sein. Ein positiver Genrebeleg allein berechtigt weiterhin nicht zum Kalenderimport.
+
+HTML-Eventkarten mit Titel und Link werden auch ohne Startdatum erkannt. JSON-LD-Links dürfen relativ sein. Für Detailabrufe bleiben HTTPS-/DNS-/SSRF-Schutz, exakter Host, robots.txt, acht Seiten pro Startquelle, Tiefe zwei und Queue-Limit 16 verbindlich. Erkannte Event-URLs werden aus der allgemeinen Navigationssuche ausgeschlossen, damit ein negatives Genreergebnis nicht durch ein `/events/...` im Link umgangen wird. Allgemeine Kalender-/Programmseiten dürfen weiterhin zum Finden von Veranstaltungen aufgerufen werden.
+
+Die Detailseite ergänzt Startangaben, Location, Status und Quellenbelege der Übersicht. Titel müssen nach Normalisierung eindeutig übereinstimmen; unterschiedliche Starttage, Absagen, Verschiebungen und Location-Widersprüche bleiben zur Prüfung erhalten. Fehlgeschlagene, blockierte, nicht erreichte oder nicht eindeutig zuordenbare Detailseiten markieren den Fund als unbestätigt. Zusammengeführte Übersicht und Detailquelle verwenden dieselbe Kandidatenidentität, sodass keine zweite Übernahme allein durch den zusätzlichen Abruf entsteht.
+
+Lokale Tests prüfen Genre-/Aliasfreigabe, Ablehnung eines unpassenden Konzertlinks trotz Event-Pfad, Wortgrenzen, fehlendes Startdatum, relative JSON-LD-Links, Datumskonflikte und Absagen, abweichende Detailtitel sowie robots-/Domain-Schutz. Die Erweiterung setzt voraus, dass die Übersicht selbst als Eventliste oder über ein konfiguriertes Extraktionsprofil lesbar ist; sie führt kein fremdes JavaScript aus.
+
+Validierung dieser Erweiterung: alle 59 Backend-Tests erfolgreich, Maven-Paket erfolgreich; PostgreSQL ausschließlich im separaten kurzlebigen Testcontainer auf Port 55434. Kein Push, Deployment oder produktiver Datenzugriff.

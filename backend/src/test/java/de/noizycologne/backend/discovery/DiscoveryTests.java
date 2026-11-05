@@ -9,6 +9,9 @@ import static org.mockito.Mockito.*;
 
 class DiscoveryTests {
     private final EventExtractor extractor=new EventExtractor();
+    private DiscoveryGenreFilter genres() {
+        var genres=mock(DiscoveryGenreFilter.class); when(genres.terms()).thenReturn(Set.of("Indie")); return genres;
+    }
     private EventPageFetcher.Page page(String body) { return new EventPageFetcher.Page(URI.create("https://unknown.example/programm"),body,"text/html"); }
     private String fixture(String name) throws Exception { try(var in=getClass().getResourceAsStream("/discovery/"+name)) { return new String(Objects.requireNonNull(in).readAllBytes(),java.nio.charset.StandardCharsets.UTF_8); } }
     @Test void fiveRepresentativeStructuresAndUnknownVenue() throws Exception {
@@ -39,16 +42,16 @@ class DiscoveryTests {
         when(fetcher.fetch(calendar)).thenReturn(new EventPageFetcher.Page(calendar,fixture("unknown.html"),"text/html"));
         URI detail=URI.create("https://new.example/events/first");
         when(fetcher.fetch(detail)).thenReturn(new EventPageFetcher.Page(detail,fixture("live-music-hall.html"),"text/html"));
-        var found=new VenueSourceDiscoveryService(fetcher,extractor).discover(root.toString(),EventExtractor.Profile.defaults());
+        var found=new VenueSourceDiscoveryService(fetcher,extractor,genres()).discover(root.toString(),EventExtractor.Profile.defaults());
         assertThat(found).hasSize(3); verify(fetcher,never()).fetch(URI.create("https://evil.example/events"));
     }
     @Test void directEventUrlAndFailingChild() throws Exception {
         var fetcher=mock(EventPageFetcher.class); when(fetcher.robotsAllowed(any(),any())).thenReturn(true);
         URI root=URI.create("https://new.example/events/one");
         when(fetcher.fetch(root)).thenReturn(new EventPageFetcher.Page(root,fixture("live-music-hall.html"),"text/html"));
-        assertThat(new VenueSourceDiscoveryService(fetcher,extractor).discover(root.toString(),EventExtractor.Profile.defaults())).hasSize(1);
+        assertThat(new VenueSourceDiscoveryService(fetcher,extractor,genres()).discover(root.toString(),EventExtractor.Profile.defaults())).hasSize(1);
         when(fetcher.fetch(root)).thenThrow(new EventPageFetcher.FetchFailure("BLOCKED"));
-        assertThatThrownBy(() -> new VenueSourceDiscoveryService(fetcher,extractor).discover(root.toString(),EventExtractor.Profile.defaults())).isInstanceOf(EventPageFetcher.FetchFailure.class);
+        assertThatThrownBy(() -> new VenueSourceDiscoveryService(fetcher,extractor,genres()).discover(root.toString(),EventExtractor.Profile.defaults())).isInstanceOf(EventPageFetcher.FetchFailure.class);
     }
     private PartySeries party() { var p=mock(PartySeries.class); when(p.getId()).thenReturn("party"); when(p.getName()).thenReturn("Indie Party"); return p; }
     private EventExtractor.Event event(String title,List<String> dates,String state) { return new EventExtractor.Event("id",title,"https://new.example/event",dates,title,state,""); }
@@ -88,7 +91,7 @@ class DiscoveryTests {
             for(int n=0;n<100;n++) html.append("<a href='/events/").append(n).append("'>Events</a>");
             return new EventPageFetcher.Page(url,html.toString(),"text/html");
         });
-        var service=new VenueSourceDiscoveryService(fetcher,extractor);
+        var service=new VenueSourceDiscoveryService(fetcher,extractor,genres());
         assertThat(service.discover("https://new.example/",EventExtractor.Profile.defaults())).hasSize(8);
         verify(fetcher,times(8)).fetch(any());
         reset(fetcher); when(fetcher.robotsAllowed(any(),any())).thenReturn(false);

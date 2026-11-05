@@ -1,0 +1,87 @@
+package de.noizycologne.backend.discovery;
+
+import de.noizycologne.backend.genre.*;
+import org.junit.jupiter.api.Test;
+import java.net.URI;
+import java.util.*;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+class EventDetailDiscoveryTests {
+    private final EventPageFetcher fetcher = mock(EventPageFetcher.class);
+    private final DiscoveryGenreFilter genres = mock(DiscoveryGenreFilter.class);
+    private final URI root = URI.create("https://club.example/programm");
+    private final URI detail = URI.create("https://club.example/nacht/123");
+    private VenueSourceDiscoveryService service() throws Exception {
+        when(genres.terms()).thenReturn(Set.of("Indie", "Alternative Rock"));
+        when(fetcher.robotsAllowed(any(), any())).thenReturn(true);
+        return new VenueSourceDiscoveryService(fetcher, new EventExtractor(), genres);
+    }
+    private void page(URI url, String body) throws Exception {
+        when(fetcher.fetch(url)).thenReturn(new EventPageFetcher.Page(url, body, "text/html"));
+    }
+    private String overview(String description, String href) {
+        return "<article><h2>Neue Party</h2><p>" + description + "</p><a href='" + href + "'>Details</a></article>";
+    }
+    @Test void filtersBeforeFetchingArbitraryDetailLinkAndEnrichesIncompleteListing() throws Exception {
+        var service = service();
+        page(root, overview("Indie und DJs", "/nacht/123"));
+        page(detail, "<h1>Neue Party</h1><time datetime='2027-01-09T23:00'>Samstag</time><p>Party im Club</p>");
+        var result = service.discover(root.toString(), EventExtractor.Profile.defaults());
+        verify(genres).terms(); verify(fetcher).fetch(detail);
+        var event = result.get(0).extraction().events().get(0);
+        assertThat(event.starts()).containsExactly("2027-01-09T23:00");
+        assertThat(event.evidence()).contains("Indie und DJs", "Detailseite", "Party im Club");
+        assertThat(event.url()).isEqualTo(detail.toString());
+        assertThat(result.get(1).extraction().events()).containsExactly(event);
+    }
+    @Test void negativeGenreCheckCannotBeBypassedByEventPath() throws Exception {
+        var service = service();
+        URI unrelated = URI.create("https://club.example/events/klassik");
+        page(root, overview("Klassisches Konzert", unrelated.toString()));
+        var result = service.discover(root.toString(), EventExtractor.Profile.defaults());
+        verify(fetcher, never()).fetch(unrelated);
+        assertThat(result).hasSize(1);
+    }
+    @Test void wordBoundariesPreventGenreSubstringMatches() throws Exception {
+        var service = service();
+        page(root, overview("Indien Reisevortrag", "/nacht/123"));
+        service.discover(root.toString(), EventExtractor.Profile.defaults());
+        verify(fetcher, never()).fetch(detail);
+    }
+    @Test void structuredEventWithRelativeUrlIsFollowedAndCancellationPreserved() throws Exception {
+        var service = service();
+        page(root, "<script type='application/ld+json'>{\"@type\":\"Event\",\"name\":\"Neue Party\",\"description\":\"Alternative Rock Party\",\"url\":\"/nacht/123\",\"startDate\":\"2027-01-09\"}</script>");
+        page(detail, "<h1>Neue Party</h1><time datetime='2027-01-10'>Sonntag</time><p>Abgesagt</p>");
+        var event = service.discover(root.toString(), EventExtractor.Profile.defaults()).get(0).extraction().events().get(0);
+        assertThat(event.starts()).containsExactly("2027-01-09", "2027-01-10");
+        assertThat(event.state()).contains("UNCONFIRMED");
+    }
+    @Test void blockedDetailRemainsUnconfirmedAndNoOtherDomainIsFetched() throws Exception {
+        var service = service();
+        page(root, overview("Indie Party", "/nacht/123") + overview("Indie Party", "https://other.example/event"));
+        when(fetcher.robotsAllowed(eq(detail), any())).thenReturn(false);
+        var result = service.discover(root.toString(), EventExtractor.Profile.defaults());
+        verify(fetcher, never()).fetch(detail);
+        verify(fetcher, never()).fetch(URI.create("https://other.example/event"));
+        assertThat(result.get(0).extraction().events().get(0).state()).contains("UNCONFIRMED");
+        assertThat(result.get(1).extraction().status()).isEqualTo("ROBOTS_BLOCKED");
+    }
+    @Test void unrelatedDetailTitleDoesNotReplaceOriginalEvent() throws Exception {
+        var service = service(); page(root, overview("Indie Party", "/nacht/123"));
+        page(detail, "<h1>Andere Party</h1><time datetime='2027-01-09'>Samstag</time>");
+        var event = service.discover(root.toString(), EventExtractor.Profile.defaults()).get(0).extraction().events().get(0);
+        assertThat(event.title()).isEqualTo("Neue Party");
+        assertThat(event.starts()).isEmpty(); assertThat(event.state()).contains("UNCONFIRMED");
+    }
+    @Test void activeDatabaseGenresIncludeExplicitAliases() {
+        var genreRepo = mock(GenreRepository.class); var aliases = mock(GenreAliasRepository.class);
+        var genre = mock(Genre.class); when(genre.getId()).thenReturn("active");
+        when(genre.getCanonicalName()).thenReturn("Alternative Rock"); when(genre.getDisplayName()).thenReturn("Alternative");
+        when(genreRepo.findAllByActiveTrueOrderByCanonicalNameAsc()).thenReturn(List.of(genre));
+        when(aliases.findAllByGenreIdIn(List.of("active"))).thenReturn(List.of(new GenreAlias("active", "Alt Rock")));
+        assertThat(new DiscoveryGenreFilter(genreRepo, aliases).terms()).containsExactlyInAnyOrder("Alternative Rock", "Alternative", "Alt Rock");
+        var event = new EventExtractor.Event("", "Party", "", List.of(), "Alt Rock mit DJs", "", "");
+        assertThat(DiscoveryGenreFilter.matches(event, new DiscoveryGenreFilter(genreRepo, aliases).terms())).isTrue();
+    }
+}
