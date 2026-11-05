@@ -25,6 +25,7 @@ public class DiscoveryGenreFilter {
     static boolean matches(EventExtractor.Event event, Collection<String> terms) {
         String text = " " + EventNormalizer.text(event.title() + " " + event.evidence()) + " ";
         return terms.stream().map(EventNormalizer::text).filter(t -> !t.isBlank())
-                .anyMatch(t -> text.contains(" " + t + " "));
+                .anyMatch(t -> text.contains(" " + t + " ") || text.contains(" " + t + "party ")
+                        || text.contains(" " + t + "partys ") || text.contains(" " + t + "parties "));
     }
 }

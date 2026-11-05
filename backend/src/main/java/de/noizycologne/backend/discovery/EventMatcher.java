@@ -16,8 +16,8 @@ public class EventMatcher {
         }).toList();
         String body = EventNormalizer.text(event.title() + " " + event.evidence());
         boolean partyCharacter = body.matches(".*\\b(party|partys|parties|clubnacht|dancefloor|disco|dj|djs)\\b.*");
-        boolean relevantGenre = genres.stream().map(EventNormalizer::text).filter(g -> !g.isBlank())
-                .anyMatch(g -> (" " + body + " ").contains(" " + g + " "));
+        boolean relevantGenre = DiscoveryGenreFilter.matches(event, genres);
+        partyCharacter |= body.matches(".*\\b[\\p{L}]+part(y|ys|ies)\\b.*");
         if (matched.isEmpty() && (!partyCharacter || !relevantGenre)) return new Match("IGNORED", null, "Kein Partyreihen-Treffer; Partycharakter und passendes Kataloggenre nicht gemeinsam belegt");
         String party = matched.size() == 1 ? matched.get(0).getId() : null;
         if (matched.size() > 1) return new Match("NEEDS_REVIEW", null, "Mehrere Partyreihen passen");

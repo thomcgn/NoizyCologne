@@ -31,16 +31,20 @@ public class EventExtractor {
         }
         if (events.isEmpty()) {
             String selector = profile.itemSelector().isBlank()
-                    ? "[itemscope][itemtype*=Event], article:has(time), article:has(a[href]), .event:has(time), .event:has(a[href]), .event-item, .event-list-item"
+                    ? "[data-hook=event-list-item], [itemscope][itemtype*=Event], article:has(time), article:has(a[href]), .event:has(time), .event:has(a[href]), .event-item, .event-list-item"
                     : profile.itemSelector();
             for (Element item : doc.select(selector).stream().limit(200).toList()) {
-                var title = item.selectFirst(profile.titleSelector().isBlank() ? "[itemprop=name], h1, h2, h3, .title" : profile.titleSelector());
+                var title = item.selectFirst(profile.titleSelector().isBlank() ? "[data-hook=ev-list-item-title], [itemprop=name], h1, h2, h3, .title" : profile.titleSelector());
                 if (title == null) title = item.selectFirst("a[href]");
                 if (title == null || title.text().isBlank()) { malformed = true; continue; }
-                String dateSelector = profile.dateSelector().isBlank() ? "time:not([itemprop=endDate]), [itemprop=startDate]" : profile.dateSelector();
-                List<String> dates = item.select(dateSelector).stream().map(e -> e.hasAttr("datetime") ? e.attr("datetime")
-                        : e.hasAttr("content") ? e.attr("content") : e.text()).distinct().toList();
-                var anchor = item.selectFirst("a[href]");
+                String dateSelector = profile.dateSelector().isBlank() ? "time:not([itemprop=endDate]), [itemprop=startDate], [data-hook=ev-full-date-location] [data-hook=date]" : profile.dateSelector();
+                List<String> dates = item.select(dateSelector).stream().flatMap(e -> {
+                    if (e.hasAttr("datetime")) return java.util.stream.Stream.of(e.attr("datetime"));
+                    if (e.hasAttr("content")) return java.util.stream.Stream.of(e.attr("content"));
+                    return GermanProgramText.starts(e.text()).stream();
+                }).distinct().toList();
+                var anchor = item.selectFirst("a[data-anchor=event-details][href], a[data-hook=ev-rsvp-button][href]");
+                if (anchor == null) anchor = item.selectFirst("a[href]");
                 String url = anchor == null ? page.url().toString() : anchor.absUrl("href");
                 String state = riskyState(item.text());
                 events.add(new Event(url.equals(page.url().toString()) ? "" : url, clip(title.text(), 500), url,
@@ -52,6 +56,12 @@ public class EventExtractor {
                 events.add(new Event(page.url().toString(), clip(doc.selectFirst("h1").text(), 500), page.url().toString(),
                         List.of(date.hasAttr("datetime") ? date.attr("datetime") : date.attr("content")),
                         clip(doc.body().text(), 8000), riskyState(doc.body().text()), ""));
+            }
+        }
+        if (profile.itemSelector().isBlank()) {
+            for (var event : GermanProgramText.events(doc, page.url().toString())) {
+                if (events.size() >= 200) break;
+                events.add(event);
             }
         }
         String status = !events.isEmpty() ? "EVENTS_FOUND" : malformed ? "UNINTERPRETABLE"
@@ -116,7 +126,7 @@ public class EventExtractor {
     }
     private static String first(Map<String, List<String>> map, String key) { return map.getOrDefault(key, List.of("")).get(0); }
     private static String riskyState(String text) {
-        return java.util.regex.Pattern.compile("(?i)abgesagt|cancelled|canceled|verschoben|rescheduled|unbestätigt|tba|freitag\\s*(oder|/|und)\\s*samstag").matcher(text).find() ? "UNCONFIRMED" : "";
+        return java.util.regex.Pattern.compile("(?i)abgesagt|fällt aus|faellt aus|cancelled|canceled|verschoben|rescheduled|unbestätigt|tba|freitag\\s*(oder|/|und)\\s*samstag").matcher(text).find() ? "UNCONFIRMED" : "";
     }
     private static String clip(String value, int size) { return value.length() <= size ? value : value.substring(0, size); }
 }

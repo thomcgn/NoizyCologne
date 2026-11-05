@@ -2115,6 +2115,7 @@ Bei jeder Ergänzung gleichzeitig **Kapitel 3 (Lastenheft), 4 (Pflichtenheft), 5
 
 | Version | Datum | Änderungen |
 |---|---|---|
+| v1.8 Wix-Programm | 05.11.2026 | Wix-Eventkarten, deutsche Datumsbereiche und textbasierte Jahresvorschauen ergänzt; aktuelles Blue-Shell-Programm mit 55 Einträgen geprüft. |
 | v1.8 Detailabruf | 05.11.2026 | Veranstaltungslinks erst nach positivem Abgleich mit aktiven Genres/Aliasen abrufen; Übersicht und Detaildaten mit Konflikterhalt zusammenführen. |
 | v1.8 Korrektur | 05.11.2026 | robots.txt: führende Wildcards korrekt auswerten, Allow-Priorität und Bot-Gruppen beachten; Blue-Shell-Regressionsfixture ergänzt. |
 | v1.8 | 05.11.2026 | Location Discovery mit additiver Migration V12, abgesichertem HTTPS-Crawler, persistenten Vorschlägen und Scanberichten, dienstäglicher Suche, Kalender-Matching und manuellem Instagram-Rückfrageworkflow; siehe Kapitel 24. |
@@ -3281,7 +3282,7 @@ Die APIs sind wie die bestehenden Stammdaten auf `local` und `staging` beschrän
 4. Automatische Suche aktivieren und die Location speichern. Der nächste manuelle oder dienstägliche Scan berücksichtigt sie.
 5. Quellen und eventuelle Fehler anschließend unter „Vorgeschlagene → Location-Quellen“ prüfen.
 
-Es gibt keine Clubnamen-Whitelist und keine Location-spezifischen Java-Verzweigungen. Eine unbekannte Website kann allein durch ihre URL eingebunden werden, sofern Homepage/Links und Eventdaten den unterstützten öffentlich auslesbaren Strukturen entsprechen. Bei abweichendem HTML lässt sich unter „Quelle / Profil bearbeiten“ ohne Java-Änderung eine direkte URL oder ein CSS-Profil für Event-Container, Titel und Startdatum hinterlegen. Das Startdatum muss als vollständiger ISO-Wert, `datetime` oder `content` vorliegen. Freie Texte ohne vollständiges Jahr werden nicht geraten.
+Es gibt keine Clubnamen-Whitelist und keine Location-spezifischen Java-Verzweigungen. Eine unbekannte Website kann allein durch ihre URL eingebunden werden, sofern Homepage/Links und Eventdaten den unterstützten öffentlich auslesbaren Strukturen entsprechen. Bei abweichendem HTML lässt sich unter „Quelle / Profil bearbeiten“ ohne Java-Änderung eine direkte URL oder ein CSS-Profil für Event-Container, Titel und Startdatum hinterlegen. Das Startdatum kann als ISO-Wert in `datetime`/`content` oder als unterstützter vollständiger deutscher Datumswert vorliegen. Textlisten können einen expliziten Jahreskontext verwenden; fehlende oder mehrdeutige Jahre werden nicht geraten.
 
 Offizielle Quellen werden über den Host der explizit hinterlegten `websiteUrl` zugeordnet. Die aktivierte Location erlaubt für diese Quellen die konservative Kalenderautomatik. Eine abweichende `eventsUrl`, eine allein ohne offizielle Website hinterlegte Eventquelle oder eine zusätzlich angelegte Portalquelle ist **EXTERNAL** und zunächst nicht freigegeben. Eine redaktionelle Quellenfreigabe kann ausdrücklich gesetzt oder entzogen werden; die Quelle bleibt dabei als extern gekennzeichnet. Ein verlinktes fremdes Portal wird nicht automatisch gecrawlt. Die Redaktion muss externe Bestätigungsqualität und anwendbare Nutzungsregeln vor einer Freigabe selbst prüfen.
 
@@ -3394,3 +3395,18 @@ Die Detailseite ergänzt Startangaben, Location, Status und Quellenbelege der Ü
 Lokale Tests prüfen Genre-/Aliasfreigabe, Ablehnung eines unpassenden Konzertlinks trotz Event-Pfad, Wortgrenzen, fehlendes Startdatum, relative JSON-LD-Links, Datumskonflikte und Absagen, abweichende Detailtitel sowie robots-/Domain-Schutz. Die Erweiterung setzt voraus, dass die Übersicht selbst als Eventliste oder über ein konfiguriertes Extraktionsprofil lesbar ist; sie führt kein fremdes JavaScript aus.
 
 Validierung dieser Erweiterung: alle 59 Backend-Tests erfolgreich, Maven-Paket erfolgreich; PostgreSQL ausschließlich im separaten kurzlebigen Testcontainer auf Port 55434. Kein Push, Deployment oder produktiver Datenzugriff.
+
+## 24.12 Wix-Programmseiten und deutsche Textvorschauen
+
+Das am 05.11.2026 öffentlich abgerufene HTML von `https://www.blue-shell.de/programm` enthält seine Veranstaltungen bereits serverseitig. Die zuvor fehlende Erkennung war eine Lücke im HTML-Parser, keine notwendige JavaScript-Ausführung. Die erweiterten Regeln sind plattformbezogen, ohne Abfrage eines bestimmten Clubnamens oder Hosts:
+
+- Wix-Karten über `data-hook="event-list-item"`, Titel über `ev-list-item-title`, vollständige Datumsfelder im Bereich `ev-full-date-location` und direkte Detail-Links über `event-details`/`ev-rsvp-button`. Teilen-Links werden nicht als Eventdetail bevorzugt.
+- Deutsche Monatsnamen/-abkürzungen sowie numerische vollständige Datumswerte, optional mit Uhrzeit. Ein ausdrücklich getrennter Bereich wie `13. Nov. 2026, 23:00 – 14. Nov. 2026, 04:00` liefert ausschließlich den Start am 13. November um 23 Uhr. Explizite Alternativen mit „oder“ bleiben mehrere Startangaben.
+- Absatzbasierte Textlisten im Format `09.01. PARTYNAME` unter einer expliziten Jahreszeile wie `2027`. Der Jahreskontext bleibt auf denselben Absatzcontainer beschränkt. Ein alleiniger Bereich wie `2026/27` liefert kein eindeutiges Jahr; solche Einträge bleiben ohne Startdatum. Vorschauen werden ausdrücklich als unbestätigt markiert und nicht automatisch übernommen.
+- Zusammengesetzte Genrebegriffe mit expliziter Party-Endung wie `Indieparty` sind Genre- und Partybeleg, sofern das Genre aktiv im Katalog ist. Beliebige Teilworttreffer wie `Indien` bleiben ausgeschlossen. „Fällt aus“ wird als unbestätigte/abgesagte Angabe erkannt.
+
+Beim lokalen Auswerten des aktuell abgerufenen Programm-HTML wurden **55 Einträge erkannt: 20 Eventkarten und 35 Textvorschauen**. 46 Einträge enthalten einen vollständigen Starttag; neun Vorschauen haben nur den mehrdeutigen Jahresbereich. Das sind Extraktionszahlen und keine Anzahl bestätigter, relevanter oder importierter Partys. Die beispielhaft geprüfte Eventdetailseite lieferte ebenfalls strukturierte Eventdaten. Dies ersetzt keine Prüfung aller verlinkten Detailseiten.
+
+Die neue Fixture `wix-programme.html` bildet die beobachtete DOM-Struktur mit synthetischen Veranstaltungsnamen ab. Die Tests laufen ohne Live-Website und decken Karten plus Vorschau, deutsche Monate, nächtliche Datumsbereiche, Absagen, eindeutige und fehlende Jahre, Jahreskontextgrenzen, Genre-Partyzusammensetzungen sowie die Koexistenz mit JSON-LD ab. Die bestehenden synthetischen Referenzfixtures der anderen Locations bleiben unverändert.
+
+Validierung: 65 Backend-Tests ohne Fehler, Maven-Paket erfolgreich, isolierte PostgreSQL-Testinstanz auf Port 55434. Ein zusätzlicher lesender Live-Abruf über `EventPageFetcher` bestätigte `ROBOTS_ALLOWED=true` und `EVENTS_FOUND` mit 55 Einträgen; dabei wurden keine Kalender- oder produktiven Daten geschrieben.
