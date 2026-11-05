@@ -23,15 +23,15 @@ class SourceNavigationTests {
         return "<h1>Programm</h1><p>"+"Öffentliche Kontaktinformationen und Navigation. ".repeat(12)+"</p>"
                 +"<div id='widget'></div><script id='wix-warmup-data' type='application/json'>{\"pages\":{\"compIdToTypeMap\":{\""+id+"\":\""+type+"\"}}}</script>";
     }
-    @Test void mtcStyleLiveAndPartyLabelsLeadToArbitraryPathsAndDiagnoseWidgets() throws Exception {
+    @Test void partyNavigationFindsArbitraryPathAndSkipsConcertNavigation() throws Exception {
         var service=service(); URI live=root.resolve("/live-shows"),party=root.resolve("/about");
         page(root,"<link rel='alternate' hreflang='en' href='/live-shows?lang=en'><a href='/live-shows'>LIVE</a><a href='/about'>PARTY</a>");
         page(live,widget("HtmlComponent","widget")); page(party,widget("HtmlComponent","widget"));
         var found=service.discover(root.toString(),EventExtractor.Profile.defaults());
-        assertThat(found).hasSize(3);
+        assertThat(found).hasSize(2);
         assertThat(found.get(0).extraction().status()).isEqualTo("SOURCE_LINKS_FOUND");
         assertThat(found.stream().skip(1).map(f -> f.extraction().status())).containsOnly("JAVASCRIPT_REQUIRED");
-        verify(fetcher).fetch(live);verify(fetcher).fetch(party);
+        verify(fetcher,never()).fetch(live);verify(fetcher).fetch(party);
         verify(fetcher,never()).fetch(root.resolve("/live-shows?lang=en"));
     }
     @Test void usefulNavigationAfterFortyUnrelatedLinksAndAccessibleImageLabelIsFound() throws Exception {
@@ -43,8 +43,8 @@ class SourceNavigationTests {
         assertThat(found).hasSize(2); verify(fetcher,times(2)).fetch(any());
     }
     @Test void programmeSectionsAreVisitedBeforeEventDetailBudgetIsSpent() throws Exception {
-        var service=service(); URI live=root.resolve("/live-shows"),party=root.resolve("/about");
-        page(root,"<a href='/live-shows'>LIVE</a><a href='/about'>PARTY</a>");
+        var service=service(); URI live=root.resolve("/programme"),party=root.resolve("/about");
+        page(root,"<a href='/programme'>EVENTS</a><a href='/about'>PARTY</a>");
         StringBuilder html=new StringBuilder();
         for(int i=0;i<10;i++) {
             html.append("<article><h2>Indie Party ").append(i).append("</h2><a href='/night/").append(i).append("'>Details</a></article>");

@@ -9,6 +9,7 @@ public class EventMatcher {
     public record Match(String status, String partyId, String reason) { }
     public Match match(EventExtractor.Event event, String venueName, List<PartySeries> parties,
                        Map<String, List<String>> aliases, Collection<String> genres, boolean approved) {
+        if (PartyOnlyPolicy.concert(event)) return new Match("IGNORED",null,"Konzert ausgeschlossen: ausschließlich Partys");
         String title = EventNormalizer.text(event.title());
         var matched = parties.stream().filter(p -> {
             var names = new ArrayList<>(aliases.getOrDefault(p.getId(), List.of())); names.add(p.getName());

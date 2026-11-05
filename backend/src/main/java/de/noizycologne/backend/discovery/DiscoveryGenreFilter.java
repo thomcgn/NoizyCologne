@@ -23,6 +23,7 @@ public class DiscoveryGenreFilter {
         return Set.copyOf(terms);
     }
     static boolean matches(EventExtractor.Event event, Collection<String> terms) {
+        if (PartyOnlyPolicy.concert(event)) return false;
         String text = " " + EventNormalizer.text(event.title() + " " + event.evidence()) + " ";
         return terms.stream().map(EventNormalizer::text).filter(t -> !t.isBlank())
                 .anyMatch(t -> text.contains(" " + t + " ") || text.contains(" " + t + "party ")

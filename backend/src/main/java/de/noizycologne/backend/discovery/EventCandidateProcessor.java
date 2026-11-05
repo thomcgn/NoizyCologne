@@ -23,6 +23,10 @@ public class EventCandidateProcessor {
         try { url=SafeUrls.parse(event.url()).toString(); } catch (IllegalArgumentException e) { url=store.jdbc().queryForObject("SELECT url FROM discovery_sources WHERE id=?",String.class,sourceId); }
         String identity=EventNormalizer.hash(event.identity().isBlank() ? EventNormalizer.text(event.title()) + "|" + event.starts() : event.identity());
         String fingerprint=EventNormalizer.hash(event.title()+event.starts()+event.state()+event.evidence());
+        if (PartyOnlyPolicy.concert(event)) {
+            store.jdbc().update("UPDATE discovery_candidates SET status='IGNORED',reason='Konzert ausgeschlossen: ausschließlich Partys',updated_at=now() WHERE venue_id=? AND identity_key=?",venue.getId(),identity);
+            return;
+        }
         var previous=store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE venue_id=? AND identity_key=?",venue.getId(),identity);
         if (!previous.isEmpty()) {
             var p=previous.get(0);

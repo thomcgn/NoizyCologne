@@ -61,7 +61,7 @@ public class VenueSourceDiscoveryService {
                                 || next.getPath().matches("(?i).*/(events|party|partys|parties|programm|kalender|veranstaltungen|calendar|live-shows|konzerte|shows)/?")
                                 || next.getPath().toLowerCase(Locale.ROOT).endsWith(".ics")
                                 || link.attr("type").equalsIgnoreCase("text/calendar");
-                        if (!overview) continue;
+                        if (!overview || PartyOnlyPolicy.concertLink(label,next)) continue;
                         if (!eventLinks.contains(next) && !next.equals(step.url()) && next.getHost().equalsIgnoreCase(root.getHost())) {
                             programmeLink = true;
                             if (!seen.contains(next) && queue.size() < 16 && navigationLinks++ < 40

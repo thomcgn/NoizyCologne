@@ -4,6 +4,7 @@
 > **Zielgruppe:** NoizyCologne-Team und Entwickler  
 > **Source of Truth:** Diese Version ersetzt v1.6 und frühere Projektdokumente fachlich. Für das tatsächlich implementierte Verhalten gilt zusätzlich der aktuelle Codezustand; nur dokumentierte Features sind noch nicht automatisch umgesetzt.  
 > **Wichtig:** Dieses Handbuch enthält Lastenheft, Pflichtenheft, technische Lern-/Agenten-Referenzen **und einen Ist-/Soll-Abgleich**. Die früheren Beispielskripte sind nicht automatisch identisch mit der aktuellen Codebasis. Die Entwicklung erfolgt auf Arch Linux; der Benutzer hat den lokalen Kalender-Prototyp erfolgreich getestet. Plattform-Funktionen werden vor Produktivstart im realen Meta-Konto verifiziert.  
+> **Verbindlicher Projektumfang (05.11.2026):** Ausschließlich Partys. Konzerte sind ausdrücklich unerwünscht und von Discovery sowie deren Kalenderübernahme ausgeschlossen. Frühere Konzertbezüge in diesem Handbuch gelten als überholte Beschreibung.
 > **Verbindlicher Vorbehalt:** Weitere fachliche Pflichtschritte **vor** dem Posting sind angekündigt und noch nicht beschrieben. Bis zu deren Freigabe bleibt das reguläre automatische Publishing **deaktiviert** (`NOIZY_PUBLISH_ENABLED=false`).
 
 ---
@@ -43,7 +44,7 @@
 
 > **Zeitliche Einordnung:** Die folgenden Stichpunkte enthalten historische Architekturentscheidungen. Für die tatsächlich lokale Bedienbarkeit und neuere Änderungen vom 31.10.2026 siehe 1.1a und Kapitel 23. Frühe Hinweise zu noch nicht gebuchtem Hosting, Excel-Import oder automatischem DJ-Tagging sind durch v1.7 teilweise überholt.
 
-- NoizyCologne bereitet von Kölner Locations/Veranstaltern gelieferte **Party- und Konzertflyer** auf und veröffentlicht **gewöhnliche Instagram-Foto-/Feed-Posts**. **Keine Reels als Kernformat.**
+- NoizyCologne bereitet von Kölner Locations/Veranstaltern gelieferte **Partyflyer** auf und veröffentlicht **gewöhnliche Instagram-Foto-/Feed-Posts**. **Keine Reels als Kernformat.**
 - Textinformationen aus Flyern: Name, Datum, Einlass/Beginn, Location, Genres, Acts/DJs, Eintritt (wenn vorhanden), Social-Handles, weitere Hinweise.
 - **Stammdaten:** Locations und DJs/Acts werden getrennt verwaltet und über m:n-Beziehungen verbunden. Die dauerhafte Location-Zuordnung ist ausdrücklich **nicht** gleichbedeutend mit einem Auftritt bei jedem Event. Für Caption und Story zählen nur **explizit dem Event zugeordnete** Acts.
 - **Neu v1.5 – echte Sheet-Struktur aus Screenshots:** Ein Party-Portfolio enthält **Partyreihen** mit Veranstalter, Turnus, Genres und ggf. DJ-Vorgaben; Jahreskalender enthalten **konkrete Datumszellen je Venue-Spalte**. Eine Partyreihe ist nicht dasselbe wie ein einzelner Eventtermin. Portfolio-DJs sind keine bestätigten Event-Auftritte.
@@ -2115,6 +2116,7 @@ Bei jeder Ergänzung gleichzeitig **Kapitel 3 (Lastenheft), 4 (Pflichtenheft), 5
 
 | Version | Datum | Änderungen |
 |---|---|---|
+| v1.8 Nur Partys | 05.11.2026 | Konzerte ausdrücklich aus dem Projektumfang ausgeschlossen; Konzertnavigation, Extraktion, Detailabrufe, Matching und manuelle Discovery-Übernahme abgesichert. |
 | v1.8 Abrufbudget | 05.11.2026 | Konfigurierbares 2-MiB-Response-Limit mit 4-MiB-Hardcap; Größen- und Zeitlimit getrennt; beide aktuellen Live-Music-Hall-Listen lesend geprüft. |
 | v1.8 Quellennavigation | 05.11.2026 | PARTY-/LIVE-Navigation und zugängliche Linkbeschriftungen erkennen, Programmseiten vor Detailabrufen priorisieren, leere Wix-HTML-Einbettungen korrekt diagnostizieren. |
 | v1.8 Wix-Programm | 05.11.2026 | Wix-Eventkarten, deutsche Datumsbereiche und textbasierte Jahresvorschauen ergänzt; aktuelles Blue-Shell-Programm mit 55 Einträgen geprüft. |
@@ -3439,3 +3441,17 @@ Die elf Party- und 18 Konzerteinträge sind Extraktionszahlen, keine bestätigte
 Lokale Regressionen prüfen eine Antwort knapp oberhalb des früheren Limits, die exakte Grenze und deren Überschreitung um ein Byte, einen endlosen Stream ohne Längenangabe, separate Timeout-Diagnose und die Konfigurations-Hardcap. Die Live-Seiten sind keine automatisierte Testabhängigkeit.
 
 Validierung: 77 Backend-Tests, Maven-Paket, Frontend-Produktionsbuild, ESLint und Compose-Konfigurationsprüfung erfolgreich. Zusätzliche lesende Live-Abrufe über den echten `EventPageFetcher` bestätigten für beide Live-Music-Hall-Seiten erlaubte robots-Regeln und `EVENTS_FOUND` mit elf beziehungsweise 18 Einträgen. Testdaten lagen ausschließlich in der kurzlebigen PostgreSQL-Instanz auf Port 55434; keine produktiven Datenänderungen, kein Push oder Deployment.
+
+## 24.15 Verbindlich nur Partys – keine Konzerte
+
+Nutzerentscheidung vom 05.11.2026: Konzerte sind für das Projekt irrelevant und ausdrücklich unerwünscht. Diese Entscheidung ersetzt ältere Beschreibungen, in denen Konzerte als mögliche Zielinhalte genannt werden. Die zuvor dokumentierten Konzertextraktionszahlen waren technische Parserprüfungen, keine erwünschten Projektergebnisse.
+
+`PartyOnlyPolicy` prüft Konzertbelege vor Genre-/Partyreihen-Matching. Explizite Konzert-/Concert-Bezeichnungen, deutsche Konzert-Zusammensetzungen, Tournee- und Tribute-Show-Belege schließen einen Fund aus; auch gleichzeitig genannte DJs, Partybegriffe, passende Genres oder ein exakter Partyreihenname heben diesen Ausschluss nicht auf. Gemischte Konzert-/Partyfunde werden konservativ ausgeschlossen. Der allgemeine Schema.org-Typ `MusicEvent` allein ist kein Konzertbeleg, weil auch Partys diesen Typ verwenden.
+
+Eindeutige Konzert-Menüpunkte wie „KONZERTE“, „LIVE“ und `/live-shows` werden nicht weiterverfolgt. Als Konzertübersichten erkennbare direkt hinterlegte Seiten erhalten `EXCLUDED_CONCERTS` („Konzertquelle ausgeschlossen – nur Partys relevant“). Gemischte allgemeine Veranstaltungsübersichten bleiben zulässig; darin werden einzelne Konzertfunde vor Detailabrufen entfernt. Das gilt für HTML, JSON-LD und ICS. Eine reine Konzertquelle ist ein bewusst ausgeschlossener Inhalt und kein technischer Scanfehler.
+
+Konzertfunde erzeugen keine neuen Discovery-Vorschläge. Wird beim erneuten Abgleich ein bereits bekannter Konzertkandidat erkannt, wird er als `IGNORED` archiviert. Ein zusätzlicher serverseitiger Importcheck blockiert sowohl automatische als auch manuelle Discovery-Übernahmen anhand der gespeicherten Konzertbelege, auch nach manueller Änderung des Prüfstatus. Bestehende Kalenderdatensätze werden dadurch nicht automatisch gelöscht oder nachträglich verändert; es wurde keine produktive Datenbereinigung ausgeführt.
+
+Regressionen prüfen Konzertbelege trotz Genre/DJ/Partyname, reine und gemischte Übersichten, ICS, Party-`MusicEvent`, das Überspringen von Konzertnavigation und die Sperre manueller Übernahme eines alten Kandidaten.
+
+Validierung dieser Einschränkung: 82 Backend-Tests, Maven-Paket, Frontend-Produktionsbuild und ESLint erfolgreich. Datenbanktests ausschließlich in einem separaten kurzlebigen PostgreSQL-Container auf Port 55434; keine produktiven Daten geändert, kein Push oder Deployment.

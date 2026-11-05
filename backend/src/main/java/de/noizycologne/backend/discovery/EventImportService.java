@@ -19,6 +19,8 @@ public class EventImportService {
         // The same lock covers automatic and manual imports, including parallel JVMs.
         store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
         var c = store.candidate(id);
+        if (PartyOnlyPolicy.concert((String)c.get("title"),(String)c.get("evidence")))
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT,"Konzerte sind von der Discovery-Übernahme ausgeschlossen");
         if (List.of("REJECTED", "DUPLICATE", "IGNORED").contains(c.get("status"))) throw new ResponseStatusException(HttpStatus.CONFLICT, "Archivierten Vorschlag zuerst prüfen");
         if (c.get("calendar_entry_id") != null) {
             if ("IMPORTED".equals(c.get("status"))) return;

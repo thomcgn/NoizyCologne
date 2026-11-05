@@ -1,4 +1,5 @@
 const labels: Record<string, string> = {
+  EXCLUDED_CONCERTS: "Konzertquelle ausgeschlossen – nur Partys relevant",
   SOURCE_LINKS_FOUND: "Programmverweise gefunden",
   NOT_CHECKED: "Noch nicht geprüft",
   EVENTS_FOUND: "Veranstaltungen gefunden",

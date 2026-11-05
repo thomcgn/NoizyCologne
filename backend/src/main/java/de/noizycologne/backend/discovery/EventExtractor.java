@@ -21,6 +21,7 @@ public class EventExtractor {
         boolean malformed = false;
         if (page.body().contains("BEGIN:VCALENDAR")) return ics(page);
         var doc = Jsoup.parse(page.body(), page.url().toString());
+        if (PartyOnlyPolicy.concertPage(doc) || PartyOnlyPolicy.concertLink("",page.url())) return new Extraction(List.of(), "EXCLUDED_CONCERTS");
         for (Element script : doc.select("script[type=application/ld+json]")) {
             try { collect(json.readTree(script.data()), events, page.url().toString(), 0); }
             catch (RuntimeException e) { malformed = true; }
@@ -64,7 +65,9 @@ public class EventExtractor {
                 events.add(event);
             }
         }
-        String status = !events.isEmpty() ? "EVENTS_FOUND" : malformed ? "UNINTERPRETABLE"
+        boolean concerts = events.stream().anyMatch(PartyOnlyPolicy::concert);
+        events.removeIf(PartyOnlyPolicy::concert);
+        String status = !events.isEmpty() ? "EVENTS_FOUND" : concerts ? "EXCLUDED_CONCERTS" : malformed ? "UNINTERPRETABLE"
                 : doc.body().text().matches("(?is).*(keine (veranstaltungen|events|termine)|no (upcoming )?events).*") ? "NO_EVENTS"
                 : requiresRendering(doc) ? "JAVASCRIPT_REQUIRED" : "UNINTERPRETABLE";
         return new Extraction(events, status);
@@ -140,7 +143,9 @@ public class EventExtractor {
                 if (header.contains("TZID=") && !header.contains("TZID=Europe/Berlin")) fields.put("UNSUPPORTED_TZ", List.of(header));
             }
         }
-        return new Extraction(events, events.isEmpty() ? (!page.body().contains("BEGIN:VEVENT") && page.body().contains("END:VCALENDAR") ? "NO_EVENTS" : "UNINTERPRETABLE") : "EVENTS_FOUND");
+        boolean concerts = events.stream().anyMatch(PartyOnlyPolicy::concert);
+        events.removeIf(PartyOnlyPolicy::concert);
+        return new Extraction(events, events.isEmpty() ? (concerts ? "EXCLUDED_CONCERTS" : !page.body().contains("BEGIN:VEVENT") && page.body().contains("END:VCALENDAR") ? "NO_EVENTS" : "UNINTERPRETABLE") : "EVENTS_FOUND");
     }
     private static String first(Map<String, List<String>> map, String key) { return map.getOrDefault(key, List.of("")).get(0); }
     private static String riskyState(String text) {

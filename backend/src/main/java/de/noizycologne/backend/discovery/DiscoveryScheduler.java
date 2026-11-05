@@ -115,15 +115,15 @@ public class DiscoveryScheduler {
             event=new EventExtractor.Event(event.identity(),event.title(),event.url(),conflictingDates ? starts : event.starts(),event.evidence(),states,event.location());
             processor.process(venue,item.sourceId(),event,knownParties,aliases,knownGenres,item.approved());
         }
-        var outcomes=statuses.stream().filter(s -> !s.equals("SOURCE_LINKS_FOUND")).toList();
+        var outcomes=statuses.stream().filter(s -> !List.of("SOURCE_LINKS_FOUND","EXCLUDED_CONCERTS").contains(s)).toList();
         String status=outcomes.contains("EVENTS_FOUND") ? "EVENTS_FOUND"
                 : !outcomes.isEmpty() && outcomes.stream().allMatch(s -> s.equals("NO_EVENTS")) ? "NO_EVENTS"
-                : outcomes.isEmpty() ? "UNINTERPRETABLE" : outcomes.get(0).equals("NO_EVENTS") ? "UNINTERPRETABLE" : outcomes.get(0);
+                : outcomes.isEmpty() ? (statuses.contains("EXCLUDED_CONCERTS") ? "EXCLUDED_CONCERTS" : "UNINTERPRETABLE") : outcomes.get(0).equals("NO_EVENTS") ? "UNINTERPRETABLE" : outcomes.get(0);
         if (!statuses.contains("EVENTS_FOUND") && statuses.contains("JAVASCRIPT_REQUIRED")) status="JAVASCRIPT_REQUIRED";
         else if (!statuses.contains("EVENTS_FOUND") && status.equals("SOURCE_LINKS_FOUND")) status="UNINTERPRETABLE";
         if (statuses.stream().anyMatch(s -> s.equals("SCAN_FAILED") || s.contains("BLOCKED"))) status="PARTIAL_FAILURE";
-        store.jdbc().update("UPDATE venues SET discovery_status=?,last_discovery_at=CASE WHEN ? IN ('EVENTS_FOUND','NO_EVENTS') THEN now() ELSE last_discovery_at END WHERE id=?",status,status,venue.getId());
-        return List.of("EVENTS_FOUND","NO_EVENTS").contains(status);
+        store.jdbc().update("UPDATE venues SET discovery_status=?,last_discovery_at=CASE WHEN ? IN ('EVENTS_FOUND','NO_EVENTS','EXCLUDED_CONCERTS') THEN now() ELSE last_discovery_at END WHERE id=?",status,status,venue.getId());
+        return List.of("EVENTS_FOUND","NO_EVENTS","EXCLUDED_CONCERTS").contains(status);
     }
     private boolean official(Venue venue,String url) {
         return !venue.getWebsiteUrl().isBlank() && SafeUrls.parse(venue.getWebsiteUrl()).getHost().equalsIgnoreCase(SafeUrls.parse(url).getHost());
