@@ -7,6 +7,7 @@ import {
   type CalendarEntry,
 } from "../CatalogProvider";
 import EntryEditor from "./EntryEditor";
+import { useModalFocus } from "../DashboardModal";
 
 const weekdays = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 
@@ -37,6 +38,13 @@ export default function CalendarPage() {
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [editorScale, setEditorScale] = useState(1);
   const editorModalRef = useRef<HTMLDivElement | null>(null);
+
+  const infoModalRef = useRef<HTMLDivElement | null>(null);
+  useModalFocus(editorOpen && selectedDate !== null, editorModalRef, () => {
+    setEditorOpen(false);
+    setEditingId(null);
+  });
+  useModalFocus(entries.some((entry) => entry.id === infoEntryId), infoModalRef, () => setInfoEntryId(null));
 
   useEffect(() => {
     const updateViewport = () => {
@@ -554,6 +562,7 @@ export default function CalendarPage() {
           >
             <div
               ref={editorModalRef}
+              tabIndex={-1}
               className="w-full max-w-3xl rounded-2xl border border-white/15 bg-black p-1 shadow-2xl"
               style={{ transform: `scale(${editorScale})`, transformOrigin: "center center" }}
               role="dialog"
@@ -563,6 +572,7 @@ export default function CalendarPage() {
               <div className="flex justify-end px-4 pt-4 sm:px-6">
                 <button
                   type="button"
+                  data-modal-close
                   onClick={() => {
                     setEditorOpen(false);
                     setEditingId(null);
@@ -599,6 +609,8 @@ export default function CalendarPage() {
             onClick={() => setInfoEntryId(null)}
           >
             <div
+              ref={infoModalRef}
+              tabIndex={-1}
               className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/15 bg-neutral-950 p-5 shadow-2xl sm:p-6"
               role="dialog"
               aria-modal="true"
