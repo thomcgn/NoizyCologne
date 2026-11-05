@@ -3527,3 +3527,14 @@ Der optionale Test `ReadOnlyDiscoveryDiagnosisTests` verarbeitet nur eine per `N
 
 
 Validierung der Reset-Korrektur: **100 Backend-Tests erfolgreich**, einschließlich des ausdrücklich aktivierten Offline-Replays der 94 kopierten Datensätze; Maven-Paket erfolgreich. **16 Frontend-Tests**, TypeScript (`tsc --noEmit`), ESLint und Next.js-Produktionsbuild erfolgreich. PostgreSQL-Schreibtests ausschließlich im kurzlebigen Testcontainer auf Port 55434. Die Bestandsdatenbank blieb auf Migration V12 und wurde nur lesend untersucht. Keine produktiven Datenänderungen, kein Push und kein Deployment. DOM-Tests ersetzen keine visuelle Browser-/Mobilabnahme.
+
+
+# 25. Permanente Code-Quality-Routine (05.11.2026)
+
+Die Root-`AGENTS.md` enthält das verbindliche **Mandatory Quality Gate** für alle zukünftigen Codex-Aufträge. Nach zusammenhängenden Änderungen gelten passende Tests/Analysen; vor jedem lokalen Commit ist `scripts/check-quality.sh --full` erfolgreich auszuführen. Fehler oder neu verursachte Warnungen verhindern Abschluss und Commit. Keine still übersprungenen Checks, globalen Suppressions, Regelabschwächungen oder `--no-verify`-Umgehungen.
+
+Versionierte Hooks liegen in `.githooks`; `scripts/install-hooks.sh` aktiviert sie nach Prüfung vorhandener Konfigurationen, ohne andere Hooks unbemerkt zu ersetzen. Neue Klone müssen den Installer einmal ausführen. Der Hook prüft ausschließlich und verändert weder Index noch Commit-/Push-Zustand automatisch.
+
+Die gemeinsame lokale/CI-Routine umfasst javac mit `-Xlint:all`/Warnungsfehlern, Tests und Maven-Paket, eine gepinnte zusätzliche ECJ-Analyse einschließlich Testcode, Next-Typegen, TypeScript, ESLint mit `--max-warnings=0`, Frontend-Tests und Produktionsbuild. Diff, Konfliktmarker und konfigurierte Secret-Muster werden auch im tatsächlichen Index geprüft. Backend-Schreibtests laufen stets in einem eigenen kurzlebigen PostgreSQL-Container mit zufälligem Loopback-Port, niemals gegen bestehende Datenbanken.
+
+Reproduzierter Ausgangsbestand: 21 Warnungen mit den lokalen IDE-Einstellungen, 43 im zusätzlichen Profil (11 Deprecations, vier unbenutzte Imports, eine Serialisierungs-ID, 27 Null-/Typflusswarnungen). Zusätzlich wurde eine javac-`this-escape`-Warnung beim Lexikon-Konstruktor fachlich behoben und per Regression abgesichert; insgesamt 44 bereinigte Warnungen ohne Suppressions. Die zusätzliche Analyse lässt 98 sichtbare Informationshinweise an Bibliotheks-/Generik-Annotationsgrenzen übrig; sie ist kein vollständiger JSpecify- oder Live-VS-Code-Problemlisten-Nachweis. Der optionale historische Offline-Discovery-Test wird ohne privaten Export ausdrücklich als nicht ausgeführt gemeldet. Voraussetzungen, verbleibende Diagnosegrenzen, Fehlerbehandlung und getestete Fehler-/Hook-Szenarien sind in [QUALITY.md](QUALITY.md) dokumentiert.

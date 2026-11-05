@@ -21,7 +21,7 @@ class ReadOnlyDiscoveryDiagnosisTests {
             active.add(genre.get("id").asString());terms.add(genre.get("canonical_name").asString());terms.add(genre.get("display_name").asString());
         }
         for (var alias:snapshot.get("genreAliases")) if (active.contains(alias.get("genre_id").asString())) terms.add(alias.get("alias_value").asString());
-        List<Map<String,Object>> details=new ArrayList<>();Map<String,Integer> totals=new TreeMap<>();
+        List<Map<String,Object>> details=new ArrayList<>();Map<String,@org.jspecify.annotations.NonNull Integer> totals=new TreeMap<>();
         for (var row:snapshot.get("candidates")) {
             if (!row.get("status").asString().equals("IGNORED")) continue;
             String date=row.get("event_date").isNull() ? "" : row.get("event_date").asString();

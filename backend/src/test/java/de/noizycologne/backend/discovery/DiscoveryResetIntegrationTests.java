@@ -11,7 +11,6 @@ import java.util.*;
 import java.time.*;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
-import static org.mockito.ArgumentMatchers.*;
 
 @SpringBootTest(properties={"noizy.discovery.enabled=false","logging.level.root=WARN"})
 @ActiveProfiles("local")
@@ -104,7 +103,7 @@ class DiscoveryResetIntegrationTests {
     }
     @Test void samePostgresLockPreventsConcurrentResetAndSchedulerAcrossConnections() throws Exception {
         candidate("Unknown Emo Night","Emo DJs");var request=request(DiscoveryResetService.Mode.ALL,false);
-        try (var connection=store.jdbc().getDataSource().getConnection();var stmt=connection.createStatement()) {
+        try (var connection=java.util.Objects.requireNonNull(store.jdbc().getDataSource(), "Test database source missing").getConnection();var stmt=connection.createStatement()) {
             stmt.execute("SELECT pg_advisory_lock(73624601)");
             try {
                 assertThat(scheduler.startReset(request)).isNull();assertThat(scheduler.start()).isFalse();scheduler.scan();
@@ -196,7 +195,8 @@ class DiscoveryResetIntegrationTests {
         assertThat(summary.get("evaluated").asInt()).isEqualTo(1);
         assertThat(summary.get("newPossibleMatches").asInt()).isEqualTo(1);
         assertThat(summary.get("preservedManual").asInt()).isEqualTo(1);
-        assertThat(operation.get("request_payload").toString()).contains("previewToken","includeManualRejected");
+        String payload=org.junit.jupiter.api.Assertions.assertInstanceOf(String.class,operation.get("request_payload"));
+        assertThat(payload).contains("previewToken","includeManualRejected");
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/discovery?filter=POSSIBLE_MATCH"))
             .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.candidates.length()").value(1))
             .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.candidates[0].id").value(automatic));

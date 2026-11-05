@@ -37,3 +37,9 @@ data/
 backups/
 .previous-image-tag
 README.txt
+
+# Local quality logs and disposable test media
+.quality/
+
+# Python quality-tool bytecode
+__pycache__/

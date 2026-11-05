@@ -38,8 +38,8 @@ final class GermanProgramText {
         return dates.isEmpty() ? List.of(text) : dates.stream().distinct().toList();
     }
 
-    static List<EventExtractor.Event> events(Document doc, String page) {
-        List<EventExtractor.Event> events = new ArrayList<>();
+    static List<EventExtractor.@org.jspecify.annotations.NonNull Event> events(Document doc, String page) {
+        List<EventExtractor.@org.jspecify.annotations.NonNull Event> events = new ArrayList<>();
         Element parent = null;
         Integer year = null;
         String context = "";

@@ -17,7 +17,7 @@ class DiscoveryTests {
     @Test void fiveRepresentativeStructuresAndUnknownVenue() throws Exception {
         for(String file:List.of("mtc.html","blue-shell.html","tsunami.ics","garagen.html","live-music-hall.html","unknown.html")) {
             var result=extractor.extract(page(fixture(file)),EventExtractor.Profile.defaults());
-            assertThat(result.status()).as(file).isEqualTo("EVENTS_FOUND");
+            org.junit.jupiter.api.Assertions.assertEquals("EVENTS_FOUND",result.status(),file);
             assertThat(result.events()).as(file).hasSize(1);
             assertThat(result.events().get(0).title()).isEqualTo("Indie Party");
             assertThat(EventNormalizer.date(result.events().get(0).starts().get(0))).isEqualTo(java.time.LocalDate.of(2027,1,9));
@@ -53,7 +53,7 @@ class DiscoveryTests {
         when(fetcher.fetch(root)).thenThrow(new EventPageFetcher.FetchFailure("BLOCKED"));
         assertThatThrownBy(() -> new VenueSourceDiscoveryService(fetcher,extractor,genres()).discover(root.toString(),EventExtractor.Profile.defaults())).isInstanceOf(EventPageFetcher.FetchFailure.class);
     }
-    private PartySeries party() { var p=mock(PartySeries.class); when(p.getId()).thenReturn("party"); when(p.getName()).thenReturn("Indie Party"); return p; }
+    private @org.jspecify.annotations.NonNull PartySeries party() { var p=mock(PartySeries.class); when(p.getId()).thenReturn("party"); when(p.getName()).thenReturn("Indie Party"); return p; }
     private EventExtractor.Event event(String title,List<String> dates,String state) { return new EventExtractor.Event("id",title,"https://new.example/event",dates,title,state,""); }
     @Test void exactNameAliasConservativeGenreAndUnknownParty() {
         var matcher=new EventMatcher(); var p=party();
@@ -77,7 +77,7 @@ class DiscoveryTests {
         assertThat(EventNormalizer.date("2027-01-09T23:30:00Z")).isEqualTo(java.time.LocalDate.of(2027,1,10));
     }
     @Test void ambiguousNamesAndFridaySaturdayTextAreNeverAutomatic() {
-        var first=party(); var second=mock(PartySeries.class);
+        var first=party(); var second=party();
         when(second.getId()).thenReturn("other"); when(second.getName()).thenReturn("Alternative");
         assertThat(new EventMatcher().match(event("Indie Party",List.of("2027-01-09"),""),"New",List.of(first,second),Map.of("other",List.of("Indie Party")),List.of(),true).status()).isEqualTo("NEEDS_REVIEW");
         var extracted=extractor.extract(page("<article><h2>Indie Party</h2><time datetime='2027-01-09'>Freitag oder Samstag</time></article>"),EventExtractor.Profile.defaults()).events().get(0);
@@ -103,7 +103,7 @@ class DiscoveryTests {
         for(String url:List.of("http://public.example", "https://127.0.0.1", "https://[::1]/", "https://user:pass@public.example", "https://public.example:8443", "https://localhost/", "https://public.example./"))
             assertThatThrownBy(() -> SafeUrls.parse(url)).isInstanceOf(IllegalArgumentException.class);
         for(String ip:List.of("0.0.0.0","10.0.0.1","127.0.0.1","100.64.0.1","169.254.169.254","172.16.0.1","192.168.0.1","192.0.2.1","198.18.0.1","198.51.100.1","203.0.113.1","224.0.0.1","::1","fc00::1","fe80::1","2001:db8::1","2002::1"))
-            assertThat(SafeUrls.isPublic(InetAddress.getByName(ip))).as(ip).isFalse();
+            org.junit.jupiter.api.Assertions.assertFalse(SafeUrls.isPublic(InetAddress.getByName(ip)),ip);
         assertThat(SafeUrls.isPublic(InetAddress.getByName("8.8.8.8"))).isTrue();
         assertThat(RobotsRules.allowed("User-agent: *\nDisallow: /private", "/private/events")).isFalse();
         assertThat(RobotsRules.allowed("User-agent: *\nDisallow: /private", "/events")).isTrue();

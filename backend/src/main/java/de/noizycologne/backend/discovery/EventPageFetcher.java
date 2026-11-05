@@ -27,6 +27,7 @@ public class EventPageFetcher {
     }
     public record Page(URI url, String body, String contentType) { }
     public static class FetchFailure extends IOException {
+        private static final long serialVersionUID = 1L;
         public final String status;
         public FetchFailure(String status) { super(status); this.status = status; }
     }

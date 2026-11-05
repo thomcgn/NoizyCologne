@@ -198,16 +198,15 @@ public class CalendarEntryService {
 
     private CalendarEntryResponse toResponse(CalendarEntry entry) {
         PartyFlyerResponse flyer = null;
-        if (entry.getEventFlyerMediaId() != null) {
-            flyer = mediaAssetRepository.findById(entry.getEventFlyerMediaId())
-                    .map(asset -> new PartyFlyerResponse(
-                            asset.getId(),
-                            asset.getOriginalFilename(),
-                            asset.getMediaType(),
-                            asset.getFileSize(),
-                            "/api/v1/calendar-entries/" + entry.getId() + "/flyer"
-                    ))
-                    .orElse(null);
+        var mediaId = entry.getEventFlyerMediaId();
+        if (mediaId != null) {
+            var asset = mediaAssetRepository.findById(mediaId);
+            if (asset.isPresent()) {
+                var media = asset.get();
+                flyer = new PartyFlyerResponse(media.getId(), media.getOriginalFilename(),
+                        media.getMediaType(), media.getFileSize(),
+                        "/api/v1/calendar-entries/" + entry.getId() + "/flyer");
+            }
         }
         return CalendarEntryResponse.from(entry, flyer);
     }

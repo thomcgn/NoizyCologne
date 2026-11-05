@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Collection;
 
 public interface GenreRepository extends JpaRepository<Genre, String> {
-    List<Genre> findAllByActiveTrueOrderByCanonicalNameAsc();
-    List<Genre> findAllByOrderByCanonicalNameAsc();
-    List<Genre> findAllByDisplayNameInAndActiveTrue(Collection<String> displayNames);
+    List<@org.jspecify.annotations.NonNull Genre> findAllByActiveTrueOrderByCanonicalNameAsc();
+    List<@org.jspecify.annotations.NonNull Genre> findAllByOrderByCanonicalNameAsc();
+    List<@org.jspecify.annotations.NonNull Genre> findAllByDisplayNameInAndActiveTrue(Collection<String> displayNames);
 }

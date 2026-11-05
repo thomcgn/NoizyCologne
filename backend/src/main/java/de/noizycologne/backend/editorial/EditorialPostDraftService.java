@@ -8,7 +8,6 @@ import de.noizycologne.backend.media.MediaAssetRepository;
 import de.noizycologne.backend.music.MusicTrack;
 import de.noizycologne.backend.music.MusicTrackRepository;
 import de.noizycologne.backend.party.PartySeriesRepository;
-import de.noizycologne.backend.party.PartySeries;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

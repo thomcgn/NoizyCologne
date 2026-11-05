@@ -35,14 +35,21 @@ public class GenreLexicon {
         this.genreRepository = genreRepository;
         this.aliasRepository = aliasRepository;
         this.entries = List.of();
-        refresh();
+        loadEntries();
     }
 
     public synchronized void refresh() {
-        if (genreRepository == null || aliasRepository == null) return;
-        List<Genre> genres = genreRepository.findAllByActiveTrueOrderByCanonicalNameAsc();
+        loadEntries();
+    }
+
+    // Constructors must not dispatch an overridable method on a partly initialized subclass.
+    private void loadEntries() {
+        var genreSource = genreRepository;
+        var aliasSource = aliasRepository;
+        if (genreSource == null || aliasSource == null) return;
+        List<Genre> genres = genreSource.findAllByActiveTrueOrderByCanonicalNameAsc();
         Map<String, List<String>> aliases = new LinkedHashMap<>();
-        for (GenreAlias alias : aliasRepository.findAllByGenreIdIn(genres.stream().map(genre -> genre.getId()).toList())) {
+        for (GenreAlias alias : aliasSource.findAllByGenreIdIn(genres.stream().map(genre -> genre.getId()).toList())) {
             aliases.computeIfAbsent(alias.getGenreId(), ignored -> new java.util.ArrayList<>()).add(alias.getValue());
         }
         entries = genres.stream().map(genre -> {

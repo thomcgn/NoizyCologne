@@ -15,8 +15,8 @@ class MatcherReevaluationTests {
         for (var fixture:fixtures) {
             var event=new EventExtractor.Event("id",fixture.get("title").asString(),"https://club.example/party",List.of("2027-01-09"),fixture.get("evidence").asString(),"","");
             var result=new EventMatcher().match(event,"Club",List.of(party),Map.of("known",List.of("Explicit Alias")),List.of("Emo","Metalcore"),true);
-            assertThat(result.status()).as(event.title()).isEqualTo(fixture.get("status").asString());
-            assertThat(result.classification()).as(event.title()).isEqualTo(fixture.get("classification").asString());
+            org.junit.jupiter.api.Assertions.assertEquals(fixture.get("status").asString(),result.status(),event.title());
+            org.junit.jupiter.api.Assertions.assertEquals(fixture.get("classification").asString(),result.classification(),event.title());
         }
     }
     @Test void knownPartyWithConflictingDatesIsNeverReady() {

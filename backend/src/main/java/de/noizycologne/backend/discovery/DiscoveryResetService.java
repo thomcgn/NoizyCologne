@@ -22,7 +22,7 @@ public class DiscoveryResetService {
         }
     }
     public record Item(String id,String title,String venue,String oldStatus,String newStatus,String classification,String reason,String automaticReason,boolean manual,boolean missingRaw,String partyId) { }
-    public record Preview(String token,int affectedCount,int preservedManual,int missingRaw,int enabledLocations,List<Item> items) { }
+    public record Preview(String token,int affectedCount,int preservedManual,int missingRaw,int enabledLocations,List<@org.jspecify.annotations.NonNull Item> items) { }
     public record Summary(int evaluated,int newPossibleMatches,int stillIgnored,int preservedManual,int reclassified,int failed) { }
     private final DiscoveryStore store;
     private final DiscoveryEvaluationService evaluator;
@@ -37,10 +37,10 @@ public class DiscoveryResetService {
             return selection.includeManualRejected() && "MANUAL".equals(row.get("decision_origin")) && "REJECTED".equals(row.get("status"));
         return selection.mode()!=Mode.IGNORED || List.of("IGNORED","REJECTED").contains(row.get("status"));
     }
-    private record Plan(Preview preview,List<Item> all) { }
+    private record Plan(Preview preview,List<@org.jspecify.annotations.NonNull Item> all) { }
     private Plan plan(Selection selection) {
         var rows=store.evaluationRows();var rules=evaluator.rules();
-        List<Item> items=new ArrayList<>();List<String> revisions=new ArrayList<>();
+        List<@org.jspecify.annotations.NonNull Item> items=new ArrayList<>();List<String> revisions=new ArrayList<>();
         int preserved=0;
         for (var row:rows) {
             if (!selected(row,selection)) {
@@ -60,7 +60,9 @@ public class DiscoveryResetService {
             revisions.add(row.get("id")+"|"+row.get("updated_at")+"|"+row.get("fingerprint")+"|"+row.get("raw_event"));
         }
         String token=EventNormalizer.hash(EventMatcher.VERSION+json.writeValueAsString(selection)+json.writeValueAsString(items)+json.writeValueAsString(revisions));
-        int enabled=store.jdbc().queryForObject("SELECT count(*) FROM venues WHERE discovery_enabled",Integer.class);
+        Integer count=store.jdbc().queryForObject("SELECT count(*) FROM venues WHERE discovery_enabled",Integer.class);
+        if (count==null) throw new IllegalStateException("Location-Zählung lieferte kein Ergebnis");
+        int enabled=count;
         return new Plan(new Preview(token,items.size(),preserved,(int)items.stream().filter(Item::missingRaw).count(),enabled,items.stream().limit(500).toList()),items);
     }
     @Transactional(readOnly=true)

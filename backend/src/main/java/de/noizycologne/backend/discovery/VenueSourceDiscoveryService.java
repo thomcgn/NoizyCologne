@@ -128,8 +128,9 @@ public class VenueSourceDiscoveryService {
         }
         // Both source records use the same merged identity/evidence, preventing duplicate proposals.
         return result.stream().map(f -> {
-            if (mergedDetails.containsKey(f.url()))
-                return new Found(f.url(), new EventExtractor.Extraction(List.of(mergedDetails.get(f.url())), "EVENTS_FOUND"));
+            var merged=mergedDetails.get(f.url());
+            if (merged!=null)
+                return new Found(f.url(), new EventExtractor.Extraction(List.of(merged), "EVENTS_FOUND"));
             if (eligible.contains(f.url()))
                 return new Found(f.url(), new EventExtractor.Extraction(f.extraction().events().stream().map(e ->
                         new EventExtractor.Event(e.identity(), e.title(), e.url(), e.starts(), e.evidence(),

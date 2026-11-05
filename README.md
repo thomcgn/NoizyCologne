@@ -34,3 +34,12 @@ GHCR -> automatisches VPS-Deployment
 
 Projektinitialisierung.
 Produktives Instagram-Publishing ist noch deaktiviert.
+
+
+## Quality gate
+
+Nach `cd frontend && npm ci` im Repository-Root `scripts/install-hooks.sh` ausführen.
+Vor jedem Commit gilt `scripts/check-quality.sh --full`; der versionierte Hook
+führt dieselbe Prüfung durch. Benötigt werden JDK 21+, Python 3, Node/npm und Docker.
+Backend-Tests verwenden automatisch eine eigene kurzlebige Datenbank.
+Details und IDE-/Analysegrenzen: [docs/QUALITY.md](docs/QUALITY.md).

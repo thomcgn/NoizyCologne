@@ -12,7 +12,6 @@ import java.time.*;
 import java.util.*;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
-import static org.mockito.ArgumentMatchers.*;
 
 @SpringBootTest(properties={"noizy.discovery.enabled=false","logging.level.root=WARN"})
 @ActiveProfiles("local")
@@ -37,10 +36,10 @@ class DiscoveryIntegrationTests {
         venues.deleteById(venue.getId()); parties.deleteById(party.getId());
         store.jdbc().update("DELETE FROM discovery_runs");
     }
-    EventExtractor.Event event(String identity,String title,String date,String state) {
+    EventExtractor.@org.jspecify.annotations.NonNull Event event(String identity,String title,String date,String state) {
         return new EventExtractor.Event(identity,title,root+"events/one",date==null ? List.of() : List.of(date),"Indie Party",state,"");
     }
-    void found(EventExtractor.Event event) throws Exception {
+    void found(EventExtractor.@org.jspecify.annotations.NonNull Event event) throws Exception {
         when(discovery.discover(eq(root),any())).thenReturn(List.of(new VenueSourceDiscoveryService.Found(URI.create(root),new EventExtractor.Extraction(List.of(event),"EVENTS_FOUND"))));
     }
     @Test void homepageOnlyImportsIdempotentlyAndChangesRequireReview() throws Exception {
@@ -141,8 +140,9 @@ class DiscoveryIntegrationTests {
         String id=store.jdbc().queryForObject("SELECT id FROM discovery_candidates WHERE venue_id=?",String.class,venue.getId());
         store.jdbc().update("UPDATE discovery_candidates SET evidence='Indie Konzert mit DJs' WHERE id=?",id);
         importer.review(id,party.getId(),LocalDate.of(2027,1,9),"NEEDS_REVIEW","NONE","");
-        assertThatThrownBy(() -> importer.importCandidate(id,party.getId(),LocalDate.of(2027,1,9),true))
-            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class).hasMessageContaining("Konzerte");
+        var failure=org.junit.jupiter.api.Assertions.assertThrows(org.springframework.web.server.ResponseStatusException.class,
+            () -> importer.importCandidate(id,party.getId(),LocalDate.of(2027,1,9),true));
+        assertThat(failure.getMessage()).contains("Konzerte");
         found(new EventExtractor.Event("legacy","Neue Indie Party",root+"events/one",List.of("2027-01-09"),"Indie Konzert mit DJs","",""));
         scheduler.scan(); assertThat(store.candidate(id).get("status")).isEqualTo("NEEDS_REVIEW");
         found(new EventExtractor.Event("new-concert",party.getName(),root+"events/two",List.of("2027-01-10"),"Indie Konzert mit DJs","",""));
@@ -151,7 +151,7 @@ class DiscoveryIntegrationTests {
         assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,venue.getId())).isZero();
     }
     @Test void postgresLockPreventsConcurrentScan() throws Exception {
-        try(var conn=store.jdbc().getDataSource().getConnection(); var stmt=conn.createStatement()) {
+        try(var conn=java.util.Objects.requireNonNull(store.jdbc().getDataSource(), "Test database source missing").getConnection(); var stmt=conn.createStatement()) {
             stmt.execute("SELECT pg_advisory_lock(73624601)");
             try { scheduler.scan(); verifyNoInteractions(discovery); }
             finally { stmt.execute("SELECT pg_advisory_unlock(73624601)"); }

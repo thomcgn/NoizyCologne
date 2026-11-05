@@ -14,10 +14,10 @@ public class EventExtractor {
     }
     public record Event(String identity, String title, String url, List<String> starts,
                         String evidence, String state, String location) { }
-    public record Extraction(List<Event> events, String status) { }
+    public record Extraction(List<@org.jspecify.annotations.NonNull Event> events, String status) { }
     private final JsonMapper json = JsonMapper.builder().build();
     public Extraction extract(EventPageFetcher.Page page, Profile profile) {
-        List<Event> events = new ArrayList<>();
+        List<@org.jspecify.annotations.NonNull Event> events = new ArrayList<>();
         boolean malformed = false;
         if (page.body().contains("BEGIN:VCALENDAR")) return ics(page);
         var doc = Jsoup.parse(page.body(), page.url().toString());
@@ -52,9 +52,10 @@ public class EventExtractor {
                         dates, clip(item.text(), 8000), state, ""));
             }
             // Generic detail pages with a semantic start date.
-            if (events.isEmpty() && doc.selectFirst("h1") != null && doc.selectFirst("time[datetime], [itemprop=startDate]") != null) {
-                var date = doc.selectFirst("[itemprop=startDate], time[datetime]");
-                events.add(new Event(page.url().toString(), clip(doc.selectFirst("h1").text(), 500), page.url().toString(),
+            var heading = doc.selectFirst("h1");
+            var date = doc.selectFirst("[itemprop=startDate], time[datetime]");
+            if (events.isEmpty() && heading != null && date != null) {
+                events.add(new Event(page.url().toString(), clip(heading.text(), 500), page.url().toString(),
                         List.of(date.hasAttr("datetime") ? date.attr("datetime") : date.attr("content")),
                         clip(doc.body().text(), 8000), riskyState(doc.body().text()), ""));
             }
@@ -82,7 +83,7 @@ public class EventExtractor {
                 var types = json.readTree(warmup.data()).path("pages").path("compIdToTypeMap");
                 for (String id : types.propertyNames()) {
                     var element = doc.getElementById(id);
-                    if (types.path(id).asText("").equals("HtmlComponent") && element != null
+                    if (types.path(id).asString("").equals("HtmlComponent") && element != null
                             && element.text().isBlank() && element.selectFirst("iframe[src], a[href], time, [itemprop=startDate]") == null)
                         return true;
                 }
@@ -90,30 +91,30 @@ public class EventExtractor {
         }
         return doc.selectFirst("script[src]") != null && doc.body().text().length() < 250;
     }
-    private void collect(JsonNode node, List<Event> events, String page, int depth) {
+    private void collect(JsonNode node, List<@org.jspecify.annotations.NonNull Event> events, String page, int depth) {
         if (node == null || depth > 16 || events.size() >= 200) return;
         if (node.isArray()) { for (var child : node) collect(child, events, page, depth + 1); return; }
         if (!node.isObject()) return;
         String type = node.path("@type").toString();
         if (type.contains("Event")) {
-            String title = node.path("name").asText("");
+            String title = node.path("name").asString("");
             if (!title.isBlank()) {
                 List<String> starts = new ArrayList<>();
                 var start = node.path("startDate");
-                if (start.isArray()) for (var value : start) starts.add(value.asText());
-                else if (start.isTextual()) starts.add(start.asText());
-                String url = java.net.URI.create(page).resolve(node.path("url").asText(page)).toString();
-                String state = node.path("eventStatus").asText("") + " " + riskyState(node.path("description").asText(""));
-                if (node.has("previousStartDate")) state += " RESCHEDULED " + node.path("previousStartDate").asText();
-                events.add(new Event(node.path("@id").asText(url.equals(page) ? "" : url), clip(title, 500), url, starts,
-                        clip(node.toString(), 8000), state, node.path("location").path("name").asText("")));
+                if (start.isArray()) for (var value : start) starts.add(value.asString());
+                else if (start.isString()) starts.add(start.asString());
+                String url = java.net.URI.create(page).resolve(node.path("url").asString(page)).toString();
+                String state = node.path("eventStatus").asString("") + " " + riskyState(node.path("description").asString(""));
+                if (node.has("previousStartDate")) state += " RESCHEDULED " + node.path("previousStartDate").asString();
+                events.add(new Event(node.path("@id").asString(url.equals(page) ? "" : url), clip(title, 500), url, starts,
+                        clip(node.toString(), 8000), state, node.path("location").path("name").asString("")));
             }
         }
         for (String key : List.of("@graph", "itemListElement", "item", "subEvent", "events"))
             if (node.has(key)) collect(node.get(key), events, page, depth + 1);
     }
     private Extraction ics(EventPageFetcher.Page page) {
-        List<Event> events = new ArrayList<>();
+        List<@org.jspecify.annotations.NonNull Event> events = new ArrayList<>();
         Map<String, List<String>> fields = null;
         for (String line : page.body().replaceAll("\\r?\\n[ \\t]", "").split("\\R")) {
             if (line.equals("BEGIN:VEVENT")) fields = new LinkedHashMap<>();

@@ -106,12 +106,17 @@ public class PartySeriesService {
     }
 
     private PartySeriesResponse toResponse(PartySeries party) {
-        PartyFlyerResponse flyer = party.getDefaultFlyerMediaId() == null ? null
-                : mediaAssetRepository.findById(party.getDefaultFlyerMediaId())
-                .map(asset -> new PartyFlyerResponse(asset.getId(), asset.getOriginalFilename(),
-                        asset.getMediaType(), asset.getFileSize(),
-                        "/api/v1/parties/" + party.getId() + "/default-flyer"))
-                .orElse(null);
+        PartyFlyerResponse flyer = null;
+        var mediaId = party.getDefaultFlyerMediaId();
+        if (mediaId != null) {
+            var asset = mediaAssetRepository.findById(mediaId);
+            if (asset.isPresent()) {
+                var media = asset.get();
+                flyer = new PartyFlyerResponse(media.getId(), media.getOriginalFilename(),
+                        media.getMediaType(), media.getFileSize(),
+                        "/api/v1/parties/" + party.getId() + "/default-flyer");
+            }
+        }
         return PartySeriesResponse.from(party, flyer);
     }
 
