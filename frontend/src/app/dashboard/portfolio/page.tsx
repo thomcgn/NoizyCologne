@@ -791,6 +791,12 @@ export default function PortfolioPage({
                         <span>{genre.displayName}</span>
                       </label>
                     ))}
+                    {!genresLoading && !genresError && standardGenres.filter(name => !availableGenres.some(genre => genre.displayName === name)).map(name => (
+                      <label key={`unavailable-${name}`} className="flex min-h-11 items-center gap-2 rounded-lg bg-neutral-900 px-3 py-2 text-sm">
+                        <input type="checkbox" className="size-4 accent-white" checked onChange={() => setStandardGenres(current => current.filter(item => item !== name))} disabled={saving || aliasesLoading || !aliasesReady} />
+                        <span>{name} <span className="text-neutral-400">(nicht mehr aktiv oder verfügbar; zum Entfernen abwählen)</span></span>
+                      </label>
+                    ))}
                   </div>
                 </fieldset>
 

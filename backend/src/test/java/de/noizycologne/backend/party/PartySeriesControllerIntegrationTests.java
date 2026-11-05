@@ -40,6 +40,9 @@ class PartySeriesControllerIntegrationTests {
     @Autowired
     private PartySeriesRepository partySeriesRepository;
 
+    @Autowired private de.noizycologne.backend.genre.GenreRepository genreRepository;
+    private final List<String> createdGenreIds = new ArrayList<>();
+
     private final List<String> createdPartyIds = new ArrayList<>();
     private final List<String> createdActorIds = new ArrayList<>();
 
@@ -49,6 +52,8 @@ class PartySeriesControllerIntegrationTests {
         partySeriesRepository.flush();
         actorRepository.deleteAllById(createdActorIds);
         actorRepository.flush();
+        genreRepository.deleteAllById(createdGenreIds);
+        genreRepository.flush();
     }
 
     @Test
@@ -192,6 +197,62 @@ class PartySeriesControllerIntegrationTests {
                         ))))
                 .andExpect(status().isBadRequest());
         assertThat(partySeriesRepository.count()).isEqualTo(partyCount);
+    }
+
+    @Test
+    void savesDisplayNamesAndSupportsReloadAddRemoveAndDuplicateValues() throws Exception {
+        String name="Genre Contract "+UUID.randomUUID();
+        var request=new PartySeriesRequest(name,"","#123456","manual",Set.of(),Set.of(),Set.of(),null,Set.of("Emo","Metalcore","Hardcore"));
+        var created=createParty(request);
+        createdPartyIds.add(created.id());
+        assertThat(created.standardGenres()).containsExactlyInAnyOrder("Emo","Metalcore","Hardcore");
+        var reloaded=List.of(getParties()).stream().filter(p -> p.id().equals(created.id())).findFirst().orElseThrow();
+        assertThat(reloaded.standardGenres()).containsExactlyInAnyOrder("Emo","Metalcore","Hardcore");
+        String update="""
+            {"name":"%s","color":"#123456","djMentionDefault":"manual","standardGenres":["Emo","Emo"," Metalcore ","Punk"]}
+            """.formatted(name);
+        var updated=objectMapper.readValue(mockMvc.perform(put("/api/v1/parties/{id}",created.id())
+            .contentType(MediaType.APPLICATION_JSON).content(update)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString(),PartySeriesResponse.class);
+        assertThat(updated.standardGenres()).containsExactlyInAnyOrder("Emo","Metalcore","Punk");
+        assertThat(partySeriesRepository.findById(created.id()).orElseThrow().getStandardGenres()).containsExactlyInAnyOrder("Emo","Metalcore","Punk");
+    }
+
+    @Test
+    void rejectsUnknownInactiveAndAmbiguousDisplayNamesWithoutChangingStoredGenres() throws Exception {
+        String suffix=UUID.randomUUID().toString();
+        String inactive="Inactive "+suffix, ambiguous="Ambiguous "+suffix;
+        for (var genre:List.of(
+            new de.noizycologne.backend.genre.Genre("inactive-"+suffix,inactive,false),
+            new de.noizycologne.backend.genre.Genre("duplicate-a-"+suffix,ambiguous,true),
+            new de.noizycologne.backend.genre.Genre("duplicate-b-"+suffix,ambiguous,true))) {
+            createdGenreIds.add(genreRepository.saveAndFlush(genre).getId());
+        }
+        var created=createParty(new PartySeriesRequest("Invalid Genres "+suffix,"","#123456","manual",Set.of(),Set.of(),Set.of(),null,Set.of("Emo")));
+        createdPartyIds.add(created.id());
+        for (String invalid:List.of("Missing "+suffix,inactive,ambiguous,"emo")) {
+            var update=new PartySeriesRequest(created.name(),"","#123456","manual",Set.of(),Set.of(),Set.of(),null,Set.of("Emo",invalid));
+            String body=mockMvc.perform(put("/api/v1/parties/{id}",created.id()).contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(update))).andExpect(status().isBadRequest()).andReturn().getResponse().getContentAsString();
+            assertThat(objectMapper.readTree(body).get("message").asString()).contains(invalid);
+            assertThat(partySeriesRepository.findById(created.id()).orElseThrow().getStandardGenres()).containsExactly("Emo");
+        }
+        // Historical inactive names are readable; saving them again requires an explicit removal.
+        var historical=partySeriesRepository.findById(created.id()).orElseThrow();
+        historical.getStandardGenres().add(inactive);partySeriesRepository.saveAndFlush(historical);
+        assertThat(List.of(getParties()).stream().filter(p -> p.id().equals(created.id())).findFirst().orElseThrow().standardGenres())
+            .containsExactlyInAnyOrder("Emo",inactive);
+    }
+
+    @Test
+    void inactiveDuplicateDoesNotMakeAnActiveDisplayNameAmbiguous() throws Exception {
+        String suffix=UUID.randomUUID().toString(), display="Unique Active "+suffix;
+        for (boolean active:List.of(true,false)) {
+            var genre=new de.noizycologne.backend.genre.Genre("active-"+active+"-"+suffix,display,active);
+            createdGenreIds.add(genreRepository.saveAndFlush(genre).getId());
+        }
+        var created=createParty(new PartySeriesRequest("Active Genre "+suffix,"","#123456","manual",Set.of(),Set.of(),Set.of(),null,Set.of(display)));
+        createdPartyIds.add(created.id());
+        assertThat(created.standardGenres()).containsExactly(display);
     }
 
     private Actor createActor(String name, String kind, Set<String> roles) {

@@ -6,7 +6,6 @@ import de.noizycologne.backend.calendar.CalendarEntry;
 import de.noizycologne.backend.calendar.CalendarEntryRepository;
 import de.noizycologne.backend.party.PartySeries;
 import de.noizycologne.backend.party.PartySeriesRepository;
-import de.noizycologne.backend.genre.GenreRepository;
 import de.noizycologne.backend.venue.Venue;
 import de.noizycologne.backend.venue.VenueRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -44,7 +43,7 @@ class EditorialPostDraftControllerIntegrationTests {
     @Autowired private PartySeriesRepository partyRepository;
     @Autowired private VenueRepository venueRepository;
     @Autowired private ActorRepository actorRepository;
-    @Autowired private GenreRepository genreRepository;
+    @Autowired private de.noizycologne.backend.party.PartySeriesService partyService;
 
     private final List<String> draftIds = new ArrayList<>();
     private final List<String> entryIds = new ArrayList<>();
@@ -73,12 +72,10 @@ class EditorialPostDraftControllerIntegrationTests {
         actorIds.add(dj.getId());
         Venue venue = venueRepository.saveAndFlush(new Venue("Draft Venue " + suffix, "draft_venue"));
         venueIds.add(venue.getId());
-        PartySeries party = partyRepository.saveAndFlush(new PartySeries(
-                "Draft Party " + suffix, "draft_party", "#123456", "manual", null,
-                null, null, null, Set.of(), Set.of()));
-        String standardGenre = genreRepository.findAllByActiveTrueOrderByCanonicalNameAsc().get(0).getDisplayName();
-        party.getStandardGenres().add(standardGenre);
-        party = partyRepository.saveAndFlush(party);
+        var savedParty=partyService.createParty(new de.noizycologne.backend.party.PartySeriesRequest(
+                "Draft Party "+suffix,"draft_party","#123456","manual",Set.of(),Set.of(),Set.of(),null,
+                Set.of("Emo","Metalcore","Hardcore")));
+        PartySeries party=partyRepository.findById(savedParty.id()).orElseThrow();
         partyIds.add(party.getId());
         CalendarEntry entry = entryRepository.saveAndFlush(new CalendarEntry(
                 LocalDate.of(2027, 4, 12), venue.getId(), "event", "", party.getId(),
@@ -97,7 +94,7 @@ class EditorialPostDraftControllerIntegrationTests {
         draftIds.add(created.id());
         assertThat(created.status()).isEqualTo("DRAFT");
         assertThat(created.mentionActorIds()).containsExactly(dj.getId());
-        assertThat(created.genres()).containsExactlyInAnyOrder("House", "Disco", standardGenre);
+        assertThat(created.genres()).containsExactlyInAnyOrder("House", "Disco", "Emo", "Metalcore", "Hardcore");
 
         EditorialPostDraftResponse[] reloaded = objectMapper.readValue(
                 mockMvc.perform(get("/api/v1/editorial-drafts"))
@@ -105,6 +102,22 @@ class EditorialPostDraftControllerIntegrationTests {
                         .andReturn().getResponse().getContentAsString(),
                 EditorialPostDraftResponse[].class);
         assertThat(List.of(reloaded)).extracting(response -> response.id()).contains(created.id());
+
+        partyService.updateParty(party.getId(),new de.noizycologne.backend.party.PartySeriesRequest(
+                party.getName(),"draft_party","#123456","manual",Set.of(),Set.of(),Set.of(),null,Set.of("Punk")));
+        var oldDraft=draftRepository.findById(created.id()).orElseThrow();
+        assertThat(oldDraft.getGenres()).containsExactlyInAnyOrder("House","Disco","Emo","Metalcore","Hardcore");
+        assertThat(oldDraft.getCaption()).isEqualTo("Caption für das Team");
+        CalendarEntry nextEntry=entryRepository.saveAndFlush(new CalendarEntry(
+                LocalDate.of(2027,4,19),venue.getId(),"event","",party.getId(),LocalTime.of(22,0),null,Set.of()));
+        entryIds.add(nextEntry.getId());
+        var nextRequest=new EditorialPostDraftRequest("Special Caption","","DRAFT",Set.of(),Set.of("Synthwave"));
+        var nextDraft=objectMapper.readValue(mockMvc.perform(post("/api/v1/calendar-entries/{id}/editorial-drafts",nextEntry.getId())
+                .contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(nextRequest)))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(),EditorialPostDraftResponse.class);
+        draftIds.add(nextDraft.id());
+        assertThat(nextDraft.genres()).containsExactlyInAnyOrder("Punk","Synthwave");
+        assertThat(partyRepository.findById(party.getId()).orElseThrow().getStandardGenres()).containsExactly("Punk");
 
         EditorialPostDraftRequest updateRequest = new EditorialPostDraftRequest(
                 "Überarbeitete Caption", "#team", "READY_FOR_REVIEW", Set.of(), Set.of("Techno"));

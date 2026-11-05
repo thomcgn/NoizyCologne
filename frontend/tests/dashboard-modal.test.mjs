@@ -375,3 +375,49 @@ test('discovery reset invalidates the preview when switching to a complete resca
   assert.ok(document.querySelector('[aria-label="Reset-Vorschau"]').textContent.includes('2 aktivierte Locations'));
   assert.equal(document.querySelector('input[type="checkbox"]').checked, false);
 });
+
+test('party standard genres submit display names, remain checked on edit and can be removed', async () => {
+  const payloads = [];
+  const save = async data => {
+    payloads.push(data);
+    const saved = { ...party, ...data, id: 'genre-party' };
+    catalogue.parties = [saved];
+    return saved;
+  };
+  catalogue = { parties: [], venues: [venue], actors: [], createParty: save, updateParty: save };
+  const names = ['Emo', 'Metalcore', 'Hardcore'];
+  globalThis.fetch = async url => new Response(JSON.stringify(url === '/api/v1/genres'
+    ? names.map((name, index) => ({ id: `genre-id-${index}`, canonicalName: name.toLowerCase(), displayName: name, active: true })) : []));
+  const Page = loadSource(new URL('../src/app/dashboard/portfolio/page.tsx', import.meta.url)).default;
+  await act(async () => { mount(h(Page)); });
+  click(button('Neu anlegen'));
+  type(document.querySelector('[role="dialog"] input'), 'Genre Test');
+  function genreCheckbox(name) {
+    const label = [...document.querySelectorAll('[role="dialog"] label')].find(label => label.textContent.trim() === name);
+    assert.ok(label, `Genre label ${name}`);
+    return label.querySelector('input');
+  }
+  for (const name of names) click(genreCheckbox(name));
+  await act(async () => { button('Übernehmen').click(); });
+  assert.deepEqual([...payloads[0].standardGenres].sort(), [...names].sort());
+  await act(async () => { button('Bearbeiten').click(); });
+  for (const name of names) assert.equal(genreCheckbox(name).checked, true);
+  click(genreCheckbox('Hardcore'));
+  await act(async () => { button('Übernehmen').click(); });
+  assert.deepEqual([...payloads[1].standardGenres].sort(), ['Emo', 'Metalcore']);
+  await act(async () => { button('Bearbeiten').click(); });
+  assert.equal(genreCheckbox('Hardcore').checked, false);
+});
+
+test('historical unavailable standard genres stay visible and can be explicitly removed', async () => {
+  catalogue = { parties: [{ ...party, standardGenres: ['Retired Genre'] }], venues: [venue], actors: [] };
+  globalThis.fetch = async () => new Response('[]');
+  const Page = loadSource(new URL('../src/app/dashboard/portfolio/page.tsx', import.meta.url)).default;
+  await act(async () => { mount(h(Page)); });
+  await act(async () => { button('Bearbeiten').click(); });
+  const label = [...document.querySelectorAll('[role="dialog"] label')].find(label => label.textContent.includes('Retired Genre'));
+  assert.ok(label);
+  assert.equal(label.querySelector('input').checked, true);
+  click(label.querySelector('input'));
+  assert.equal(label.isConnected, false);
+});
