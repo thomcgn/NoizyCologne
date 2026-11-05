@@ -2115,6 +2115,7 @@ Bei jeder Ergänzung gleichzeitig **Kapitel 3 (Lastenheft), 4 (Pflichtenheft), 5
 
 | Version | Datum | Änderungen |
 |---|---|---|
+| v1.8 Abrufbudget | 05.11.2026 | Konfigurierbares 2-MiB-Response-Limit mit 4-MiB-Hardcap; Größen- und Zeitlimit getrennt; beide aktuellen Live-Music-Hall-Listen lesend geprüft. |
 | v1.8 Quellennavigation | 05.11.2026 | PARTY-/LIVE-Navigation und zugängliche Linkbeschriftungen erkennen, Programmseiten vor Detailabrufen priorisieren, leere Wix-HTML-Einbettungen korrekt diagnostizieren. |
 | v1.8 Wix-Programm | 05.11.2026 | Wix-Eventkarten, deutsche Datumsbereiche und textbasierte Jahresvorschauen ergänzt; aktuelles Blue-Shell-Programm mit 55 Einträgen geprüft. |
 | v1.8 Detailabruf | 05.11.2026 | Veranstaltungslinks erst nach positivem Abgleich mit aktiven Genres/Aliasen abrufen; Übersicht und Detaildaten mit Konflikterhalt zusammenführen. |
@@ -3300,7 +3301,7 @@ Offizielle Quellen werden über den Host der explizit hinterlegten `websiteUrl` 
 | `EventImportService` | Transaktionale manuelle/automatische Kalenderübernahme, Konflikt-/Dublettenprüfung, Prüf- und Rückfragestatus |
 | `DiscoveryScheduler` | Ein begrenzter Worker, PostgreSQL-Scanlock, Quellenprüfung pro Location, persistenter Laufbericht |
 
-Pro Location werden höchstens drei Startquellen untersucht. Pro Startquelle gelten maximal acht Seiten, Tiefe zwei, 200 untersuchte Links und höchstens 40 geeignete Navigationslinks pro Seite und eine Queue mit höchstens 16 Links; alle müssen auf demselben exakten Host bleiben. Pro Location werden höchstens 300 Eventfunde verarbeitet. Abrufe sind JVM-weit seriell mit mindestens 500 ms Pause, ohne automatische Wiederholungen. Verbindungsaufbau: fünf Sekunden; Socket-/Antwortwartezeit: acht Sekunden; Body-Lesephase: zehn Sekunden, jeweils zusätzlich zum Größenlimit von 1 MB. robots.txt zählt als zusätzlicher Abruf und wird innerhalb einer Quellensuche je Host zwischengespeichert.
+Pro Location werden höchstens drei Startquellen untersucht. Pro Startquelle gelten maximal acht Seiten, Tiefe zwei, 200 untersuchte Links und höchstens 40 geeignete Navigationslinks pro Seite und eine Queue mit höchstens 16 Links; alle müssen auf demselben exakten Host bleiben. Pro Location werden höchstens 300 Eventfunde verarbeitet. Abrufe sind JVM-weit seriell mit mindestens 500 ms Pause, ohne automatische Wiederholungen. Verbindungsaufbau: fünf Sekunden; Socket-/Antwortwartezeit: acht Sekunden; Body-Lesephase: zehn Sekunden, jeweils zusätzlich zum standardmäßigen Größenlimit von 2 MiB (über `DISCOVERY_MAX_RESPONSE_BYTES` zwischen 64 KiB und maximal 4 MiB konfigurierbar). robots.txt zählt als zusätzlicher Abruf und wird innerhalb einer Quellensuche je Host zwischengespeichert.
 
 Migration **V12** ergänzt `website_url`, `events_url`, `discovery_enabled`, `last_discovery_at` und `discovery_status` additiv an `venues`; Instagram bleibt das bestehende Feld. Weitere Tabellen: `discovery_sources` mit Freigabe/Profil/Status/Abrufzeit, `party_series_aliases`, `discovery_candidates` mit Herkunft/Fingerprint/Rückfrage und `discovery_runs` mit Start/Ende/Bericht. Die Übersicht lädt die neuesten 500 Kandidaten und zehn Laufberichte; Statuszähler beziehen sich auf den gesamten Bestand.
 
@@ -3308,7 +3309,7 @@ Migration **V12** ergänzt `website_url`, `events_url`, `discovery_enabled`, `la
 
 Priorität: JSON-LD → ICS → generische HTML-Listen → semantische Detailseite. HTML-Regeln erkennen u. a. `article` mit `time`, `.event`, `.event-item`, `.event-list-item` und Schema.org-Microdata. Ein CSS-Profil kann die drei Selektoren ersetzen. Es wird kein fremdes JavaScript ausgeführt. RSS/Atom, allgemeines natürlichsprachliches Datumsverstehen, wiederkehrende ICS-Regeln und beliebige Widget-/Ticket-APIs sind nicht Bestandteil dieses MVP.
 
-`EVENTS_FOUND` bedeutet interpretierbare Eventfunde, nicht automatisch relevante oder importierbare Partys. `NO_EVENTS` erfordert eine ausdrückliche Leermeldung oder einen leeren abgeschlossenen ICS-Kalender. Unbekannte/leere HTML-Strukturen ergeben `UNINTERPRETABLE`; eine kurze App-Shell mit externem Script ergibt heuristisch `JAVASCRIPT_REQUIRED`. Weitere Diagnosen: `BLOCKED`, `ROBOTS_BLOCKED`, `SCAN_FAILED`, `PARTIAL_FAILURE`, `REDIRECT_REQUIRES_REVIEW`, `RESPONSE_TOO_LARGE`, `RESPONSE_LIMIT`, `UNSUPPORTED_ENCODING` und `UNSUPPORTED_CONTENT`. Ein fehlender Kalender oder ein unbekanntes Layout ist kein Beweis, dass keine Events existieren.
+`EVENTS_FOUND` bedeutet interpretierbare Eventfunde, nicht automatisch relevante oder importierbare Partys. `NO_EVENTS` erfordert eine ausdrückliche Leermeldung oder einen leeren abgeschlossenen ICS-Kalender. Unbekannte/leere HTML-Strukturen ergeben `UNINTERPRETABLE`; eine kurze App-Shell mit externem Script ergibt heuristisch `JAVASCRIPT_REQUIRED`. Weitere Diagnosen: `BLOCKED`, `ROBOTS_BLOCKED`, `SCAN_FAILED`, `PARTIAL_FAILURE`, `REDIRECT_REQUIRES_REVIEW`, `RESPONSE_TOO_LARGE`, `FETCH_TIMEOUT`, `RESPONSE_LIMIT` (historischer Sammelstatus), `UNSUPPORTED_ENCODING` und `UNSUPPORTED_CONTENT`. Ein fehlender Kalender oder ein unbekanntes Layout ist kein Beweis, dass keine Events existieren.
 
 `last_discovery_at` bezeichnet die letzte erfolgreiche Prüfung mit Eventfunden oder ausdrücklichem Leerbestand. `last_fetched_at` ist der letzte Abrufversuch der einzelnen Quelle. Ein fehlerhafter Teilabruf bleibt in der Quellenübersicht sichtbar. Die JavaScript-Diagnose ist eine Heuristik, keine Garantie, dass ein Browser die Daten darstellen könnte.
 
@@ -3349,6 +3350,7 @@ Standard: **Dienstag, 09:00 Uhr, `Europe/Berlin`**, serverseitig mit Spring `@Sc
 | `DISCOVERY_ENABLED` | `true` | Automatischen Scheduler aktivieren; manuelle Suche bleibt separat möglich |
 | `DISCOVERY_CRON` | `0 0 9 * * TUE` | Spring-Cron-Ausdruck mit Sekundenfeld |
 | `DISCOVERY_ZONE` | `Europe/Berlin` | Zeitzone einschließlich Sommer-/Winterzeit |
+| `DISCOVERY_MAX_RESPONSE_BYTES` | `2097152` | Maximale Response-Body-Größe in Bytes; zulässig 65536 bis 4194304 |
 
 Compose und `.env.example` enthalten die Durchleitung dieser Variablen; es wurde damit kein Deployment ausgeführt. Bestehende Locations starten durch die Migration deaktiviert. Ein zusätzlicher PostgreSQL-Sessionlock verhindert überlappende Scans über JVM-Grenzen hinweg. Laufberichte bleiben nach Neustarts erhalten; beim nächsten Scan werden verwaiste `RUNNING`-Berichte zu `INTERRUPTED`. Verpasste Dienstagstermine werden nicht automatisch nachgeholt; dafür existiert die manuelle Suche. Quellen- und Locationfehler verhindern nicht die Bearbeitung anderer Locations. Unvollständige Läufe werden als `PARTIAL` protokolliert.
 
@@ -3425,3 +3427,15 @@ Die Korrektur macht die MTC-Navigation nachvollziehbar, verspricht aber keine MT
 Neue lokale Regressionen decken den MTC-Menüweg mit anderen Host-/Pfadnamen, Unterseiten nach mehr als 40 sonstigen Links, `aria-label`, Programmpriorität vor Eventdetails, leere aktuelle Komponenten gegenüber unbeteiligten Metadaten sowie Domain-/Tiefenbegrenzung ab.
 
 Validierung: 72 Backend-Tests und Maven-Paket erfolgreich; Frontend-Produktionsbuild und ESLint erfolgreich. Der zusätzliche lesende Live-Crawl erreichte die MTC-Homepage sowie die Party- und Live-Unterseiten und bestätigte den Navigations-/JavaScript-Befund. PostgreSQL-Tests liefen ausschließlich in einem separaten kurzlebigen Container auf Port 55434. Keine produktiven Datenänderungen, kein Push oder Deployment.
+
+## 24.14 Live Music Hall und Response-Größenlimit
+
+Die am 05.11.2026 öffentlich abgerufene Live-Music-Hall-Seite `/parties` enthält elf Eventkarten und etwa 962 KB HTML; `/veranstaltungen` enthält 18 Konzerteinträge und etwa 1,05 MB HTML. Der bestehende Wix-Parser erkennt diese Karten bereits. Das frühere 1.000.000-Byte-Limit blockierte jedoch die Konzertseite; bei unbekannter Content-Length wurden Größe und Lesezeit gemeinsam als `RESPONSE_LIMIT` gemeldet.
+
+Der Standard beträgt nun **2 MiB**, konfigurierbar über `DISCOVERY_MAX_RESPONSE_BYTES` zwischen 64 KiB und einer nicht überschreitbaren Hardcap von 4 MiB. Content-Length und tatsächlich gelesene Bytes werden beide begrenzt. Ein fehlender oder falscher Längenheader umgeht das Limit nicht. Zu große Antworten ergeben immer `RESPONSE_TOO_LARGE`; überschrittene Lese-/Socket-Zeiten ergeben `FETCH_TIMEOUT`. Komprimierte Antworten bleiben ausgeschlossen, nicht unterstützte Content-Types werden vor dem Lesen des Bodys abgewiesen. Domain-/DNS-/robots-Regeln, Seitenanzahl, Rate und Zeitbudgets bleiben unverändert.
+
+Die elf Party- und 18 Konzerteinträge sind Extraktionszahlen, keine bestätigten Genre-Treffer oder Kalenderimporte. Eine ältere lokale Backend-/Frontend-Instanz kann weiterhin die ursprünglichen Meldungen anzeigen; nach Änderungen muss der aktive Entwicklungsserver den aktuellen Code laden. Die Konfiguration ist in Compose und `.env.example` durchgereicht, ohne damit ein Deployment auszuführen.
+
+Lokale Regressionen prüfen eine Antwort knapp oberhalb des früheren Limits, die exakte Grenze und deren Überschreitung um ein Byte, einen endlosen Stream ohne Längenangabe, separate Timeout-Diagnose und die Konfigurations-Hardcap. Die Live-Seiten sind keine automatisierte Testabhängigkeit.
+
+Validierung: 77 Backend-Tests, Maven-Paket, Frontend-Produktionsbuild, ESLint und Compose-Konfigurationsprüfung erfolgreich. Zusätzliche lesende Live-Abrufe über den echten `EventPageFetcher` bestätigten für beide Live-Music-Hall-Seiten erlaubte robots-Regeln und `EVENTS_FOUND` mit elf beziehungsweise 18 Einträgen. Testdaten lagen ausschließlich in der kurzlebigen PostgreSQL-Instanz auf Port 55434; keine produktiven Datenänderungen, kein Push oder Deployment.

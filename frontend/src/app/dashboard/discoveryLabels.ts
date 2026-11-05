@@ -10,6 +10,7 @@ const labels: Record<string, string> = {
   SCAN_FAILED: "Abruf fehlgeschlagen",
   PARTIAL_FAILURE: "Einzelne Quellen fehlgeschlagen",
   REDIRECT_REQUIRES_REVIEW: "Weiterleitung – endgültige URL hinterlegen",
+  FETCH_TIMEOUT: "Zeitlimit beim Abruf überschritten",
   RESPONSE_TOO_LARGE: "Antwort überschreitet Größenlimit",
   RESPONSE_LIMIT: "Abruflimit erreicht",
   UNSUPPORTED_ENCODING: "Komprimierte Antwort nicht unterstützt",

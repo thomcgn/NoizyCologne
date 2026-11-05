@@ -15,7 +15,16 @@ import java.util.*;
 
 @Component
 public class EventPageFetcher {
-    public static final int MAX_BYTES = 1_000_000;
+    public static final int DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
+    public static final int HARD_MAX_BYTES = 4 * 1024 * 1024;
+    private final int maxBytes;
+    public EventPageFetcher() { this(DEFAULT_MAX_BYTES); }
+    @org.springframework.beans.factory.annotation.Autowired
+    public EventPageFetcher(@org.springframework.beans.factory.annotation.Value("${noizy.discovery.max-response-bytes:2097152}") int maxBytes) {
+        if (maxBytes < 64 * 1024 || maxBytes > HARD_MAX_BYTES)
+            throw new IllegalArgumentException("Discovery-Antwortlimit muss zwischen 64 KiB und 4 MiB liegen");
+        this.maxBytes = maxBytes;
+    }
     public record Page(URI url, String body, String contentType) { }
     public static class FetchFailure extends IOException {
         public final String status;
@@ -47,21 +56,29 @@ public class EventPageFetcher {
                 if (code != 200 || response.getEntity() == null) throw new FetchFailure("SCAN_FAILED");
                 var entity = response.getEntity();
                 String type = Objects.toString(entity.getContentType(), "");
-                if (response.containsHeader("Content-Encoding")) throw new FetchFailure("UNSUPPORTED_ENCODING");
-                if (entity.getContentLength() > MAX_BYTES) throw new FetchFailure("RESPONSE_TOO_LARGE");
-                long deadline = System.nanoTime() + 10_000_000_000L;
-                var out = new java.io.ByteArrayOutputStream();
-                try (var in = entity.getContent()) {
-                    byte[] buffer = new byte[8192]; int n;
-                    while ((n = in.read(buffer)) != -1) {
-                        if (out.size() + n > MAX_BYTES || System.nanoTime() > deadline) throw new FetchFailure("RESPONSE_LIMIT");
-                        out.write(buffer, 0, n);
-                    }
-                }
                 if (!(type.contains("text/") || type.contains("json") || type.contains("calendar"))) throw new FetchFailure("UNSUPPORTED_CONTENT");
-                return new Page(url, out.toString(StandardCharsets.UTF_8), type);
+                if (response.containsHeader("Content-Encoding")) throw new FetchFailure("UNSUPPORTED_ENCODING");
+                if (entity.getContentLength() > maxBytes) throw new FetchFailure("RESPONSE_TOO_LARGE");
+                byte[] body;
+                try (var in = entity.getContent()) {
+                    body = readBody(in, System.nanoTime() + 10_000_000_000L);
+                }
+                return new Page(url, new String(body, StandardCharsets.UTF_8), type);
             });
+        } catch (java.net.SocketTimeoutException e) {
+            throw new FetchFailure("FETCH_TIMEOUT");
         }
+    }
+    byte[] readBody(java.io.InputStream in, long deadline) throws IOException {
+        var out = new java.io.ByteArrayOutputStream();
+        byte[] buffer = new byte[8192]; int n;
+        while ((n = in.read(buffer)) != -1) {
+            // Enforce the actual received size even if Content-Length is absent or incorrect.
+            if (out.size() + n > maxBytes) throw new FetchFailure("RESPONSE_TOO_LARGE");
+            if (System.nanoTime() > deadline) throw new FetchFailure("FETCH_TIMEOUT");
+            out.write(buffer, 0, n);
+        }
+        return out.toByteArray();
     }
     public boolean robotsAllowed(URI url, Map<String, String> cache) throws IOException {
         String origin = "https://" + url.getHost();
