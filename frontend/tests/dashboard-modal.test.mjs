@@ -504,3 +504,26 @@ test('manual cancellation uses central endpoint and the separate graphic draft n
   assert.deepEqual(catalogue.entries, [entry]);
   key('Escape');
 });
+
+test('editorial monitoring warnings preserve multiline captions and deliberately empty mentions across calendar refreshes', async () => {
+  const saved = [];
+  const persisted = { id: 'draft', calendarEntryId: 'entry', caption: 'Mein eigener Text\nBeginn: bleibt redaktionell', hashtags: '#original', mentionActorIds: [], genres: ['Emo'], status: 'DRAFT', musicTrackId: null, approvalNeedsReview: true, publicationBlockers: ['RESCHEDULE_DETECTED: Datum prüfen'] };
+  catalogue = { parties: [{ ...party, residentDjIds: ['actor'], djMentionDefault: 'residents' }], venues: [venue], actors: [actor], entries: [{ ...entry, mentionDjIds: ['actor'] }], entriesLoading: false, entriesError: null, reloadEntries: async () => {}, drafts: [persisted], draftsLoading: false, draftsError: null, reloadDrafts: async () => {}, musicTracks: [], musicTracksLoading: false, musicTracksError: null, reloadMusicTracks: async () => {}, updateDraft: async value => { saved.push(value); return value; } };
+  globalThis.fetch = async () => jsonResponse([genre]);
+  const Page = loadSource(new URL('../src/app/dashboard/redaktion/page.tsx', import.meta.url)).default;
+  await act(async () => { mount(h(Page)); });
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+  const caption = [...document.querySelectorAll('label')].find(label => label.querySelector('span')?.textContent === 'Caption').querySelector('textarea');
+  assert.equal(caption.value, persisted.caption);
+  const mention = [...document.querySelectorAll('label')].find(label => label.textContent.includes('Test DJ')).querySelector('input');
+  assert.equal(mention.checked, false, 'Explicitly cleared mentions must not be repopulated from party defaults');
+  assert.match(document.body.textContent, /Originalpost gesperrt/);
+  catalogue = { ...catalogue, entries: [{ ...entry, date: '2027-01-03', mentionDjIds: ['actor'] }] };
+  await act(async () => { root.render(h(StrictMode, null, h(Page))); });
+  assert.equal(caption.value, persisted.caption, 'A calendar refresh must never regenerate a saved caption');
+  type(caption, ' redaktionell ergänzt');
+  await act(async () => { button('Entwurf speichern').click(); });
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].caption, persisted.caption + ' redaktionell ergänzt');
+  assert.deepEqual(saved[0].mentionActorIds, []);
+});

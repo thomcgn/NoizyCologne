@@ -172,7 +172,7 @@ public class DiscoveryScheduler {
                     if (official(venue,found.url().toString())) checks.add(new Checked(sourceId,found.extraction().events(),found.extraction().complete()));
                     boolean approved=Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT approved FROM discovery_sources WHERE id=?",Boolean.class,sourceId));
                     for (var event : found.extraction().events()) {
-                        if(changesOnly && !targetKeys.contains(EventChangeMonitor.identity(event)) && targets.stream().noneMatch(target -> Objects.equals(EventChangeMonitor.date(event),target.get("event_date") instanceof java.sql.Date day ? day.toLocalDate() : target.get("event_date")))) continue;
+                        if(changesOnly && !targetKeys.contains(EventChangeMonitor.identity(event)) && targets.stream().noneMatch(target -> EventMatcher.nameMatches(event.title(),(String)target.get("title")) || EventMatcher.nameMatches((String)target.get("title"),event.title()) || Objects.equals(EventChangeMonitor.date(event),target.get("event_date") instanceof java.sql.Date day ? day.toLocalDate() : target.get("event_date")))) continue;
                         if (++count>300) break; pending.add(new Pending(sourceId,event,approved,official(venue,found.url().toString()))); }
                 }
             } catch (java.io.IOException e) {

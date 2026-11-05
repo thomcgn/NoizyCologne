@@ -194,4 +194,50 @@ class EventChangeMonitoringIntegrationTests {
         assertThat(store.jdbc().queryForObject("SELECT count(*) FROM event_changes WHERE venue_id=?",Long.class,venue.getId())).isZero();
     }
 
+    @Test void resolvedSourceConflictStaysClosedAndManualCalendarCorrectionIsNeverOverwritten() throws Exception {
+        scan(event(party.getName(),day,""));String entry=imported();
+        var changed=new EventExtractor.Event("uid-"+venue.getId(),party.getName(),root+"events/stable",List.of(day+"T22:00:00"),"Offizielle Partyankündigung","",venue.getName());
+        scan(changed);var change=change("EVENT_CHANGED");
+        changes.decide((String)change.get("id"),decision(change,"REJECT",null));
+        calendar.updateEntry(entry,new CalendarEntryRequest(day.plusDays(3).toString(),venue.getId(),"event","Manuell korrigiert",party.getId(),"21:00",null,Set.of()));
+        scan(changed);scan(changed);
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM event_changes WHERE venue_id=?",Long.class,venue.getId())).isEqualTo(1L);
+        var rejected=store.jdbc().queryForMap("SELECT * FROM event_changes WHERE id=?",change.get("id"));
+        assertThat(rejected.get("state")).isEqualTo("REJECT");assertThat(rejected.get("blocks_publication")).isEqualTo(false);
+        assertThatThrownBy(() -> changes.decide((String)rejected.get("id"),decision(rejected,"UPDATE_CALENDAR",null))).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        assertThat(store.jdbc().queryForObject("SELECT event_date FROM calendar_entries WHERE id=?",LocalDate.class,entry)).isEqualTo(day.plusDays(3));
+        assertThat(store.jdbc().queryForObject("SELECT notes FROM calendar_entries WHERE id=?",String.class,entry)).isEqualTo("Manuell korrigiert");
+        scan(new EventExtractor.Event("uid-"+venue.getId(),party.getName(),root+"events/stable",List.of(day+"T20:00:00"),"Offizielle Partyankündigung","",venue.getName()));
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM event_changes WHERE venue_id=?",Long.class,venue.getId())).isEqualTo(2L);
+        assertThat(store.jdbc().queryForObject("SELECT state FROM event_changes WHERE id=?",String.class,rejected.get("id"))).isEqualTo("REJECT");
+        assertThat(store.jdbc().queryForObject("SELECT event_date FROM calendar_entries WHERE id=?",LocalDate.class,entry)).isEqualTo(day.plusDays(3));
+    }
+
+    @Test void missingExternalIdentityDoesNotTurnEditionIntoReplacementOrDateHintIntoCertainMove() throws Exception {
+        var original=new EventExtractor.Event("",party.getName(),root,List.of(day+"T23:00:00"),"Emo Party","",venue.getName());
+        scan(original);String entry=imported();
+        var edition=new EventExtractor.Event("",party.getName()+" Halloween Special",root,List.of(day+"T23:00:00"),"Emo Party","",venue.getName());
+        scan(edition);
+        assertThat(change("EVENT_CHANGED").get("calendar_entry_id")).isEqualTo(entry);
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates WHERE venue_id=?",Long.class,venue.getId())).isEqualTo(1L);
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM event_changes WHERE venue_id=? AND kind='POSSIBLE_REPLACEMENT'",Long.class,venue.getId())).isZero();
+        scan(new EventExtractor.Event("",edition.title(),root,List.of(day.plusDays(1)+"T23:00:00"),"Emo Party","",venue.getName()));
+        assertThat(change("CONFLICTING_SOURCES").get("calendar_entry_id")).isEqualTo(entry);
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM event_changes WHERE venue_id=? AND kind='RESCHEDULE_DETECTED'",Long.class,venue.getId())).isZero();
+        assertThat(store.jdbc().queryForObject("SELECT event_date FROM calendar_entries WHERE id=?",LocalDate.class,entry)).isEqualTo(day);
+    }
+
+    @Test void externalObservationsAreRetainedWithoutReplacingOfficialConfirmation() throws Exception {
+        var original=event(party.getName(),day,"");scan(original);String entry=imported();
+        String candidate=store.jdbc().queryForObject("SELECT id FROM discovery_candidates WHERE calendar_entry_id=?",String.class,entry);
+        String confirmed=store.jdbc().queryForObject("SELECT monitor_fingerprint FROM discovery_candidates WHERE id=?",String.class,candidate);
+        String source=store.source(venue.getId(),"https://external.example/event","EXTERNAL",true);
+        var changed=event(party.getName(),day.plusDays(1),"EVENT_CANCELLED");
+        monitor.batch(venue,List.of(new EventChangeMonitor.Observation(source,changed,false)),"external-observation");
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM discovery_observations WHERE candidate_id=? AND source_id=?",Long.class,candidate,source)).isEqualTo(1L);
+        assertThat(store.jdbc().queryForObject("SELECT monitor_fingerprint FROM discovery_candidates WHERE id=?",String.class,candidate)).isEqualTo(confirmed);
+        assertThat(change("CONFLICTING_SOURCES").get("calendar_entry_id")).isEqualTo(entry);
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM event_cancellations WHERE calendar_entry_id=?",Long.class,entry)).isZero();
+    }
+
 }

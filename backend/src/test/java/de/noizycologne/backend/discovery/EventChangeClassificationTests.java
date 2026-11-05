@@ -47,4 +47,22 @@ class EventChangeClassificationTests {
         assertThat(untrusted.events().getFirst().identity()).isEqualTo("https://club.example/one");
     }
 
+    private EventExtractor.Event ics(String name) throws java.io.IOException {
+        try(var input=getClass().getResourceAsStream("/discovery/"+name)) {
+            if(input==null) throw new IllegalStateException("Missing local ICS fixture: "+name);
+            var extraction=new EventExtractor().extract(new EventPageFetcher.Page(URI.create("https://club.example/calendar.ics"),new String(input.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8),"text/calendar"),EventExtractor.Profile.defaults());
+            assertThat(extraction.complete()).isTrue();
+            return extraction.events().getFirst();
+        }
+    }
+    @Test void realIcsUidIdentifiesFridayToSaturdayMoveAndEditionIsOnlyATitleChange() throws java.io.IOException {
+        var original=ics("monitor-original.ics");var moved=ics("monitor-moved.ics");var edition=ics("monitor-edition.ics");
+        assertThat(java.time.LocalDateTime.parse(original.starts().getFirst()).getDayOfWeek()).isEqualTo(java.time.DayOfWeek.FRIDAY);
+        assertThat(java.time.LocalDateTime.parse(moved.starts().getFirst()).getDayOfWeek()).isEqualTo(java.time.DayOfWeek.SATURDAY);
+        assertThat(original.identity()).isEqualTo("stable-party-occurrence@club.example");
+        assertThat(EventChangeMonitor.identity(original)).isEqualTo(EventChangeMonitor.identity(moved));
+        assertThat(EventChangeMonitor.classify(original,moved,false)).isEqualTo("RESCHEDULE_DETECTED");
+        assertThat(EventChangeMonitor.classify(original,edition,false)).isEqualTo("EVENT_CHANGED");
+    }
+
 }

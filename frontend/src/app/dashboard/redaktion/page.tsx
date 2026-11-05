@@ -347,7 +347,7 @@ export default function RedaktionPage() {
   const configuredMentionIds = selectedEntry && selectedEntry.mentionDjIds.length > 0
     ? selectedEntry.mentionDjIds
     : partyMentionDefaults;
-  const initialMentionIds = persistedDraft && persistedDraft.mentionActorIds.length > 0
+  const initialMentionIds = persistedDraft !== null
     ? persistedDraft.mentionActorIds
     : configuredMentionIds;
   const eventFlyer = selectedEntry?.eventFlyer ?? null;
@@ -371,9 +371,7 @@ export default function RedaktionPage() {
 
   const defaultDraft: DraftState = selectedEntry && selectedParty
     ? {
-        caption: persistedCaptionIsCurrent
-          ? persistedDraft.caption
-          : generatedCaption,
+        caption: persistedDraft?.caption ?? generatedCaption,
         hashtags: persistedDraft?.hashtags ?? "",
         mentionIds: initialMentionIds,
         genres: persistedDraft?.genres ?? selectedParty.standardGenres,
@@ -418,7 +416,7 @@ export default function RedaktionPage() {
       ? hoveredEntry.mentionDjIds
       : hoveredParty?.djMentionDefault === "residents" ? hoveredParty.residentDjIds : []);
   const hoveredCaption = hoveredEntry && hoveredVenue && hoveredParty
-    ? hoveredDraft?.caption || buildCaption(
+    ? hoveredDraft?.caption ?? buildCaption(
         hoveredEntry,
         hoveredVenue,
         actors,
@@ -982,6 +980,7 @@ export default function RedaktionPage() {
               <p className="mt-2 text-sm leading-6 text-neutral-400">
                 Änderungen werden erst mit „Entwurf speichern“ dauerhaft in PostgreSQL gespeichert.
               </p>
+              {persistedDraft && !persistedCaptionIsCurrent && <p className="mt-3 text-sm text-amber-300">Die gespeicherte Caption bleibt unverändert. Datum, Format, Mentions und Eintritt bitte redaktionell prüfen.</p>}
               <label className="mt-5 block">
                 <span className="mb-2 block text-sm text-neutral-300">Redaktionsstatus</span>
                 <select

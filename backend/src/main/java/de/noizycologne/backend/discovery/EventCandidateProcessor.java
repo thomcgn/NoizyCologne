@@ -40,7 +40,7 @@ public class EventCandidateProcessor {
         // The same event can be exposed as JSON-LD, a text list and a detail URL.
         if (previous.isEmpty() && date!=null) {
             var sameOccurrence=store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE venue_id=? AND event_date=?",venue.getId(),date)
-                .stream().filter(c -> EventNormalizer.text((String)c.get("title")).equals(EventNormalizer.text(event.title()))).toList();
+                .stream().filter(c -> (EventMatcher.nameMatches(event.title(),(String)c.get("title")) || EventMatcher.nameMatches((String)c.get("title"),event.title()))).toList();
             if (!sameOccurrence.isEmpty()) previous=List.of(sameOccurrence.stream().min(
                 Comparator.<Map<String,Object>,Integer>comparing(c -> "AUTOMATIC".equals(c.get("decision_origin")) ? 1 : 0)
                     .thenComparing(c -> (String)c.get("id"))).orElseThrow());

@@ -41,7 +41,7 @@ public class EventChangeMonitor {
         if(keys.contains(key)) return true;
         // No title-only matching across dates: repetition and a move cannot be distinguished safely.
         return Objects.equals(date(old),date(event)) && date(old)!=null
-            && EventNormalizer.text(old.title()).equals(EventNormalizer.text(event.title()));
+            && (EventMatcher.nameMatches(event.title(),old.title()) || EventMatcher.nameMatches(old.title(),event.title()));
     }
     @Transactional
     public void batch(Venue venue,List<@NonNull Observation> observations,String operation) { batch(venue,observations,operation,false); }
@@ -91,6 +91,7 @@ public class EventChangeMonitor {
             for (var found:matching) {
                 var event=found.event();
                 if (!found.official()) {
+                    observation((String)candidate.get("id"),found.sourceId(),event,operation);
                     if (!fingerprint(old).equals(fingerprint(event))) alert(candidate,venue,"CONFLICTING_SOURCES",old,event,sourceUrl(found.sourceId()),"Abweichende nicht-offizielle Quelle; Bestätigung erforderlich");
                     continue;
                 }
@@ -101,7 +102,12 @@ public class EventChangeMonitor {
             }
             if (matching.stream().anyMatch(Observation::official)) continue;
             for (var found:observations) {
-                if (!found.official() || PartyOnlyPolicy.concert(found.event()) || date(old)==null || !Objects.equals(date(old),date(found.event()))) continue;
+                if (!found.official() || PartyOnlyPolicy.concert(found.event()) || date(old)==null || date(found.event())==null) continue;
+                if(!Objects.equals(date(old),date(found.event()))) {
+                    if(EventMatcher.nameMatches(found.event().title(),old.title()) || EventMatcher.nameMatches(old.title(),found.event().title()))
+                        alert(candidate,venue,"CONFLICTING_SOURCES",old,found.event(),sourceUrl(found.sourceId()),"Ohne stabile externe Identität anderes Datum: Wiederholung oder Verschiebung redaktionell prüfen");
+                    continue;
+                }
                 if (!EventNormalizer.text(old.title()).equals(EventNormalizer.text(found.event().title())))
                     alert(candidate,venue,"POSSIBLE_REPLACEMENT",old,found.event(),sourceUrl(found.sourceId()),"Bisheriges Event nicht bestätigt; andere Party an derselben Location und demselben Tag. Mehrere Veranstaltungen sind möglich.");
             }
@@ -126,14 +132,15 @@ public class EventChangeMonitor {
         if (!Objects.equals(date(old),date(event)) && date(old)!=null && date(event)!=null) return "RESCHEDULE_DETECTED";
         if (event.state().contains("CANCELLATION_HINT")) return "CANCELLATION_UNCONFIRMED";
         if (event.state().contains("UNCONFIRMED")) return "CONFLICTING_SOURCES";
-        if (!EventNormalizer.text(old.title()).equals(EventNormalizer.text(event.title())) && Objects.equals(date(old),date(event))) return "POSSIBLE_REPLACEMENT";
+        if (!EventNormalizer.text(old.title()).equals(EventNormalizer.text(event.title())) && Objects.equals(date(old),date(event))
+            && !EventMatcher.nameMatches(event.title(),old.title()) && !EventMatcher.nameMatches(old.title(),event.title())) return "POSSIBLE_REPLACEMENT";
         if (!fingerprint(old).equals(fingerprint(event))) return "EVENT_CHANGED";
         return null;
     }
     @Transactional
     public void record(String candidate,String source,EventExtractor.Event event,String operation) {
-        if(!Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM discovery_sources WHERE id=? AND source_type='OFFICIAL')",Boolean.class,source))) return;
         observation(candidate,source,event,operation);
+        if(!Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM discovery_sources WHERE id=? AND source_type='OFFICIAL')",Boolean.class,source))) return;
         store.jdbc().update("UPDATE discovery_candidates SET last_confirmed_at=now(),last_changed_at=CASE WHEN monitor_fingerprint IS DISTINCT FROM ? THEN now() ELSE last_changed_at END,monitored_event=?,monitor_fingerprint=? WHERE id=?",fingerprint(event),evaluator.raw(event),fingerprint(event),candidate);
         store.jdbc().update("INSERT INTO discovery_source_checks(candidate_id,source_id,consecutive_missing,last_operation) VALUES (?,?,0,?) ON CONFLICT(candidate_id,source_id) DO UPDATE SET consecutive_missing=0,last_operation=excluded.last_operation",candidate,source,operation);
     }
