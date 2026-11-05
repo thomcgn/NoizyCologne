@@ -11,8 +11,15 @@ public class VenueSourceDiscoveryService {
     private final EventPageFetcher fetcher;
     private final EventExtractor extractor;
     private final DiscoveryGenreFilter genres;
+    private final de.noizycologne.backend.party.PartySeriesRepository parties;
+    private final DiscoveryStore store;
     public VenueSourceDiscoveryService(EventPageFetcher fetcher, EventExtractor extractor, DiscoveryGenreFilter genres) {
-        this.fetcher = fetcher; this.extractor = extractor; this.genres = genres;
+        this(fetcher,extractor,genres,null,null);
+    }
+    @org.springframework.beans.factory.annotation.Autowired
+    public VenueSourceDiscoveryService(EventPageFetcher fetcher,EventExtractor extractor,DiscoveryGenreFilter genres,
+            de.noizycologne.backend.party.PartySeriesRepository parties,DiscoveryStore store) {
+        this.fetcher=fetcher;this.extractor=extractor;this.genres=genres;this.parties=parties;this.store=store;
     }
     public record Found(URI url, EventExtractor.Extraction extraction) { }
     /** Calendar navigation before details, one host, depth <= 2, at most 8 pages and 200 inspected links/page. */
@@ -23,6 +30,9 @@ public class VenueSourceDiscoveryService {
         Set<URI> seen = new HashSet<>(); Map<String, String> robots = new HashMap<>();
         List<Found> found = new ArrayList<>();
         Set<String> genreTerms = genres.terms();
+        List<String> knownNames=new ArrayList<>();
+        if (parties!=null) parties.findAll().forEach(p -> knownNames.add(p.getName()));
+        if (store!=null) store.aliases().values().forEach(knownNames::addAll);
         Set<URI> eligibleDetails = new HashSet<>();
         while (!queue.isEmpty() && seen.size() < 8) {
             // Find programme sections before spending the page budget on event details.
@@ -41,7 +51,9 @@ public class VenueSourceDiscoveryService {
                     try {
                         URI detail = SafeUrls.parse(step.url().resolve(event.url()).toString().split("#", 2)[0]);
                         eventLinks.add(detail);
-                        if (!DiscoveryGenreFilter.matches(event, genreTerms) || detail.equals(step.url())
+                        boolean known=knownNames.stream().anyMatch(name -> EventMatcher.nameMatches(event.title(),name));
+                        boolean partyLead=EventNormalizer.text(event.title()).matches(".*\\b([\\p{L}]*party|partys|parties|clubnacht|disco|dancefloor|dj|djs)\\b.*");
+                        if (PartyOnlyPolicy.concert(event) || (!known && (EventMatcher.unrelated(event) || (!partyLead && !DiscoveryGenreFilter.matches(event, genreTerms)))) || detail.equals(step.url())
                                 || !detail.getHost().equalsIgnoreCase(root.getHost())) continue;
                         eligibleDetails.add(detail);
                         if (!seen.contains(detail) && queue.size() < 16)

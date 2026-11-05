@@ -331,3 +331,47 @@ test('calendar information → editor → Escape restores the original page trig
   assert.equal(document.querySelector('[role="dialog"]'), null);
   assert.equal(document.activeElement, trigger);
 });
+
+test('discovery reset shows preview and requires a second explicit manual-rejection confirmation', async () => {
+  const calls = [];
+  const started = [];
+  const preview = { token: 'a'.repeat(64), affectedCount: 3, preservedManual: 1, missingRaw: 2, enabledLocations: 1,
+    items: [{ id: 'candidate', title: 'Unknown Party', venue: 'Venue', oldStatus: 'IGNORED', newStatus: 'NEEDS_REVIEW', classification: 'POSSIBLE_MATCH', reason: 'Genre-Match: Emo' }] };
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, body: JSON.parse(options.body) });
+    return new Response(JSON.stringify(url.endsWith('/preview') ? preview : { operationId: 'operation' }));
+  };
+  const Dialog = loadSource(new URL('../src/app/dashboard/vorschlaege/DiscoveryResetDialog.tsx', import.meta.url)).default;
+  await act(async () => { mount(h(Dialog, { initialMode: 'IGNORED', onClose() {}, onStarted: id => started.push(id) })); });
+  assert.ok(document.querySelector('[aria-label="Reset-Vorschau"]').textContent.includes('3 Kandidaten'));
+  const checkbox = document.querySelector('input[type="checkbox"]');
+  assert.equal(checkbox.checked, false);
+  checkbox.focus();
+  await act(async () => { checkbox.click(); });
+  assert.equal(document.activeElement, checkbox);
+  assert.equal(button('Neubewertung bestätigen').disabled, true);
+  click(document.querySelectorAll('input[type="checkbox"]')[1]);
+  assert.equal(button('Neubewertung bestätigen').disabled, false);
+  await act(async () => { button('Neubewertung bestätigen').click(); });
+  const request = calls.find(call => call.url.endsWith('/reset'));
+  assert.equal(request.body.includeManualRejected, true);
+  assert.equal(request.body.confirmation, 'MANUELL ABGELEHNTE ERNEUT PRÜFEN');
+  assert.equal(request.body.previewToken, preview.token);
+  assert.equal(request.body.mode, 'IGNORED');
+  assert.deepEqual(started, ['operation']);
+});
+
+test('discovery reset invalidates the preview when switching to a complete rescan', async () => {
+  const requests = [];
+  globalThis.fetch = async (url, options) => {
+    const body = JSON.parse(options.body);
+    requests.push(body);
+    return new Response(JSON.stringify({ token: body.mode, affectedCount: 0, preservedManual: 0, missingRaw: 0, enabledLocations: 2, items: [] }));
+  };
+  const Dialog = loadSource(new URL('../src/app/dashboard/vorschlaege/DiscoveryResetDialog.tsx', import.meta.url)).default;
+  await act(async () => { mount(h(Dialog, { initialMode: 'IGNORED', onClose() {}, onStarted() {} })); });
+  await act(async () => { document.querySelector('input[value="RESCAN"]').click(); });
+  assert.ok(requests.some(request => request.mode === 'RESCAN'));
+  assert.ok(document.querySelector('[aria-label="Reset-Vorschau"]').textContent.includes('2 aktivierte Locations'));
+  assert.equal(document.querySelector('input[type="checkbox"]').checked, false);
+});

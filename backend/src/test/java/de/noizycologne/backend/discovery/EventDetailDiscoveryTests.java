@@ -84,4 +84,20 @@ class EventDetailDiscoveryTests {
         var event = new EventExtractor.Event("", "Party", "", List.of(), "Alt Rock mit DJs", "", "");
         assertThat(DiscoveryGenreFilter.matches(event, new DiscoveryGenreFilter(genreRepo, aliases).terms())).isTrue();
     }
+    @Test void knownNameOrAliasDoesNotNeedWebsiteGenreProofBeforeDetailFetch() throws Exception {
+        var repository=mock(de.noizycologne.backend.party.PartySeriesRepository.class);
+        var store=mock(DiscoveryStore.class);
+        var party=mock(de.noizycologne.backend.party.PartySeries.class);
+        when(party.getName()).thenReturn("Black Parade");
+        when(repository.findAll()).thenReturn(List.of(party));
+        when(store.aliases()).thenReturn(Map.of("known",List.of("Explicit Alias")));
+        when(genres.terms()).thenReturn(Set.of());when(fetcher.robotsAllowed(any(),any())).thenReturn(true);
+        page(root,"<article><h2>Explicit Alias</h2><a href='/nacht/123'>Details</a></article>");
+        page(detail,"<h1>Explicit Alias</h1><time datetime='2027-01-09'></time>");
+        var service=new VenueSourceDiscoveryService(fetcher,new EventExtractor(),genres,repository,store);
+        var found=service.discover(root.toString(),EventExtractor.Profile.defaults());
+        verify(fetcher).fetch(detail);
+        assertThat(found.getFirst().extraction().events().getFirst().starts()).containsExactly("2027-01-09");
+    }
+
 }

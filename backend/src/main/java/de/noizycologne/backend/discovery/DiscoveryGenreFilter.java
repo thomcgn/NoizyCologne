@@ -23,10 +23,18 @@ public class DiscoveryGenreFilter {
         return Set.copyOf(terms);
     }
     static boolean matches(EventExtractor.Event event, Collection<String> terms) {
-        if (PartyOnlyPolicy.concert(event)) return false;
+        return !matchingTerms(event,terms).isEmpty();
+    }
+    static List<String> matchingTerms(EventExtractor.Event event, Collection<String> terms) {
+        if (PartyOnlyPolicy.concert(event)) return List.of();
         String text = " " + EventNormalizer.text(event.title() + " " + event.evidence()) + " ";
-        return terms.stream().map(EventNormalizer::text).filter(t -> !t.isBlank())
-                .anyMatch(t -> text.contains(" " + t + " ") || text.contains(" " + t + "party ")
-                        || text.contains(" " + t + "partys ") || text.contains(" " + t + "parties "));
+        Map<String,String> normalized=new TreeMap<>();
+        terms.stream().sorted().filter(t -> !EventNormalizer.text(t).isBlank())
+            .forEach(t -> normalized.putIfAbsent(EventNormalizer.text(t),t));
+        return normalized.values().stream().filter(term -> {
+            String t=EventNormalizer.text(term);
+            return text.contains(" " + t + " ") || text.contains(" " + t + "party ")
+                    || text.contains(" " + t + "partys ") || text.contains(" " + t + "parties ");
+        }).distinct().sorted().toList();
     }
 }

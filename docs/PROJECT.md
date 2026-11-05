@@ -3317,13 +3317,13 @@ Priorität: JSON-LD → ICS → generische HTML-Listen → semantische Detailsei
 
 ## 24.5 Matching, Wiederholung und Änderungen
 
-Ein exakter, normalisierter Partyreihenname oder expliziter Alias muss **genau eine** bekannte Partyreihe treffen. Aliase können im Party-Modal gepflegt werden (`GET/PUT /api/v1/discovery/parties/{id}/aliases`). Ein Genre allein erzeugt keinen positiven Treffer: Für unbekannte Partyreihen sind sowohl ein ausdrücklicher Party-/DJ-/Clubnachtbeleg als auch ein aktives Kataloggenre nötig; das Ergebnis bleibt ein Vorschlag. Standardgenres gehören weiter zur vorhandenen Partyreihe und müssen nicht in Discovery dupliziert werden. Bestehende bekannte Partyreihennamen sind ein stärkerer Beleg als ein generisches Genre.
+Ein eindeutig normalisierter Partyreihenname oder expliziter Alias muss **genau eine** bekannte Partyreihe treffen; Satzzeichen, Großschreibung und ausdrücklich erkennbare Special-/Edition-Suffixe werden gemäß 24.16 berücksichtigt. Aliase können im Party-Modal gepflegt werden (`GET/PUT /api/v1/discovery/parties/{id}/aliases`). Aktive Kataloggenres einschließlich expliziter OCR-Aliasse können unbekannte Veranstaltungen als `POSSIBLE_MATCH` zur Prüfung vorschlagen; sie berechtigen niemals allein zur Übernahme. Fehlende Angaben ergeben `UNVERIFIED` statt einer automatischen Ablehnung. Die aktuellen versionierten Regeln und der Reset sind in 24.16 beschrieben. Standardgenres gehören weiter zur vorhandenen Partyreihe und müssen nicht in Discovery dupliziert werden. Bestehende bekannte Partyreihennamen sind ein stärkerer Beleg als ein generisches Genre.
 
 Automatischer Import verlangt außerdem eine gebundene Location, genau ein vollständiges Startdatum, keine abweichende Locationangabe, keine bekannte Absage/Verschiebung/Unbestätigtheit, eine freigegebene Quelle sowie einen konfliktfreien Kalender. Ein `endDate` nach Mitternacht erzeugt keinen zweiten Starttag. Datumswerte mit Offset werden in `Europe/Berlin` ausgewertet. Die Vorschlags-API serialisiert Kalendertage ausdrücklich als `YYYY-MM-DD`, ohne Timestamp-Verschiebung. Fehlende Uhrzeiten bleiben `NULL`; unterschiedliche Uhrzeitangaben werden nicht zu einer erfundenen Uhrzeit zusammengeführt. Unbekannte ICS-Zeitzonen werden zur Prüfung markiert.
 
 Vor der ersten Übernahme werden alle begrenzten Funde einer Location gesammelt; abweichende Starttage gleichnamiger Funde im selben Batch gehen konservativ gemeinsam zur Rückfrage. Auch reguläre Wiederholungstermine können dadurch eine manuelle Prüfung benötigen.
 
-Kandidatenschlüssel verwenden Quell-IDs/ICS-UIDs oder normalisierten Namen mit Startangaben; Fingerprints erkennen Änderungen. Unveränderte bekannte Funde werden nicht erneut übernommen. Explizit abgelehnte und manuell als Dublette markierte Kandidaten bleiben archiviert. Ein Fund mit bekanntem Namen und geändertem Datum wird vorsichtshalber geprüft: Das kann eine reguläre Wiederholung oder eine Verschiebung sein. Änderungen bereits importierter Funde ändern den Kalender nicht stillschweigend. Die Redaktion prüft sie im bestehenden Kalendereditor. Ein bestehender Termin derselben Party am selben Ort/Tag ist eine Dublette; andere Termine und Location-Sperren am selben Ort/Tag blockieren die Automatik.
+Kandidatenschlüssel verwenden Quell-IDs/ICS-UIDs oder normalisierten Namen mit Startangaben; Fingerprints erkennen Änderungen. Unveränderte bekannte Funde werden bei gleicher Matcher-Version nicht erneut übernommen. Explizit abgelehnte und manuell als Dublette markierte Kandidaten bleiben archiviert. Ein Fund mit bekanntem Namen und geändertem Datum wird vorsichtshalber geprüft: Das kann eine reguläre Wiederholung oder eine Verschiebung sein. Änderungen bereits importierter Funde ändern den Kalender nicht stillschweigend. Die Redaktion prüft sie im bestehenden Kalendereditor. Ein bestehender Termin derselben Party am selben Ort/Tag ist eine Dublette; andere Termine und Location-Sperren am selben Ort/Tag blockieren die Automatik.
 
 Alle Discovery-Importe, Kandidatenabgleiche und manuellen Prüfentscheidungen verwenden denselben PostgreSQL-Transaktionslock. Das schützt auch parallele manuelle Importe und mehrere Backend-Instanzen; normale manuelle Kalenderbearbeitungen gehören weiterhin zur bestehenden Kalender-API. Vor einem manuellen Import muss die Redaktion Partyreihe und bestätigtes Datum wählen. Es entsteht weder ein neues Party-Stammdatum noch eine neue Location.
 
@@ -3335,7 +3335,7 @@ Alle Discovery-Importe, Kandidatenabgleiche und manuellen Prüfentscheidungen ve
 | `NEEDS_INQUIRY` | Fehlender/widersprüchlicher Start oder Absage/Verschiebung/Unbestätigtheit |
 | `READY` | Automatikbedingungen erfüllt; interne Zwischenstufe vor Import |
 | `IMPORTED` | Im Kalender; Grund unterscheidet automatische und manuelle Übernahme |
-| `REJECTED` / `DUPLICATE` / `IGNORED` | Abgelehnt, Dublette oder kein ausreichender Relevanzbeleg |
+| `REJECTED` / `DUPLICATE` / `IGNORED` | Manuell abgelehnt, belegte Dublette oder explizit fachfremder Beleg; fehlende Angaben bleiben ungeklärt |
 
 Die Übersicht bietet Prüfung, Partyzuordnung, Datumsänderung, manuelle Übernahme, Ablehnung, Dublettenmarkierung, Quelllink, Quellenprofile und einen manuellen Suchlauf. Quellenbelege und Rückfragen sind einklappbar. Bereits übernommene Kalenderdaten werden über den Kalender geprüft.
 
@@ -3391,7 +3391,7 @@ Die robots.txt liegt als lokale Regression unter `blue-shell-robots.txt`. Die ge
 
 ## 24.11 Genreprüfung vor Event-Detailabrufen
 
-Die Quellensuche prüft jede erkannte Veranstaltung anhand ihres Titels und ihrer eigenen Übersichtsangaben gegen aktive Datenbank-Genres einschließlich Anzeigenamen und expliziter Aliase. Der Abgleich verwendet vollständige normalisierte Wörter, keine unscharfen Teilworttreffer. Ein positiver Genrebeleg erlaubt den Abruf des zugehörigen Detail-Links, auch bei URLs ohne `event`/`party` im Pfad. Dies gilt für „Quelle prüfen“ und die geplanten/manuellen Suchläufe gleichermaßen. Ohne Genrebeleg wird dieser zusätzliche Detailabruf ausgelassen; das Genre muss daher bereits in der Übersicht erkennbar sein. Ein positiver Genrebeleg allein berechtigt weiterhin nicht zum Kalenderimport.
+Die Quellensuche prüft jede erkannte Veranstaltung anhand ihres Titels und ihrer eigenen Übersichtsangaben gegen aktive Datenbank-Genres einschließlich Anzeigenamen und expliziter Aliase. Der Abgleich verwendet vollständige normalisierte Wörter, keine unscharfen Teilworttreffer. Ein positiver Genrebeleg erlaubt den Abruf des zugehörigen Detail-Links, auch bei URLs ohne `event`/`party` im Pfad. Dies gilt für „Quelle prüfen“ und die geplanten/manuellen Suchläufe gleichermaßen. Seit der Korrektur in 24.16 erlauben auch ein bekannter Partyreihenname/Alias oder ein ausdrücklicher Partyhinweis im Titel den begrenzten Detailabruf ohne Genrebeleg. Eindeutig fachfremde und Konzertfunde bleiben ausgeschlossen; fehlende Genres allein verhindern die Klärung einer erkennbaren Party nicht mehr. Ein positiver Genrebeleg allein berechtigt weiterhin nicht zum Kalenderimport.
 
 HTML-Eventkarten mit Titel und Link werden auch ohne Startdatum erkannt. JSON-LD-Links dürfen relativ sein. Für Detailabrufe bleiben HTTPS-/DNS-/SSRF-Schutz, exakter Host, robots.txt, acht Seiten pro Startquelle, Tiefe zwei und Queue-Limit 16 verbindlich. Erkannte Event-URLs werden aus der allgemeinen Navigationssuche ausgeschlossen, damit ein negatives Genreergebnis nicht durch ein `/events/...` im Link umgangen wird. Allgemeine Kalender-/Programmseiten dürfen weiterhin zum Finden von Veranstaltungen aufgerufen werden.
 
@@ -3446,12 +3446,78 @@ Validierung: 77 Backend-Tests, Maven-Paket, Frontend-Produktionsbuild, ESLint un
 
 Nutzerentscheidung vom 05.11.2026: Konzerte sind für das Projekt irrelevant und ausdrücklich unerwünscht. Diese Entscheidung ersetzt ältere Beschreibungen, in denen Konzerte als mögliche Zielinhalte genannt werden. Die zuvor dokumentierten Konzertextraktionszahlen waren technische Parserprüfungen, keine erwünschten Projektergebnisse.
 
-`PartyOnlyPolicy` prüft Konzertbelege vor Genre-/Partyreihen-Matching. Explizite Konzert-/Concert-Bezeichnungen, deutsche Konzert-Zusammensetzungen, Tournee- und Tribute-Show-Belege schließen einen Fund aus; auch gleichzeitig genannte DJs, Partybegriffe, passende Genres oder ein exakter Partyreihenname heben diesen Ausschluss nicht auf. Gemischte Konzert-/Partyfunde werden konservativ ausgeschlossen. Der allgemeine Schema.org-Typ `MusicEvent` allein ist kein Konzertbeleg, weil auch Partys diesen Typ verwenden.
+`PartyOnlyPolicy` prüft Konzertbelege vor Genre-/Partyreihen-Matching. Explizite Konzert-/Concert-Bezeichnungen, deutsche Konzert-Zusammensetzungen, Tournee- und Tribute-Show-Belege schließen einen Fund aus; auch gleichzeitig genannte DJs, Partybegriffe, passende Genres oder ein exakter Partyreihenname heben diesen Ausschluss nicht auf. Gemischte Konzert-/Partyfunde werden konservativ ausgeschlossen. Seit 24.16 gilt die präzise Ausnahme für eine eigenständig als Aftershowparty/Afterparty betitelte Party: Die bloße Erwähnung des vorherigen Konzerts in ihrer Beschreibung macht sie nicht selbst zum Konzert. Ein Konzertbegriff im eigenen Titel bleibt ein Ausschluss. Der allgemeine Schema.org-Typ `MusicEvent` allein ist kein Konzertbeleg, weil auch Partys diesen Typ verwenden.
 
 Eindeutige Konzert-Menüpunkte wie „KONZERTE“, „LIVE“ und `/live-shows` werden nicht weiterverfolgt. Als Konzertübersichten erkennbare direkt hinterlegte Seiten erhalten `EXCLUDED_CONCERTS` („Konzertquelle ausgeschlossen – nur Partys relevant“). Gemischte allgemeine Veranstaltungsübersichten bleiben zulässig; darin werden einzelne Konzertfunde vor Detailabrufen entfernt. Das gilt für HTML, JSON-LD und ICS. Eine reine Konzertquelle ist ein bewusst ausgeschlossener Inhalt und kein technischer Scanfehler.
 
-Konzertfunde erzeugen keine neuen Discovery-Vorschläge. Wird beim erneuten Abgleich ein bereits bekannter Konzertkandidat erkannt, wird er als `IGNORED` archiviert. Ein zusätzlicher serverseitiger Importcheck blockiert sowohl automatische als auch manuelle Discovery-Übernahmen anhand der gespeicherten Konzertbelege, auch nach manueller Änderung des Prüfstatus. Bestehende Kalenderdatensätze werden dadurch nicht automatisch gelöscht oder nachträglich verändert; es wurde keine produktive Datenbereinigung ausgeführt.
+Konzertfunde erzeugen keine neuen Discovery-Vorschläge. Wird beim erneuten Abgleich ein automatisch verwalteter Konzertkandidat erkannt, wird er als `IGNORED` archiviert. Manuell geprüfte Entscheidungen bleiben seit 24.16 geschützt; die serverseitige Importsperre für Konzerte gilt unabhängig davon weiter. Ein zusätzlicher serverseitiger Importcheck blockiert sowohl automatische als auch manuelle Discovery-Übernahmen anhand der gespeicherten Konzertbelege, auch nach manueller Änderung des Prüfstatus. Bestehende Kalenderdatensätze werden dadurch nicht automatisch gelöscht oder nachträglich verändert; es wurde keine produktive Datenbereinigung ausgeführt.
 
 Regressionen prüfen Konzertbelege trotz Genre/DJ/Partyname, reine und gemischte Übersichten, ICS, Party-`MusicEvent`, das Überspringen von Konzertnavigation und die Sperre manueller Übernahme eines alten Kandidaten.
 
 Validierung dieser Einschränkung: 82 Backend-Tests, Maven-Paket, Frontend-Produktionsbuild und ESLint erfolgreich. Datenbanktests ausschließlich in einem separaten kurzlebigen PostgreSQL-Container auf Port 55434; keine produktiven Daten geändert, kein Push oder Deployment.
+
+
+## 24.16 Discovery-Reset, Entscheidungsherkunft und Regelversion `party-rules-2`
+
+Die lokale Bestandsanalyse am **05.11.2026** erfolgte über eine PostgreSQL-Sitzung mit `default_transaction_read_only=on`. Die vorhandene Datenbank auf Port 5433 wurde weder migriert noch zurückgesetzt. Bestätigter Bestand: **94 automatisch ignorierte Kandidaten**, **0 manuell abgelehnte Kandidaten**, zwei weitere Vorschläge, **0 gespeicherte Partyreihen**, 42 aktive Genres und 65 Genre-Aliasse. Alle 94 ignorierten Zeilen stammten von Blue Shell und hatten denselben automatischen Sammelgrund. Der vollständige Befund und die Grenzen der Offline-Auswertung stehen in [DISCOVERY_DIAGNOSIS_2026-11-05.md](DISCOVERY_DIAGNOSIS_2026-11-05.md).
+
+Der neue Matcher bewertet dieselbe lesende Kopie als **8 `POSSIBLE_MATCH`, 78 `UNVERIFIED`, 8 `IGNORED`, 0 bestätigte bekannte Reihen**. Die acht möglichen Treffer umfassen sechs verschiedene Titel, nicht acht nachgewiesene Clubpartys. Unklare Konzert-/Partyart muss redaktionell geprüft werden; ein Genre-Match allein erzeugt keinen Kalendereintrag. Kein Reset dieser vorhandenen Daten wurde ausgeführt.
+
+### Status und Herkunft
+
+Der fachliche Matching-Befund `matching_class` ist vom bisherigen Bearbeitungsstatus getrennt:
+
+| Matching-Befund | Bedeutung | Bearbeitung |
+|---|---|---|
+| `MATCH` | Genau eine bekannte Partyreihe oder ein expliziter Alias erkannt | `READY` nur bei vollständigen, konfliktfreien Angaben und freigegebener Quelle; sonst Prüfung/Rückfrage |
+| `POSSIBLE_MATCH` | Unbekannte Reihe mit belegtem aktivem Kataloggenre/Alias | Vorschlag, niemals allein automatisch importieren |
+| `UNVERIFIED` | Genre-/Veranstaltungsinformationen fehlen oder die Zuordnung ist mehrdeutig | `NEEDS_INQUIRY`/`NEEDS_REVIEW`; kein automatischer Papierkorb |
+| `IGNORED` | Expliziter Konzert- oder fachfremder Beleg, etwa Poetry Slam, Comedy oder geschlossene Gesellschaft | Automatisch archivieren; Grund anzeigen |
+
+Bekannte Reihen müssen keine zusätzlichen Website-Genres beweisen. Ihre Standardgenres werden im Grund angezeigt. Namen werden Unicode-/Case-/Satzzeichen-normalisiert verglichen; gleichlautende kompakte Schreibweisen und ausdrücklich abgegrenzte Special-/Edition-/Volume-Suffixe sind zulässig. Beliebige Teilstrings und unscharfe Namensscores sind ausgeschlossen. Mehrere passende Reihen bleiben prüfbedürftig. Genrebegriffe stammen aus aktiven kanonischen Namen, Anzeigenamen und expliziten Genre-/OCR-Aliassen; Wortgrenzen und Kombinationen bleiben erhalten. Es gibt keine erfundenen Konfidenzprozente.
+
+`decision_origin` unterscheidet `AUTOMATIC` und `MANUAL`. Für historisch nicht sicher rekonstruierbare Prüfentscheidungen verwendet die additive Migration **V13** bewusst `LEGACY` und schützt diese wie manuelle Entscheidungen. Alte `REJECTED`- und ausdrücklich manuelle Gründe sind manuell, alte `IGNORED`-Entscheidungen nach dem bisherigen Code automatisch. Die zwei vorhandenen offenen Altvorschläge werden deshalb konservativ geschützt, statt eine unbewiesene Historie zu erfinden. Neue manuelle Prüfungen, Ablehnungen, Dublettenmarkierungen und Übernahmen werden explizit protokolliert. Ein erneuter Abruf darf technische Quellenbelege und den getrennten technischen Befund aktualisieren, ohne manuelle Status-, Party-, Datums- oder Rückfrageentscheidungen zu überschreiben. Neue Konzertbelege bleiben dadurch auch bei geschütztem manuellem Prüfstatus vor einem Import wirksam.
+
+Zusätzliche Felder: `automatic_reason`, `matcher_version`, `evaluated_at`, `previous_status`, `last_evaluation_id` und `raw_event`. Letzteres speichert die **extrahierten Eventfelder** mit Startliste, Status, Location und begrenztem Quellenbeleg, keine vollständige HTML-Archivkopie. Alte Zeilen haben keine vollständigen Event-Rohdaten. Ihre Rekonstruktion aus Titel/Datum/Beleg erhält `UNCONFIRMED`; verlorene Konflikt-/Statusangaben werden nicht als bestätigte Daten erfunden. Ein echter erneuter Abruf ist über Modus C möglich.
+
+### Bedienung und Reset-Umfänge
+
+Unter `/dashboard/vorschlaege`:
+
+- **Jetzt suchen:** Aktivierte Locations im bestehenden begrenzten Crawler erneut abrufen. Auch ein unveränderter Fund wird bei geänderter Matcher-Version neu geprüft.
+- **Neu bewerten:** Öffnet die Vorschau mit Modus B.
+- **Suchlauf zurücksetzen:** Öffnet dasselbe Bestätigungsmodal mit Modus A.
+
+| Modus | Verhalten |
+|---|---|
+| A / `IGNORED` | Automatische `IGNORED`-/`REJECTED`-Entscheidungen anhand gespeicherter Belege neu bewerten |
+| B / `ALL` | Alle nicht übernommenen, automatisch verwalteten Kandidaten erneut bewerten |
+| C / `RESCAN` | Zusätzlich alle aktivierten Location-Websites mit bisherigen Quellen-/Seiten-/Hostbudgets neu abrufen; bekannte Treffer aus alten Belegen erst nach erfolgreichem neuem Abruf automatisch übernehmen |
+
+Manuelle Prüfentscheidungen und unklare `LEGACY`-Entscheidungen bleiben standardmäßig unverändert. **„Auch manuell abgelehnte Kandidaten erneut zur Prüfung vorlegen“** ist standardmäßig aus und benötigt ein zweites ausdrückliches Bestätigungshäkchen; der Server verlangt dafür ebenfalls eine Bestätigungsangabe. Nur manuelle `REJECTED`-Zeilen werden dadurch geöffnet, keine anderen manuellen Entscheidungen. Diese Kandidaten bleiben `MANUAL` und gehen ausschließlich zu `NEEDS_REVIEW`, auch bei einem technischen `MATCH`. Bereits importierte Kandidaten und ihre Kalendereinträge werden durch die Neubewertung nicht geändert oder gelöscht.
+
+Die Vorschau zeigt Anzahl, geschützte Altentscheidungen, fehlende Event-Rohdaten sowie Party/Location, alten/neuen Status und Grund; maximal 500 Detailzeilen, aber die Anzahl und Verarbeitung gelten für den gesamten betroffenen Bestand. Modus C kann weitere neue Funde liefern, die vor dem Abruf noch nicht bekannt sind. Ein Vorschau-Hash wird vor der Anwendung erneut geprüft; geänderte Kandidaten/Regelergebnisse erfordern eine neue Vorschau.
+
+### Transaktionen, Idempotenz und Audit
+
+`DiscoveryResetService` übernimmt gespeicherte Neubewertungen in einer Transaktion unter dem mit Import/Redaktion geteilten Transaktionslock `73624602`. `DiscoveryWorkLock` reserviert den PostgreSQL-Sessionlock `73624601` **vor** der Jobannahme und hält ihn über den gesamten Scan/Reset. Damit sind Scheduler, manuelle Suche und Reset auch über mehrere Backend-Instanzen gegenseitig ausgeschlossen. Ein konkurrierender neuer Auftrag erhält HTTP 409.
+
+Jede Reset-Anforderung hat eine UUID und einen Hash ihrer Optionen. Ein Retry derselben Anforderung liefert denselben Vorgang; dieselbe UUID mit anderen Optionen wird abgelehnt. Ein erneuter eigenständiger Reset erzeugt keine zusätzlichen Kandidaten oder Kalendereinträge. `discovery_candidate_identities` erhält alternative Quellidentitäten. Titel/Ort/eindeutiger Tag verhindern zusätzliche Neuerfassungen desselben Vorkommens über Textliste, JSON-LD und Detailseite. Bereits vorhandene Mehrfachzeilen werden nicht pauschal gelöscht oder automatisch zusammengeführt; bei neuen Identitäten wird eine vorhandene, bevorzugt geschützte Zeile wiederverwendet.
+
+`discovery_operations` speichert Modus, Anforderungsoptionen einschließlich Bestätigung, Regelversion, Start/Ende, Status, Bericht und Zähler. `discovery_decisions` speichert Kandidat/Vorgang, vorherigen/neuen Bearbeitungsstatus und Matching-Befund, Ursprung, Grund, Regelversion und Bewertungszeit. Es wird keine historisch unbekannte Benutzeridentität erfunden. `COMPLETED`, `PARTIAL`, `FAILED` und nach einem Neustart erkannte `INTERRUPTED`-Vorgänge bleiben unterscheidbar. Location-Fehler beschädigen keine manuellen Entscheidungen; fehlgeschlagene Abrufe erlauben keine Übernahme aus alten Belegen. Gespeicherte Teilentscheidungen und Location-Diagnosen bleiben erkennbar.
+
+Alle Zähler stammen aus SQL-Abfragen beziehungsweise dem persistenten Entscheidungsprotokoll. Filter gelten serverseitig **vor** der 500-Zeilen-Begrenzung. „Neu bewertet“ basiert auf dem Reset-Audit, nicht bloß auf einem aktuellen Status. Die Zusammenfassung zählt eindeutige Kandidaten, neu entstandene `POSSIBLE_MATCH`-Befunde, weiterhin ignorierte Kandidaten, geschützte Entscheidungen, Status-/Befundwechsel und fehlerhafte Locations. Quellen und bisherige `discovery_runs` bleiben erhalten. Es gibt keine Reset-DELETEs und kein TRUNCATE.
+
+### API und Regressionen
+
+- `POST /api/v1/discovery/reset/preview`: `{mode, includeManualRejected}` → Vorschau und Token, ausschließlich lesend.
+- `POST /api/v1/discovery/reset`: Modus, Option, Bestätigung, Vorschautoken und Vorgangs-UUID → HTTP 202 mit `operationId`.
+- `GET /api/v1/discovery/operations/{id}`: persistentes Ergebnis/Fehlerstatus.
+- Die Übersicht liefert Metriken, Vorgänge, Diagnosen und die serverseitig gefilterten Kandidaten.
+
+Lokale Fixtures prüfen fehlende Genres, spezifische Genre-Kombinationen, bekannte Reihen ohne Website-Genre, Satzzeichen/Schreibweisen, Aliasse, Specials, Datumskonflikte, fachfremde Events und eigenständige Aftershowpartys. PostgreSQL-Regressionen prüfen Schutz und explizites Wiederöffnen manueller Ablehnungen, Schutz anderer manueller/unklarer Altentscheidungen, unveränderte Kalendertermine, wiederholte Resets/Request-Retries, bestehende Mehrfacherfassungen, veraltete Vorschauen, tatsächliche API-Zähler/Filter, parallele Jobs und fehlgeschlagene Neuabrufe. Frontend-Tests prüfen Vorschau, Umfangswechsel, ausdrückliche Zusatzbestätigung und erhaltenen Fokus.
+
+Der optionale Test `ReadOnlyDiscoveryDiagnosisTests` verarbeitet nur eine per `NOIZY_DISCOVERY_SNAPSHOT` ausdrücklich übergebene lokale JSON-Kopie; er öffnet weder Datenbank noch Websites. Rohdaten des Bestands werden nicht im Repository eingecheckt. Für Datenbanktests immer eine separate kurzlebige Testinstanz und `DB_URL`/`DB_USER`/`DB_PASSWORD` setzen; niemals Tests mit schreibenden Fixtures gegen den bestehenden lokalen Bestand starten.
+
+
+Validierung der Reset-Korrektur: **100 Backend-Tests erfolgreich**, einschließlich des ausdrücklich aktivierten Offline-Replays der 94 kopierten Datensätze; Maven-Paket erfolgreich. **16 Frontend-Tests**, TypeScript (`tsc --noEmit`), ESLint und Next.js-Produktionsbuild erfolgreich. PostgreSQL-Schreibtests ausschließlich im kurzlebigen Testcontainer auf Port 55434. Die Bestandsdatenbank blieb auf Migration V12 und wurde nur lesend untersucht. Keine produktiven Datenänderungen, kein Push und kein Deployment. DOM-Tests ersetzen keine visuelle Browser-/Mobilabnahme.

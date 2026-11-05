@@ -13,13 +13,14 @@ public class EventImportService {
     @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entityManager;
     private final DiscoveryStore store;
     private final CalendarEntryService calendar;
-    public EventImportService(DiscoveryStore store, CalendarEntryService calendar) { this.store = store; this.calendar = calendar; }
+    private final DiscoveryEvaluationService evaluator;
+    public EventImportService(DiscoveryStore store, CalendarEntryService calendar,DiscoveryEvaluationService evaluator) { this.store = store; this.calendar = calendar; this.evaluator=evaluator; }
     @Transactional
     public void importCandidate(String id, String party, LocalDate date, boolean manual) {
         // The same lock covers automatic and manual imports, including parallel JVMs.
         store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
         var c = store.candidate(id);
-        if (PartyOnlyPolicy.concert((String)c.get("title"),(String)c.get("evidence")))
+        if (PartyOnlyPolicy.concert((String)c.get("title"),(String)c.get("evidence")) || PartyOnlyPolicy.concert(evaluator.event(c)))
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT,"Konzerte sind von der Discovery-Übernahme ausgeschlossen");
         if (List.of("REJECTED", "DUPLICATE", "IGNORED").contains(c.get("status"))) throw new ResponseStatusException(HttpStatus.CONFLICT, "Archivierten Vorschlag zuerst prüfen");
         if (c.get("calendar_entry_id") != null) {
@@ -37,6 +38,9 @@ public class EventImportService {
             boolean duplicate = existing.stream().anyMatch(e -> party.equals(e.get("party_id")) && "event".equals(e.get("entry_type")));
             store.jdbc().update("UPDATE discovery_candidates SET status=?,reason=?,updated_at=now() WHERE id=?",
                     duplicate ? "DUPLICATE" : "NEEDS_REVIEW", duplicate ? "Identischer Kalendereintrag vorhanden" : "Konflikt mit bestehendem Termin oder Location-Sperre", id);
+            store.jdbc().update("UPDATE discovery_candidates SET decision_origin=?,previous_status=?,evaluated_at=now() WHERE id=?",
+                manual ? "MANUAL" : "AUTOMATIC",c.get("status"),id);
+            store.audit(id,(String)c.get("status"),manual ? null : (String)c.get("last_evaluation_id"));
             return;
         }
         String time = c.get("start_time") == null ? null : c.get("start_time").toString().substring(0,5);
@@ -44,18 +48,21 @@ public class EventImportService {
         entityManager.flush();
         store.jdbc().update("UPDATE discovery_candidates SET calendar_entry_id=?,party_id=?,event_date=?,status='IMPORTED',reason=?,updated_at=now() WHERE id=?",
                 entry.id(), party, date, manual ? "Manuell geprüft und übernommen" : "Automatisch übernommen", id);
+        store.jdbc().update("UPDATE discovery_candidates SET decision_origin=?,previous_status=?,evaluated_at=now() WHERE id=?",
+                manual ? "MANUAL" : "AUTOMATIC",c.get("status"),id);
+        store.audit(id,(String)c.get("status"),manual ? null : (String)c.get("last_evaluation_id"));
     }
     @Transactional
     public void review(String id, String party, LocalDate date, String status, String inquiry, String dm) {
         store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
-        store.candidate(id);
+        var previous=store.candidate(id);
         if (!List.of("NEEDS_REVIEW", "NEEDS_INQUIRY", "REJECTED", "DUPLICATE").contains(status)) throw new IllegalArgumentException("Ungültiger Prüfstatus");
         if (!List.of("NONE", "PREPARED", "SENT", "ANSWERED").contains(inquiry)) throw new IllegalArgumentException("Ungültiger Rückfragestatus");
         if (party != null && !Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM party_series WHERE id=?)", Boolean.class, party))) throw new IllegalArgumentException("Unbekannte Partyreihe");
-        if (status.equals("DUPLICATE") || status.equals("REJECTED")) store.jdbc().update(
-                "UPDATE discovery_candidates SET reason=? WHERE id=?",status.equals("DUPLICATE") ? "Manuell als Dublette markiert" : "Manuell abgelehnt",id);
-        store.jdbc().update("UPDATE discovery_candidates SET party_id=?, event_date=?, status=?, inquiry_status=?, dm_text=?, updated_at=now() WHERE id=?",
-                party, date, status, inquiry, dm, id);
+        String reason=status.equals("REJECTED") ? "Manuell abgelehnt" : status.equals("DUPLICATE") ? "Manuell als Dublette markiert" : "Manuell geprüft; "+Objects.toString(previous.get("automatic_reason"),"");
+        store.jdbc().update("UPDATE discovery_candidates SET party_id=?,event_date=?,status=?,inquiry_status=?,dm_text=?,reason=?,decision_origin='MANUAL',previous_status=?,evaluated_at=now(),updated_at=now() WHERE id=?",
+                party,date,status,inquiry,dm,reason,previous.get("status"),id);
+        store.audit(id,(String)previous.get("status"),null);
     }
     public String dm(String id) {
         var c = store.candidate(id);

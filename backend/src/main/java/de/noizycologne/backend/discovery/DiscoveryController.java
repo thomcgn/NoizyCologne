@@ -17,19 +17,47 @@ public class DiscoveryController {
     private final DiscoveryScheduler scheduler;
     private final VenueSourceDiscoveryService discovery;
     private final EventImportService importer;
-    public DiscoveryController(DiscoveryStore store,DiscoveryScheduler scheduler,VenueSourceDiscoveryService discovery,EventImportService importer) {
-        this.store=store; this.scheduler=scheduler; this.discovery=discovery; this.importer=importer;
+    private final DiscoveryResetService resets;
+    public DiscoveryController(DiscoveryStore store,DiscoveryScheduler scheduler,VenueSourceDiscoveryService discovery,EventImportService importer,DiscoveryResetService resets) {
+        this.store=store; this.scheduler=scheduler; this.discovery=discovery; this.importer=importer; this.resets=resets;
     }
-    @GetMapping public Map<String,Object> overview() {
-        return Map.of("candidates",store.candidates(),"sources",store.sources(),
+    @GetMapping public Map<String,Object> overview(@RequestParam(defaultValue="ALL") String filter) {
+        return Map.of("candidates",store.candidates(filter),"sources",store.sources(),
                 "counts",store.jdbc().queryForList("SELECT status,count(*) AS count FROM discovery_candidates GROUP BY status"),
                 "automaticallyImported",store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates WHERE status='IMPORTED' AND reason='Automatisch übernommen'",Long.class),
+                "metrics",store.jdbc().queryForMap("""
+                    SELECT count(*) FILTER (WHERE decision_origin='AUTOMATIC' AND status='IGNORED') AS "automaticallyIgnored",
+                    count(*) FILTER (WHERE decision_origin='MANUAL' AND status='REJECTED') AS "manuallyRejected",
+                    count(*) FILTER (WHERE status IN ('NEEDS_REVIEW','NEEDS_INQUIRY','READY')) AS "needsReview",
+                    count(*) FILTER (WHERE EXISTS (SELECT 1 FROM discovery_decisions d JOIN discovery_operations o ON o.id=d.operation_id WHERE d.candidate_id=discovery_candidates.id AND o.kind<>'SCAN' AND d.old_status IS NOT NULL)) AS reevaluated,
+                    count(*) FILTER (WHERE matching_class='UNVERIFIED' AND status NOT IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED')) AS unverified,
+                    count(*) FILTER (WHERE matching_class='POSSIBLE_MATCH' AND status NOT IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED')) AS possible,
+                    count(*) FILTER (WHERE inquiry_status IN ('PREPARED','SENT')) AS open,
+                    count(*) FILTER (WHERE status IN ('REJECTED','DUPLICATE','IGNORED')) AS archive FROM discovery_candidates
+                    """),
+                "operations",store.jdbc().queryForList("SELECT * FROM discovery_operations ORDER BY started_at DESC LIMIT 10").stream().map(DiscoveryStore::forApi).toList(),
+                "diagnoses",store.jdbc().queryForList("SELECT d.*,c.title,v.name AS venue_name FROM discovery_decisions d JOIN discovery_candidates c ON c.id=d.candidate_id JOIN venues v ON v.id=c.venue_id ORDER BY d.id DESC LIMIT 500").stream().map(DiscoveryStore::forApi).toList(),
                 "runs",store.jdbc().queryForList("SELECT * FROM discovery_runs ORDER BY started_at DESC LIMIT 10").stream().map(DiscoveryStore::forApi).toList());
     }
     @PostMapping("/scan") @ResponseStatus(HttpStatus.ACCEPTED)
     public Map<String,Boolean> scan() {
         if (!scheduler.start()) throw new ResponseStatusException(HttpStatus.CONFLICT,"Suchlauf läuft bereits");
         return Map.of("accepted",true);
+    }
+    @PostMapping("/reset/preview")
+    public DiscoveryResetService.Preview preview(@Valid @RequestBody DiscoveryResetService.Selection selection) {
+        return resets.preview(selection);
+    }
+    @PostMapping("/reset") @ResponseStatus(HttpStatus.ACCEPTED)
+    public Map<String,String> reset(@Valid @RequestBody DiscoveryResetService.Request request) {
+        String id=scheduler.startReset(request);
+        if (id==null) throw new ResponseStatusException(HttpStatus.CONFLICT,"Suchlauf oder Neubewertung läuft bereits");
+        return Map.of("operationId",id);
+    }
+    @GetMapping("/operations/{id}") public Map<String,Object> operation(@PathVariable String id) {
+        var rows=store.jdbc().queryForList("SELECT * FROM discovery_operations WHERE id=?",id);
+        if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Vorgang fehlt");
+        return DiscoveryStore.forApi(rows.getFirst());
     }
     public record Probe(@NotBlank @Size(max=2048) String url) { }
     private final java.util.concurrent.Semaphore probeLock=new java.util.concurrent.Semaphore(1);

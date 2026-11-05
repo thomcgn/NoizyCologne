@@ -4,11 +4,20 @@ import { useEffect, useState, useCallback } from "react";
 import { discoveryStatusLabel } from "../discoveryLabels";
 import DashboardModal from "../DashboardModal";
 import { useCatalog } from "../CatalogProvider";
+import DiscoveryResetDialog, { type ResetMode } from "./DiscoveryResetDialog";
 
-type Candidate = {id: string; title: string; venue_name: string; instagram: string; source_url: string; event_date: string | null; party_id: string | null; status: string; reason: string; evidence: string; inquiry_status: string; dm_text: string; calendar_entry_id: string | null};
+type Candidate = {id: string; title: string; venue_name: string; instagram: string; source_url: string; event_date: string | null; party_id: string | null; status: string; reason: string; evidence: string; inquiry_status: string; dm_text: string; calendar_entry_id: string | null; decision_origin: string; matching_class: string; automatic_reason: string; matcher_version: string; evaluated_at: string | null; previous_status: string | null; last_evaluation_id: string | null};
 type Source = {id: string; venue_id: string; venue_name: string; url: string; source_type: string; approved: boolean; status: string; item_selector: string; title_selector: string; date_selector: string};
-type Overview = {automaticallyImported: number; candidates: Candidate[]; sources: Source[]; counts: {status: string; count: number}[]; runs: {id: string; started_at: string; status: string; report: string}[]};
+type Operation = { id: string; kind: string; status: string; report: string; summary: string };
+type Summary = { evaluated: number; newPossibleMatches: number; stillIgnored: number; preservedManual: number; reclassified: number; failed: number };
+type Diagnosis = { id: number; title: string; venue_name: string; old_status: string | null; new_status: string; reason: string; origin: string };
+type Overview = {metrics: { automaticallyIgnored: number; manuallyRejected: number; needsReview: number; reevaluated: number; unverified: number; possible: number; open: number; archive: number }; operations: Operation[]; diagnoses: Diagnosis[]; automaticallyImported: number; candidates: Candidate[]; sources: Source[]; counts: {status: string; count: number}[]; runs: {id: string; started_at: string; status: string; report: string}[]};
 const labels: Record<string,string> = {NEEDS_REVIEW: "Neue passende Partys / Prüfung", NEEDS_INQUIRY: "Rückfragen nötig", IMPORTED: "Übernommen", REJECTED: "Abgelehnt", DUPLICATE: "Dublette", IGNORED: "Ignoriert", READY: "Bereit zur Übernahme", NONE: "Keine Rückfrage", PREPARED: "Rückfrage vorbereitet", SENT: "Rückfrage gesendet (manuell)", ANSWERED: "Antwort erhalten"};
+const extraFilters: Record<string,string> = {AUTOMATIC_IGNORED: "Automatisch ignoriert", MANUAL_REJECTED: "Manuell abgelehnt", UNVERIFIED: "Unklar", POSSIBLE_MATCH: "Möglicher Treffer", REEVALUATED: "Neu bewertet"};
+function summaryOf(operation?: Operation): Summary | null {
+  if (!operation || !["COMPLETED", "PARTIAL"].includes(operation.status)) return null;
+  try { return JSON.parse(operation.summary) as Summary; } catch { return null; }
+}
 const field = "mt-1 w-full rounded-lg border border-white/20 bg-neutral-900 p-3";
 const button = "rounded-lg border border-white/20 px-4 py-2 disabled:opacity-50";
 async function api(path: string, method = "GET", body?: unknown) {
@@ -29,27 +38,54 @@ export default function SuggestionsPage() {
   const [party,setParty] = useState(""); const [date,setDate] = useState("");
   const [status,setStatus] = useState("NEEDS_REVIEW"); const [inquiry,setInquiry] = useState("NONE"); const [dm,setDm] = useState("");
   const [notice,setNotice] = useState("");
-  const reload = useCallback(async () => { try { setData(await api("")); } catch(e) { setError(e instanceof Error ? e.message : "Laden fehlgeschlagen"); } }, []);
+  const [resetMode, setResetMode] = useState<ResetMode | null>(null);
+  const [operationId, setOperationId] = useState<string | null>(null);
+  const reload = useCallback(async () => { try { setData(await api(`?filter=${encodeURIComponent(filter)}`)); } catch(e) { setError(e instanceof Error ? e.message : "Laden fehlgeschlagen"); } }, [filter]);
   useEffect(() => { const timer = window.setTimeout(() => void reload(),0); const poll = window.setInterval(() => void reload(),10000); return () => { clearTimeout(timer); clearInterval(poll); }; },[reload]);
   async function action(work: () => Promise<void>) { setBusy(true); setError(""); setNotice(""); try { await work(); await reload(); } catch(e) { setError(e instanceof Error ? e.message : "Aktion fehlgeschlagen"); } finally { setBusy(false); } }
   function edit(c: Candidate) { setCandidate(c); setParty(c.party_id ?? ""); setDate(c.event_date ?? ""); setStatus(["NEEDS_REVIEW","NEEDS_INQUIRY","REJECTED","DUPLICATE"].includes(c.status) ? c.status : "NEEDS_REVIEW"); setInquiry(c.inquiry_status); setDm(c.dm_text); setError(""); }
+  const operation = operationId ? data?.operations?.find(item => item.id === operationId) : data?.operations?.[0];
+  const summary = summaryOf(operation);
+  const running = busy || data?.operations?.some(item => item.status === "RUNNING");
+  function countFor(value: string) {
+    const m = data?.metrics;
+    const extra: Record<string, number | undefined> = {AUTOMATIC_IGNORED: m?.automaticallyIgnored, MANUAL_REJECTED: m?.manuallyRejected, UNVERIFIED: m?.unverified, POSSIBLE_MATCH: m?.possible, REEVALUATED: m?.reevaluated, OPEN: m?.open, ARCHIVE: m?.archive};
+    return extra[value] ?? data?.counts.find(item => item.status === value)?.count ?? 0;
+  }
+  function visible(c: Candidate) {
+    if (filter === "OPEN") return ["PREPARED", "SENT"].includes(c.inquiry_status);
+    if (filter === "ARCHIVE") return ["REJECTED", "DUPLICATE", "IGNORED"].includes(c.status);
+    if (filter === "AUTOMATIC_IGNORED") return c.status === "IGNORED" && c.decision_origin === "AUTOMATIC";
+    if (filter === "MANUAL_REJECTED") return c.status === "REJECTED" && c.decision_origin === "MANUAL";
+    if (filter === "REEVALUATED") return true; // Server filters against the reset audit history.
+    if (["UNVERIFIED", "POSSIBLE_MATCH"].includes(filter)) return c.matching_class === filter && !["IMPORTED", "REJECTED", "DUPLICATE", "IGNORED"].includes(c.status);
+    return c.status === filter;
+  }
   async function save() { if (!candidate) return; await api(`/candidates/${candidate.id}`,"PUT",{partyId: party || null,date: date || null,status,inquiryStatus: inquiry,dmText: dm}); }
   return <main className="min-w-0 space-y-5 p-4 sm:p-7">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-bold">Vorgeschlagene</h1><button className={button} disabled={busy} onClick={() => void action(async () => { await api("/scan","POST"); setNotice("Suchlauf angefordert. Ergebnisse werden automatisch aktualisiert."); })}>Suche manuell starten</button></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-bold">Vorgeschlagene</h1><div className="flex flex-wrap gap-2"><button className={button} disabled={running} onClick={() => void action(async () => { await api("/scan","POST"); setNotice("Suchlauf angefordert. Ergebnisse werden automatisch aktualisiert."); })}>Jetzt suchen</button><button className={button} disabled={running} onClick={() => setResetMode("ALL")}>Neu bewerten</button><button className={button} disabled={running} onClick={() => setResetMode("IGNORED")}>Suchlauf zurücksetzen</button></div></div>
     <p className="text-sm text-neutral-400">Gefundene Partys prüfen und in den Kalender übernehmen.</p>
     {error && <p role="alert" className="text-red-400">{error}</p>}{notice && <p role="status">{notice}</p>}
-    <div className="flex flex-wrap gap-2">{["NEEDS_REVIEW","NEEDS_INQUIRY","OPEN","IMPORTED","ARCHIVE"].map(s => <button key={s} aria-pressed={filter === s} className={`${button} ${filter === s ? "bg-white/15" : ""}`} onClick={() => setFilter(s)}>{s === "OPEN" ? "Rückfragen offen" : s === "ARCHIVE" ? "Abgelehnt / Archiv" : labels[s]} ({s === "OPEN" ? data?.candidates.filter(c => ["PREPARED","SENT"].includes(c.inquiry_status)).length ?? 0 : s === "ARCHIVE" ? data?.counts.filter(c => ["REJECTED","DUPLICATE","IGNORED"].includes(c.status)).reduce((n,c) => n + Number(c.count),0) ?? 0 : data?.counts.find(c => c.status === s)?.count ?? 0})</button>)}</div>
+    <div className="flex flex-wrap gap-2">{["NEEDS_REVIEW","NEEDS_INQUIRY","OPEN","IMPORTED","ARCHIVE", ...Object.keys(extraFilters)].map(value => <button key={value} aria-pressed={filter === value} className={`${button} ${filter === value ? "bg-white/15" : ""}`} onClick={() => setFilter(value)}>{extraFilters[value] ?? (value === "OPEN" ? "Rückfragen offen" : value === "ARCHIVE" ? "Abgelehnt / Archiv" : labels[value])} ({countFor(value)})</button>)}</div>
+    <p className="text-sm">Automatisch ignoriert: {data?.metrics?.automaticallyIgnored ?? 0} · Manuell abgelehnt: {data?.metrics?.manuallyRejected ?? 0} · Prüfbedürftig: {data?.metrics?.needsReview ?? 0} · Neu bewertet: {data?.metrics?.reevaluated ?? 0}</p>
+    {operation && <section className="rounded-xl border border-white/15 p-3" aria-live="polite"><p>Letzter Vorgang: {operation.status} · {operation.report}</p>
+      {summary && <p>{summary.evaluated} Kandidaten erneut bewertet · {summary.newPossibleMatches} neue mögliche Treffer · {summary.stillIgnored} weiterhin ignoriert · {summary.preservedManual} manuelle/geschützte Entscheidungen unverändert · {summary.reclassified} neu klassifiziert · {summary.failed} Location-Fehler</p>}
+    </section>}
+    <details className="rounded-xl border border-white/15 p-3"><summary>Matching-Diagnose · letzte {data?.diagnoses?.length ?? 0} Entscheidungen</summary><div className="overflow-x-auto"><table className="mt-3 w-full text-left text-sm"><thead><tr><th>Party</th><th>Location</th><th>Alter Status</th><th>Neuer Status</th><th>Grund</th></tr></thead><tbody>{data?.diagnoses?.map(item => <tr key={item.id}><td className="p-2">{item.title}</td><td>{item.venue_name}</td><td>{item.old_status ?? "Neu"}</td><td>{item.new_status}</td><td>{item.origin} · {item.reason}</td></tr>)}</tbody></table></div></details>
     <p className="text-sm">Automatisch übernommen: {data?.automaticallyImported ?? 0}</p>
     <p className="text-sm">Letzter Suchlauf: {data?.runs[0] ? `${new Date(data.runs[0].started_at).toLocaleString("de-DE",{timeZone:"Europe/Berlin"})} · ${discoveryStatusLabel(data.runs[0].status)} · ${data.runs[0].report}` : "Noch kein Suchlauf"}</p>
-    <div className="space-y-3">{data?.candidates.filter(c => filter === "OPEN" ? ["PREPARED","SENT"].includes(c.inquiry_status) : filter === "ARCHIVE" ? ["REJECTED","DUPLICATE","IGNORED"].includes(c.status) : c.status === filter).map(c => <article key={c.id} className="rounded-xl border border-white/10 p-4"><div className="flex flex-wrap justify-between gap-3"><div><h2 className="font-semibold">{c.title}</h2><p>{c.venue_name} · {c.event_date ?? "Datum unklar"}</p><p className="text-sm text-neutral-400">{c.reason}</p></div><button className={button} onClick={() => edit(c)}>Veranstaltung prüfen</button></div></article>)}</div>
+    <div className="space-y-3">{data?.candidates.filter(visible).map(c => <article key={c.id} className="rounded-xl border border-white/10 p-4"><div className="flex flex-wrap justify-between gap-3"><div><h2 className="font-semibold">{c.title}</h2><p>{c.venue_name} · {c.event_date ?? "Datum unklar"}</p><p className="text-sm text-neutral-400">{c.reason}</p><p className="text-xs text-neutral-500">{c.decision_origin} · {c.matching_class} · {c.matcher_version}</p></div><button className={button} onClick={() => edit(c)}>Veranstaltung prüfen</button></div></article>)}</div>
     <details className="rounded-xl border border-white/10 p-4"><summary>Location-Quellen · {data?.sources.filter(s => !["EVENTS_FOUND","NO_EVENTS","NOT_CHECKED","SOURCE_LINKS_FOUND","EXCLUDED_CONCERTS"].includes(s.status)).length ?? 0} mit Diagnosebedarf</summary>
       <button className={`${button} mt-3`} onClick={() => setSource({id:"",venue_id:venues[0]?.id ?? "",venue_name:"",url:"",source_type:"EXTERNAL",approved:false,status:"NOT_CHECKED",item_selector:"",title_selector:"",date_selector:""})}>Quelle hinzufügen</button>
       {data?.sources.map(s => <div key={s.id} className="mt-3 break-words border-t border-white/10 pt-3"><p>{s.venue_name} · {s.source_type === "OFFICIAL" ? "Offizielle Website" : "Externe Quelle"} · {discoveryStatusLabel(s.status)} · {s.approved ? "Automatik freigegeben" : "Prüfung erforderlich"}</p><a href={sourceLink(s.url)} target="_blank" rel="noreferrer" className="underline">{s.url}</a> <button className={button} onClick={() => setSource({...s})}>Quelle / Profil bearbeiten</button></div>)}
     </details>
+    {resetMode && <DiscoveryResetDialog initialMode={resetMode} onClose={() => setResetMode(null)} onStarted={id => { setOperationId(id); setResetMode(null); setNotice("Neubewertung angefordert. Der Vorgang wird mit Ergebnis und Fehlern protokolliert."); void reload(); }} />}
     <DashboardModal open={!!candidate} onClose={() => setCandidate(null)} title={candidate?.title ?? "Vorschlag prüfen"}>
       {candidate && <div className="space-y-4">
         {error && <p role="alert" className="text-red-400">{error}</p>}
         <p>{candidate.venue_name} · {candidate.reason}</p>
+        <p className="text-sm">Entscheidungsursprung: {candidate.decision_origin} · {candidate.matching_class}<br />Regelversion: {candidate.matcher_version} · Bewertet: {candidate.evaluated_at ?? "Noch nicht versioniert"}</p>
+        {candidate.automatic_reason && <p className="text-sm">Technische Entscheidung: {candidate.automatic_reason}</p>}
         <a href={sourceLink(candidate.source_url)} target="_blank" rel="noreferrer" className="underline">Quellseite öffnen</a>
         <label className="block">Partyreihe zuordnen<select className={field} value={party} onChange={e => setParty(e.target.value)}><option value="">Bitte wählen</option>{parties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
         <label className="block">Korrigiertes / bestätigtes Datum<input className={field} type="date" value={date} onChange={e => setDate(e.target.value)} /></label>

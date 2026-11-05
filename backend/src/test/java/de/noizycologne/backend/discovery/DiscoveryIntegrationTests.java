@@ -68,7 +68,7 @@ class DiscoveryIntegrationTests {
         found(event("one",party.getName(),"2027-01-09","")); scheduler.scan();
         found(event("two",party.getName(),"2027-01-09","")); scheduler.scan();
         assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,venue.getId())).isEqualTo(1);
-        assertThat(store.jdbc().queryForList("SELECT status FROM discovery_candidates WHERE venue_id=?",String.class,venue.getId())).contains("IMPORTED","DUPLICATE");
+        assertThat(store.jdbc().queryForList("SELECT status FROM discovery_candidates WHERE venue_id=?",String.class,venue.getId())).containsExactly("IMPORTED");
         found(event("unknown","Neue Indie Party","2027-01-10","")); scheduler.scan();
         String id=store.jdbc().queryForObject("SELECT id FROM discovery_candidates WHERE title='Neue Indie Party' AND venue_id=?",String.class,venue.getId());
         importer.review(id,null,LocalDate.of(2027,1,10),"REJECTED","NONE","");
@@ -136,7 +136,7 @@ class DiscoveryIntegrationTests {
         scheduler.scan();
         assertThat(venues.findById(venue.getId()).orElseThrow().getDiscoveryStatus()).isEqualTo("NO_EVENTS");
     }
-    @Test void concertCannotBeImportedManuallyOrReintroducedAsAProposal() throws Exception {
+    @Test void concertCannotBeImportedAndFreshScansPreserveManualReview() throws Exception {
         found(event("legacy","Neue Indie Party","2027-01-09","")); scheduler.scan();
         String id=store.jdbc().queryForObject("SELECT id FROM discovery_candidates WHERE venue_id=?",String.class,venue.getId());
         store.jdbc().update("UPDATE discovery_candidates SET evidence='Indie Konzert mit DJs' WHERE id=?",id);
@@ -144,7 +144,7 @@ class DiscoveryIntegrationTests {
         assertThatThrownBy(() -> importer.importCandidate(id,party.getId(),LocalDate.of(2027,1,9),true))
             .isInstanceOf(org.springframework.web.server.ResponseStatusException.class).hasMessageContaining("Konzerte");
         found(new EventExtractor.Event("legacy","Neue Indie Party",root+"events/one",List.of("2027-01-09"),"Indie Konzert mit DJs","",""));
-        scheduler.scan(); assertThat(store.candidate(id).get("status")).isEqualTo("IGNORED");
+        scheduler.scan(); assertThat(store.candidate(id).get("status")).isEqualTo("NEEDS_REVIEW");
         found(new EventExtractor.Event("new-concert",party.getName(),root+"events/two",List.of("2027-01-10"),"Indie Konzert mit DJs","",""));
         scheduler.scan();
         assertThat(store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates WHERE venue_id=?",Integer.class,venue.getId())).isEqualTo(1);
