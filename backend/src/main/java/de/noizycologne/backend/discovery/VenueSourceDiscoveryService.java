@@ -15,7 +15,7 @@ public class VenueSourceDiscoveryService {
         this.fetcher = fetcher; this.extractor = extractor; this.genres = genres;
     }
     public record Found(URI url, EventExtractor.Extraction extraction) { }
-    /** Breadth first, one domain, depth <= 2, at most 8 pages and 40 inspected links/page. */
+    /** Calendar navigation before details, one host, depth <= 2, at most 8 pages and 200 inspected links/page. */
     public List<Found> discover(String input, EventExtractor.Profile profile) throws IOException {
         URI root = SafeUrls.parse(input);
         record Step(URI url, int depth, boolean detail) { }
@@ -25,7 +25,10 @@ public class VenueSourceDiscoveryService {
         Set<String> genreTerms = genres.terms();
         Set<URI> eligibleDetails = new HashSet<>();
         while (!queue.isEmpty() && seen.size() < 8) {
-            Step step = queue.remove(); if (!seen.add(step.url())) continue;
+            // Find programme sections before spending the page budget on event details.
+            Step step = queue.stream().filter(s -> !s.detail()).findFirst().orElse(queue.getFirst());
+            queue.remove(step);
+            if (!seen.add(step.url())) continue;
             try {
                 if (!fetcher.robotsAllowed(step.url(), robots)) throw new EventPageFetcher.FetchFailure("ROBOTS_BLOCKED");
                 var page = fetcher.fetch(step.url());
@@ -46,19 +49,29 @@ public class VenueSourceDiscoveryService {
                     } catch (IllegalArgumentException ignored) { }
                 }
                 if (page.body().contains("BEGIN:VCALENDAR")) continue;
-                for (var link : Jsoup.parse(page.body(), step.url().toString()).select("a[href], link[href]").stream().limit(40).toList()) {
+                boolean programmeLink = false;
+                int navigationLinks = 0;
+                for (var link : Jsoup.parse(page.body(), step.url().toString()).select("a[href], link[href][type=text/calendar]").stream().limit(200).toList()) {
                     try {
                         String href = link.absUrl("href").split("#", 2)[0];
                         URI next = SafeUrls.parse(href);
-                        String label = EventNormalizer.text(link.text());
-                        boolean overview = label.matches("events|partys|parties|programm|kalender|veranstaltungen|calendar|veranstaltungskalender|alle events|zum programm|mehr events")
-                                || next.getPath().matches("(?i).*/(events|partys|parties|programm|kalender|veranstaltungen|calendar)/?")
+                        String label = EventNormalizer.text(link.text().isBlank()
+                                ? (link.hasAttr("aria-label") ? link.attr("aria-label") : link.attr("title")) : link.text());
+                        boolean overview = label.matches("events|party|partys|parties|programm|kalender|veranstaltungen|calendar|veranstaltungskalender|alle events|zum programm|mehr events|live|live shows|konzerte|shows|upcoming events|whats on")
+                                || next.getPath().matches("(?i).*/(events|party|partys|parties|programm|kalender|veranstaltungen|calendar|live-shows|konzerte|shows)/?")
                                 || next.getPath().toLowerCase(Locale.ROOT).endsWith(".ics")
                                 || link.attr("type").equalsIgnoreCase("text/calendar");
                         if (!overview) continue;
-                        if (!eventLinks.contains(next) && next.getHost().equalsIgnoreCase(root.getHost()) && queue.size() < 16 && !seen.contains(next)) queue.add(new Step(next, step.depth() + 1, false));
+                        if (!eventLinks.contains(next) && !next.equals(step.url()) && next.getHost().equalsIgnoreCase(root.getHost())) {
+                            programmeLink = true;
+                            if (!seen.contains(next) && queue.size() < 16 && navigationLinks++ < 40
+                                    && queue.stream().noneMatch(s -> s.url().equals(next)))
+                                queue.add(new Step(next, step.depth() + 1, false));
+                        }
                     } catch (IllegalArgumentException ignored) { }
                 }
+                if (programmeLink && extraction.events().isEmpty() && extraction.status().equals("UNINTERPRETABLE"))
+                    found.set(found.size() - 1, new Found(step.url(), new EventExtractor.Extraction(List.of(), "SOURCE_LINKS_FOUND")));
             } catch (IOException e) {
                 if (step.depth() == 0) throw e;
                 found.add(new Found(step.url(), new EventExtractor.Extraction(List.of(), e instanceof EventPageFetcher.FetchFailure f ? f.status : "SCAN_FAILED")));

@@ -66,8 +66,26 @@ public class EventExtractor {
         }
         String status = !events.isEmpty() ? "EVENTS_FOUND" : malformed ? "UNINTERPRETABLE"
                 : doc.body().text().matches("(?is).*(keine (veranstaltungen|events|termine)|no (upcoming )?events).*") ? "NO_EVENTS"
-                : (doc.selectFirst("script[src]") != null && doc.body().text().length() < 250) ? "JAVASCRIPT_REQUIRED" : "UNINTERPRETABLE";
+                : requiresRendering(doc) ? "JAVASCRIPT_REQUIRED" : "UNINTERPRETABLE";
         return new Extraction(events, status);
+    }
+    private boolean requiresRendering(org.jsoup.nodes.Document doc) {
+        if (doc.selectFirst("iframe[data-src], iframe:not([src])[data-widget], [data-requires-javascript]") != null) return true;
+        // Wix publicly describes current page components as inert JSON. Check only components
+        // actually present in the DOM, not its global catalogue of installed apps.
+        var warmup = doc.selectFirst("script#wix-warmup-data[type=application/json]");
+        if (warmup != null) {
+            try {
+                var types = json.readTree(warmup.data()).path("pages").path("compIdToTypeMap");
+                for (String id : types.propertyNames()) {
+                    var element = doc.getElementById(id);
+                    if (types.path(id).asText("").equals("HtmlComponent") && element != null
+                            && element.text().isBlank() && element.selectFirst("iframe[src], a[href], time, [itemprop=startDate]") == null)
+                        return true;
+                }
+            } catch (RuntimeException ignored) { /* Invalid metadata never becomes executable content. */ }
+        }
+        return doc.selectFirst("script[src]") != null && doc.body().text().length() < 250;
     }
     private void collect(JsonNode node, List<Event> events, String page, int depth) {
         if (node == null || depth > 16 || events.size() >= 200) return;

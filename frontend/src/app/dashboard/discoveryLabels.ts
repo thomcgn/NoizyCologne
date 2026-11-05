@@ -1,4 +1,5 @@
 const labels: Record<string, string> = {
+  SOURCE_LINKS_FOUND: "Programmverweise gefunden",
   NOT_CHECKED: "Noch nicht geprüft",
   EVENTS_FOUND: "Veranstaltungen gefunden",
   NO_EVENTS: "Quelle meldet keine Veranstaltungen",

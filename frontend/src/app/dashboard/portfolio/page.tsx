@@ -91,7 +91,7 @@ export default function PortfolioPage({
       const response = await fetch("/api/v1/discovery/probe", {method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({url: eventsUrl || websiteUrl})});
       if (!response.ok) throw new Error(`Quellenprüfung: HTTP ${response.status}`);
       const results: {url: string; extraction: {status: string; events: unknown[]}}[] = await response.json();
-      setProbeResult(results.map(r => `${discoveryStatusLabel(r.extraction.status)}: ${r.extraction.events.length} Events (${r.url})`).join("\n"));
+      setProbeResult(results.map(r => `${discoveryStatusLabel(r.extraction.status)}${["EVENTS_FOUND", "NO_EVENTS"].includes(r.extraction.status) ? `: ${r.extraction.events.length} Events` : ""} (${r.url})`).join("\n"));
     } catch (e) { setProbeResult(e instanceof Error ? e.message : "Prüfung fehlgeschlagen"); }
     finally { setProbing(false); }
   }

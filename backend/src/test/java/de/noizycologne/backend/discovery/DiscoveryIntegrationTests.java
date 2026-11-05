@@ -129,6 +129,13 @@ class DiscoveryIntegrationTests {
             .content("{\"venueId\":\""+venue.getId()+"\",\"url\":\"https://127.0.0.1/\",\"approved\":true}"))
             .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isBadRequest());
     }
+    @Test void navigationStatusDoesNotHideExplicitEmptyCalendar() throws Exception {
+        when(discovery.discover(eq(root),any())).thenReturn(List.of(
+            new VenueSourceDiscoveryService.Found(URI.create(root),new EventExtractor.Extraction(List.of(),"SOURCE_LINKS_FOUND")),
+            new VenueSourceDiscoveryService.Found(URI.create(root+"programm"),new EventExtractor.Extraction(List.of(),"NO_EVENTS"))));
+        scheduler.scan();
+        assertThat(venues.findById(venue.getId()).orElseThrow().getDiscoveryStatus()).isEqualTo("NO_EVENTS");
+    }
     @Test void postgresLockPreventsConcurrentScan() throws Exception {
         try(var conn=store.jdbc().getDataSource().getConnection(); var stmt=conn.createStatement()) {
             stmt.execute("SELECT pg_advisory_lock(73624601)");
