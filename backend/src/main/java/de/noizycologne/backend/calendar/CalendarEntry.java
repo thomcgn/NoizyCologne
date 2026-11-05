@@ -26,6 +26,10 @@ public class CalendarEntry {
     @Column(nullable = false, length = 100)
     private String id;
 
+    @Column(name = "event_status", nullable = false)
+    private String eventStatus="ACTIVE";
+    public String getEventStatus() { return eventStatus; }
+
     @Column(name = "event_date", nullable = false)
     private LocalDate eventDate;
 

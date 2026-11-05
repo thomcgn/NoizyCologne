@@ -22,6 +22,7 @@ public class EventImportService {
         var c = store.candidate(id);
         if (PartyOnlyPolicy.concert((String)c.get("title"),(String)c.get("evidence")) || PartyOnlyPolicy.concert(evaluator.event(c)))
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT,"Konzerte sind von der Discovery-Übernahme ausgeschlossen");
+        if (Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM event_changes WHERE candidate_id=? AND blocks_publication)",Boolean.class,id))) throw new ResponseStatusException(HttpStatus.CONFLICT,"Offene Veranstaltungsänderung zuerst klären");
         if (List.of("REJECTED", "DUPLICATE", "IGNORED").contains(c.get("status"))) throw new ResponseStatusException(HttpStatus.CONFLICT, "Archivierten Vorschlag zuerst prüfen");
         if (c.get("calendar_entry_id") != null) {
             if ("IMPORTED".equals(c.get("status"))) return;
@@ -33,7 +34,11 @@ public class EventImportService {
             if (!Boolean.TRUE.equals(approved) || !"READY".equals(c.get("status"))) throw new IllegalArgumentException("Automatische Übernahme nicht freigegeben");
         }
         String venue = (String)c.get("venue_id");
-        var existing = store.jdbc().queryForList("SELECT id,party_id,entry_type FROM calendar_entries WHERE location_id=? AND event_date=?", venue, date);
+        var existing = store.jdbc().queryForList("""
+            SELECT e.id,e.party_id,e.entry_type FROM calendar_entries e WHERE e.location_id=? AND e.event_date=?
+            AND NOT (e.event_status='CANCELLED' AND EXISTS(SELECT 1 FROM event_cancellations x WHERE x.calendar_entry_id=e.id AND x.replacement_candidate_id=?))
+            AND NOT EXISTS(SELECT 1 FROM event_changes x WHERE x.calendar_entry_id=e.id AND x.state='SEPARATE' AND x.after_data::jsonb->>'url'=?)
+            """,venue,date,id,c.get("source_url"));
         if (!existing.isEmpty()) {
             boolean duplicate = existing.stream().anyMatch(e -> party.equals(e.get("party_id")) && "event".equals(e.get("entry_type")));
             store.jdbc().update("UPDATE discovery_candidates SET status=?,reason=?,updated_at=now() WHERE id=?",

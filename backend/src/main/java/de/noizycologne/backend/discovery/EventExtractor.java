@@ -14,7 +14,9 @@ public class EventExtractor {
     }
     public record Event(String identity, String title, String url, List<String> starts,
                         String evidence, String state, String location) { }
-    public record Extraction(List<@org.jspecify.annotations.NonNull Event> events, String status) { }
+    public record Extraction(List<@org.jspecify.annotations.NonNull Event> events, String status, boolean complete) {
+        public Extraction(List<@org.jspecify.annotations.NonNull Event> events,String status) { this(events,status,false); }
+    }
     private final JsonMapper json = JsonMapper.builder().build();
     public Extraction extract(EventPageFetcher.Page page, Profile profile) {
         List<@org.jspecify.annotations.NonNull Event> events = new ArrayList<>();
@@ -48,14 +50,20 @@ public class EventExtractor {
                 if (anchor == null) anchor = item.selectFirst("a[href]");
                 String url = anchor == null ? page.url().toString() : anchor.absUrl("href");
                 String state = riskyState(item.text());
-                events.add(new Event(url.equals(page.url().toString()) ? "" : url, clip(title.text(), 500), url,
+                events.add(new Event(!item.attr("data-event-id").isBlank() ? item.attr("data-event-id") : url.equals(page.url().toString()) ? "" : url, clip(title.text(), 500), url,
                         dates, clip(item.text(), 8000), state, ""));
             }
             // Generic detail pages with a semantic start date.
             var heading = doc.selectFirst("h1");
             var date = doc.selectFirst("[itemprop=startDate], time[datetime]");
             if (events.isEmpty() && heading != null && date != null) {
-                events.add(new Event(page.url().toString(), clip(heading.text(), 500), page.url().toString(),
+                String detailUrl=page.url().toString();
+                var canonical=doc.selectFirst("link[rel=canonical][href]");
+                if(canonical!=null) try {
+                    var resolved=SafeUrls.parse(canonical.absUrl("href"));
+                    if(resolved.getHost().equalsIgnoreCase(page.url().getHost())) detailUrl=resolved.toString();
+                } catch(IllegalArgumentException ignored) { /* Untrusted canonical links cannot change event identity. */ }
+                events.add(new Event(detailUrl, clip(heading.text(), 500), detailUrl,
                         List.of(date.hasAttr("datetime") ? date.attr("datetime") : date.attr("content")),
                         clip(doc.body().text(), 8000), riskyState(doc.body().text()), ""));
             }
@@ -144,12 +152,21 @@ public class EventExtractor {
                 if (header.contains("TZID=") && !header.contains("TZID=Europe/Berlin")) fields.put("UNSUPPORTED_TZ", List.of(header));
             }
         }
+        boolean complete=page.body().contains("END:VCALENDAR") && fields==null && events.size()<200
+            && page.body().lines().filter(line -> line.equals("BEGIN:VEVENT")).count()==events.size()
+            && events.stream().allMatch(event -> !event.starts().isEmpty() && event.starts().stream().allMatch(start -> EventNormalizer.date(start)!=null));
         boolean concerts = events.stream().anyMatch(PartyOnlyPolicy::concert);
         events.removeIf(PartyOnlyPolicy::concert);
-        return new Extraction(events, events.isEmpty() ? (concerts ? "EXCLUDED_CONCERTS" : !page.body().contains("BEGIN:VEVENT") && page.body().contains("END:VCALENDAR") ? "NO_EVENTS" : "UNINTERPRETABLE") : "EVENTS_FOUND");
+        return new Extraction(events, events.isEmpty() ? (concerts ? "EXCLUDED_CONCERTS" : !page.body().contains("BEGIN:VEVENT") && page.body().contains("END:VCALENDAR") ? "NO_EVENTS" : "UNINTERPRETABLE") : "EVENTS_FOUND", complete);
     }
     private static String first(Map<String, List<String>> map, String key) { return map.getOrDefault(key, List.of("")).get(0); }
     private static String riskyState(String text) {
+        String normalized=EventNormalizer.text(text);
+        if (normalized.matches(".*\\b(vielleicht|gerücht|geruecht|möglicherweise|moeglicherweise|nicht abgesagt)\\b.*")) return "CANCELLATION_HINT UNCONFIRMED";
+        if (normalized.matches(".*\\b(veranstaltung|event|party|termin)\\s+(wird |ist |leider |muss |heute |komplett |vollständig ){0,5}(abgesagt|fällt aus|faellt aus|cancelled|canceled)\\b.*")) return "EVENT_CANCELLED UNCONFIRMED";
+        if (normalized.matches(".*\\b(dj|act|line up|lineup)\\b.*\\b(fällt aus|faellt aus|abgesagt|cancelled)\\b.*")) return "LINEUP_CHANGE UNCONFIRMED";
+        if (normalized.matches(".*\\b(abgesagt|fällt aus|faellt aus|cancelled|canceled)\\b.*")) return "EVENT_CANCELLED UNCONFIRMED";
+
         return java.util.regex.Pattern.compile("(?i)abgesagt|fällt aus|faellt aus|cancelled|canceled|verschoben|rescheduled|unbestätigt|tba|freitag\\s*(oder|/|und)\\s*samstag").matcher(text).find() ? "UNCONFIRMED" : "";
     }
     private static String clip(String value, int size) { return value.length() <= size ? value : value.substring(0, size); }

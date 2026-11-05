@@ -10,7 +10,7 @@ FROM eclipse-temurin:21-jre
 
 WORKDIR /app
 RUN apt-get update \
-  && apt-get install --no-install-recommends -y wget tesseract-ocr tesseract-ocr-deu tesseract-ocr-eng \
+  && apt-get install --no-install-recommends -y wget tesseract-ocr tesseract-ocr-deu tesseract-ocr-eng fontconfig fonts-dejavu-core \
   && rm -rf /var/lib/apt/lists/* \
   && useradd --system --create-home --uid 10001 appuser
 COPY --from=build /build/target/*.jar /app/app.jar

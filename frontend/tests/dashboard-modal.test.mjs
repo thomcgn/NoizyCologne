@@ -421,3 +421,86 @@ test('historical unavailable standard genres stay visible and can be explicitly 
   click(label.querySelector('input'));
   assert.equal(label.isConnected, false);
 });
+
+const monitoredBefore = { title: 'Teenage Dirtbag', starts: ['2026-11-07T23:00:00'], location: 'Blue Shell', state: '', evidence: 'Bisherige Quelle', url: 'https://club.example/old' };
+const monitoredAfter = { ...monitoredBefore, title: 'Neon Paradise', url: 'https://club.example/new' };
+const changeFixture = { id: 'change', revision: 0, kind: 'POSSIBLE_REPLACEMENT', state: 'OPEN', venue_name: 'Blue Shell', instagram: 'blue_shell', before_data: JSON.stringify(monitoredBefore), after_data: JSON.stringify(monitoredAfter), source_url: monitoredAfter.url, reason: 'Mehrere Veranstaltungen sind möglich', blocks_publication: true, calendar_entry_id: 'entry', calendar_party_id: 'party', calendar_venue_id: 'venue', calendar_date: '2026-11-07', calendar_start_time: '23:00', dm_text: '', answer: '', inquiry_status: 'NONE' };
+function changeCatalogue() { catalogue = { parties: [party], venues: [venue], entries: [entry], reloadEntries: async () => {}, reloadDrafts: async () => {} }; }
+async function mountChanges(fetcher) {
+  changeCatalogue(); globalThis.fetch = fetcher;
+  const Panel = loadSource(new URL('../src/app/dashboard/vorschlaege/EventChangesPanel.tsx', import.meta.url)).default;
+  await act(async () => { mount(h(Panel)); });
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+}
+function jsonResponse(value, status = 200) { return new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } }); }
+
+test('event replacement comparison, editable DM and manual sent marker preserve focus and original entry', async () => {
+  const calls = [];
+  await mountChanges(async (url, options = {}) => {
+    calls.push({ url, ...options });
+    if (url.endsWith('/dm')) return jsonResponse({ text: 'Hallo Blue-Shell-Team! Teenage Dirtbag oder Neon Paradise am 07.11.?' });
+    if (url.endsWith('/history')) return jsonResponse([]);
+    if (options.method === 'PUT') return new Response(null, { status: 204 });
+    return jsonResponse(url.endsWith('/cancellations') ? [] : [changeFixture]);
+  });
+  const trigger = button('Änderung vergleichen'); trigger.focus();
+  await act(async () => { trigger.click(); });
+  const table = document.querySelector('[role="dialog"] table');
+  assert.match(table.textContent, /Teenage Dirtbag/); assert.match(table.textContent, /Neon Paradise/);
+  for (const details of document.querySelectorAll('[role="dialog"] details')) details.open = true;
+  const note = document.querySelector('[role="dialog"] textarea'); type(note, 'Location gefragt');
+  await act(async () => { button('DM-Entwurf erstellen').click(); });
+  const dm = [...document.querySelectorAll('label')].find(label => label.textContent.startsWith('DM-Entwurf')).querySelector('textarea');
+  type(dm, ' Bitte bestätigen.');
+  assert.equal(document.activeElement, dm);
+  assert.ok(!calls.some(call => call.method === 'PUT'));
+  await act(async () => { button('Rückfrage gesendet (manuell)').click(); });
+  const decision = calls.find(call => call.method === 'PUT');
+  assert.equal(JSON.parse(decision.body).action, 'SENT');
+  assert.match(JSON.parse(decision.body).dmText, /Bitte bestätigen/);
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.equal(document.activeElement, trigger);
+  assert.deepEqual(catalogue.entries, [entry]);
+  assert.ok(calls.every(call => call.url.startsWith('/api/v1/')));
+});
+
+test('stale event-change decision displays conflict and retains unsaved input', async () => {
+  await mountChanges(async (url, options = {}) => {
+    if (options.method === 'PUT') return jsonResponse({ message: 'Änderung wurde inzwischen bearbeitet; neu laden' }, 409);
+    return jsonResponse(url.endsWith('/history') || url.endsWith('/cancellations') ? [] : [changeFixture]);
+  });
+  await act(async () => { button('Änderung vergleichen').click(); });
+  const input = document.querySelector('[role="dialog"] textarea'); type(input, 'Beide finden statt');
+  await act(async () => { button('Als getrennte Veranstaltungen behandeln').click(); });
+  assert.ok(document.querySelector('[role="dialog"]'));
+  assert.equal(input.value, 'Beide finden statt');
+  assert.match(document.querySelector('[role="dialog"] [role="alert"]').textContent, /inzwischen bearbeitet/);
+  key('Escape');
+});
+
+test('manual cancellation uses central endpoint and the separate graphic draft never publishes', async () => {
+  const calls = [];
+  const cancellation = { id: 'cancellation', revision: 0, calendar_entry_id: 'entry', party_name: 'Test Party', venue_name: 'Test Venue', event_date: '2027-01-02', reason_code: 'PERSONALBEDINGTER_AUSFALL', announcement_caption: 'Die Veranstaltung wurde abgesagt.', announcement_status: 'DRAFT', media_asset_id: null };
+  let confirmed = false;
+  await mountChanges(async (url, options = {}) => {
+    calls.push({ url, ...options });
+    if (options.method === 'POST' && url.endsWith('/cancellations')) { confirmed = true; return jsonResponse({ id: cancellation.id }); }
+    if (options.method === 'POST' && url.endsWith('/graphic')) return jsonResponse({ mediaAssetId: 'new-cancelled-image' });
+    return jsonResponse(url.endsWith('/cancellations') ? (confirmed ? [cancellation] : []) : []);
+  });
+  click(button('Veranstaltung manuell absagen'));
+  const selects = document.querySelectorAll('[role="dialog"] select');
+  act(() => { selects[0].value = 'entry'; selects[0].dispatchEvent(new Event('change', { bubbles: true })); selects[1].value = 'PERSONALBEDINGTER_AUSFALL'; selects[1].dispatchEvent(new Event('change', { bubbles: true })); });
+  await act(async () => { button('Gesamte Veranstaltung verbindlich absagen').click(); });
+  const confirm = calls.find(call => call.method === 'POST' && call.url.endsWith('/cancellations'));
+  assert.equal(JSON.parse(confirm.body).trigger, 'MANUAL');
+  assert.equal(JSON.parse(confirm.body).reasonCode, 'PERSONALBEDINGTER_AUSFALL');
+  for (const details of document.querySelectorAll('details')) details.open = true;
+  click(button('Cancellation-Workflow öffnen'));
+  await act(async () => { button('Absagegrafik vorbereiten').click(); });
+  assert.match(document.querySelector('[role="dialog"]').textContent, /kein Remote-Abbruch bestätigt/);
+  assert.ok(document.querySelector('a[href="/api/v1/cancellations/cancellation/graphic"]'));
+  assert.ok(!calls.some(call => /publish|instagram/.test(call.url)));
+  assert.deepEqual(catalogue.entries, [entry]);
+  key('Escape');
+});

@@ -12,17 +12,19 @@ import java.util.*;
 @Transactional
 public class EventCandidateProcessor {
     private final DiscoveryStore store;
+    private final EventChangeMonitor monitor;
     private final DiscoveryEvaluationService evaluator;
     private final EventImportService importer;
-    public EventCandidateProcessor(DiscoveryStore store,DiscoveryEvaluationService evaluator,EventImportService importer) {
-        this.store=store;this.evaluator=evaluator;this.importer=importer;
+    public EventCandidateProcessor(DiscoveryStore store,DiscoveryEvaluationService evaluator,EventImportService importer,EventChangeMonitor monitor) {
+        this.store=store;this.evaluator=evaluator;this.importer=importer;this.monitor=monitor;
     }
     public void process(Venue venue,String sourceId,EventExtractor.Event event,List<PartySeries> known,
             Map<String,List<String>> aliases,List<String> genres,boolean approved) {
         process(venue,sourceId,event,known,aliases,genres,approved,null);
     }
-    public void process(Venue venue,String sourceId,EventExtractor.Event event,List<PartySeries> known,
+    public void process(Venue venue,String sourceId,EventExtractor.Event sourceEvent,List<PartySeries> known,
             Map<String,List<String>> aliases,List<String> genres,boolean approved,String operation) {
+        var event=EventPrivacy.safe(sourceEvent);
         store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
         String url;
         try { url=SafeUrls.parse(event.url()).toString(); }
@@ -44,6 +46,12 @@ public class EventCandidateProcessor {
                     .thenComparing(c -> (String)c.get("id"))).orElseThrow());
         }
         Map<String,Object> old=previous.isEmpty() ? null : previous.getFirst();
+        // A reused official URL/UID may now advertise an entirely different party. Keep both candidates.
+        if(old!=null && old.get("calendar_entry_id")!=null && !EventMatcher.nameMatches(event.title(),(String)old.get("title"))) {
+            identity=EventNormalizer.hash("replacement|"+old.get("id")+"|"+EventNormalizer.text(event.title())+"|"+date);
+            var replacement=store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE venue_id=? AND identity_key=?",venue.getId(),identity);
+            old=replacement.isEmpty() ? null : replacement.getFirst();
+        }
         if (old!=null) store.jdbc().update("INSERT INTO discovery_candidate_identities(venue_id,identity_key,candidate_id) VALUES (?,?,?) ON CONFLICT DO NOTHING",venue.getId(),identity,old.get("id"));
         // Includes ambiguous legacy reviews: uncertainty about provenance never permits overwriting them.
         if (old!=null && !"AUTOMATIC".equals(old.get("decision_origin"))) {
@@ -83,6 +91,14 @@ public class EventCandidateProcessor {
              match.classification(),match.reason(),EventMatcher.VERSION,old==null ? null : old.get("status"),operation,evaluator.raw(event));
         store.jdbc().update("INSERT INTO discovery_candidate_identities(venue_id,identity_key,candidate_id) VALUES (?,?,?) ON CONFLICT DO NOTHING",venue.getId(),identity,id);
         store.audit(id,old==null ? null : (String)old.get("status"),operation,old==null ? null : (String)old.get("matching_class"));
+        if (match.partyId()!=null && date!=null && !status.equals("IGNORED")) {
+            var calendar=store.jdbc().queryForList("SELECT id FROM calendar_entries WHERE location_id=? AND event_date=? AND party_id=? AND entry_type='event'",venue.getId(),date,match.partyId());
+            if(calendar.size()==1) {
+                int linked=store.jdbc().update("UPDATE discovery_candidates SET calendar_entry_id=?,status=?,reason=? WHERE id=? AND calendar_entry_id IS NULL",calendar.getFirst().get("id"),status.equals("DUPLICATE") ? "IMPORTED" : "NEEDS_REVIEW",status.equals("DUPLICATE") ? "Mit bestehendem Kalendereintrag verknüpft" : "Quellenänderung zu bestehendem Kalendereintrag prüfen",id);
+                if(linked>0) store.audit(id,status,operation);
+            }
+        }
+        if (old==null && operation!=null) monitor.record(id,sourceId,event,operation);
         if (status.equals("READY")) importer.importCandidate(id,match.partyId(),date,false);
     }
 }

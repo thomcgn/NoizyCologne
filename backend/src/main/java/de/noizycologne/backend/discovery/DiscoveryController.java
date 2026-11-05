@@ -21,6 +21,17 @@ public class DiscoveryController {
     public DiscoveryController(DiscoveryStore store,DiscoveryScheduler scheduler,VenueSourceDiscoveryService discovery,EventImportService importer,DiscoveryResetService resets) {
         this.store=store; this.scheduler=scheduler; this.discovery=discovery; this.importer=importer; this.resets=resets;
     }
+    @org.springframework.beans.factory.annotation.Autowired private EventChangeService changes;
+    @GetMapping("/changes") public List<Map<String,Object>> changes() { return changes.list(); }
+    @GetMapping("/changes/{id}/replacements") public List<Map<String,Object>> replacements(@PathVariable String id) { return changes.replacements(id); }
+    @GetMapping("/candidates/{id}") public Map<String,Object> candidate(@PathVariable String id) { return DiscoveryStore.forApi(store.candidate(id)); }
+    @GetMapping("/changes/{id}/history") public List<Map<String,Object>> changeHistory(@PathVariable String id) { return changes.history(id); }
+    @GetMapping("/changes/{id}/dm") public Map<String,String> changeDm(@PathVariable String id) { return Map.of("text",changes.dm(id)); }
+    @PutMapping("/changes/{id}") public void decide(@PathVariable String id,@Valid @RequestBody EventChangeService.Decision decision) { changes.decide(id,decision); }
+    @PostMapping("/monitor") @ResponseStatus(HttpStatus.ACCEPTED) public Map<String,Boolean> monitor() {
+        if(!scheduler.startChanges()) throw new ResponseStatusException(HttpStatus.CONFLICT,"Discovery-Auftrag läuft bereits");
+        return Map.of("accepted",true);
+    }
     @GetMapping public Map<String,Object> overview(@RequestParam(defaultValue="ALL") String filter) {
         return Map.of("candidates",store.candidates(filter),"sources",store.sources(),
                 "counts",store.jdbc().queryForList("SELECT status,count(*) AS count FROM discovery_candidates GROUP BY status"),

@@ -16,7 +16,8 @@ public record CalendarEntryResponse(
         String startTime,
         String reason,
         List<String> mentionDjIds,
-        PartyFlyerResponse eventFlyer
+        PartyFlyerResponse eventFlyer,
+        String eventStatus
 ) {
 
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
@@ -34,7 +35,8 @@ public record CalendarEntryResponse(
                 startTime == null ? null : startTime.format(TIME_FORMAT),
                 entry.getReason(),
                 entry.getMentionDjIds().stream().sorted().toList(),
-                eventFlyer
+                eventFlyer,
+                entry.getEventStatus()
         );
     }
 }

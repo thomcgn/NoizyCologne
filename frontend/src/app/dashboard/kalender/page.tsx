@@ -426,6 +426,7 @@ export default function CalendarPage() {
                             }}
                             title={getEntryName(entry)}
                           >
+                            {entry.eventStatus === "CANCELLED" && <strong className="text-red-400">ABGESAGT · </strong>}
                             {entry.type === "event" && entry.startTime
                               ? `${entry.startTime} `
                               : ""}
@@ -521,7 +522,8 @@ export default function CalendarPage() {
                       </div>
                       <p className="mt-1 text-sm text-neutral-300">
                         {entryDate} · {locationName}
-                        {entry.type === "event" && entry.startTime
+                        {entry.eventStatus === "CANCELLED" && <strong className="text-red-400">ABGESAGT · </strong>}
+                            {entry.type === "event" && entry.startTime
                           ? ` · ${entry.startTime} Uhr`
                           : ""}
                       </p>

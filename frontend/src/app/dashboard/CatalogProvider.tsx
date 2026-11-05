@@ -95,6 +95,8 @@ export type PartySeries = CatalogItem & {
 export type EditorialDraftStatus = "DRAFT" | "READY_FOR_REVIEW" | "APPROVED";
 
 export type EditorialPostDraft = {
+  approvalNeedsReview?: boolean;
+  publicationBlockers?: string[];
   id: string;
   calendarEntryId: string;
   caption: string;
@@ -123,6 +125,7 @@ export type MusicTrack = {
 export type MusicTrackInput = Omit<MusicTrack, "id" | "lastUsedAt" | "score" | "matchReasons">;
 
 type EntryBase = {
+  eventStatus?: "ACTIVE" | "CANCELLED";
   id: string;
   date: string; // Lokales Kalenderdatum: YYYY-MM-DD (ohne Zeitzonen-Verschiebung)
   locationId: string;
@@ -418,6 +421,8 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       genres: draft.genres as string[],
       status: draft.status as EditorialDraftStatus,
       musicTrackId: draft.musicTrackId as string | null,
+      approvalNeedsReview: draft.approvalNeedsReview === true,
+      publicationBlockers: Array.isArray(draft.publicationBlockers) ? draft.publicationBlockers.filter((item): item is string => typeof item === "string") : [],
     };
   }, []);
 
@@ -977,6 +982,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         entryPrice: value.entryPrice,
         eventFlyer,
         type: "event",
+        eventStatus: value.eventStatus === "CANCELLED" ? "CANCELLED" : "ACTIVE",
         partyId: value.partyId,
         startTime: value.startTime ?? "",
         mentionDjIds: value.mentionDjIds,

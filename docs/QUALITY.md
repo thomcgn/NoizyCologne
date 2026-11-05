@@ -118,7 +118,7 @@ Metadaten sind gesondert in der IDE beziehungsweise mit einem weitergehenden,
 kompatibel eingerichteten Analyseprofil zu prüfen. Neue `@NullMarked`-Scopes dürfen
 nicht allein mit diesem Kompatibilitätsprofil freigegeben werden.
 
-Im bereinigten ECJ-Lauf bleiben **98 Informationshinweise** (15 main, 83 test) zur
+Im ursprünglichen bereinigten ECJ-Lauf blieben **98 Informationshinweise** (15 main, 83 test); mit Event Change Monitoring sind es derzeit **109 Informationshinweise** (19 main, 90 test) zur
 Null-Annotation-Interpretation an Bibliotheks-/Generikgrenzen, etwa Jackson,
 Spring Data und generischen Assertion-Rückgaben. Sie sind sichtbar im Analyse-Log,
 keine unterdrückten Warnungen und kein Beweis für 98 Laufzeitfehler. Es wurden

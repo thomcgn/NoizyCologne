@@ -36,6 +36,12 @@ public class EditorialPostDraft {
     @Column(nullable = false, length = 30)
     private String status;
 
+    @Column(name = "approval_needs_review", nullable = false)
+    private boolean approvalNeedsReview;
+
+    public boolean isApprovalNeedsReview() { return approvalNeedsReview; }
+    public void confirmReview() { approvalNeedsReview=false; }
+
     @Column(name = "music_track_id", length = 100)
     private String musicTrackId;
 

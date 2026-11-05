@@ -24,6 +24,9 @@ import java.util.Set;
 @Service
 public class CalendarEntryService {
 
+    @org.springframework.beans.factory.annotation.Autowired private de.noizycologne.backend.discovery.DiscoveryStore discoveryStore;
+    private void lockCalendar() { discoveryStore.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)"); }
+
     private static final DateTimeFormatter DATE_FORMAT =
             DateTimeFormatter.ofPattern("uuuu-MM-dd").withResolverStyle(ResolverStyle.STRICT);
     private static final DateTimeFormatter TIME_FORMAT =
@@ -64,6 +67,7 @@ public class CalendarEntryService {
 
     @Transactional
     public CalendarEntryResponse createEntry(CalendarEntryRequest request) {
+        lockCalendar();
         ValidatedEntry validated = validate(request);
         CalendarEntry entry = new CalendarEntry(
                 validated.date(),
@@ -81,6 +85,7 @@ public class CalendarEntryService {
 
     @Transactional
     public CalendarEntryResponse updateEntry(String id, CalendarEntryRequest request) {
+        lockCalendar();
         ValidatedEntry validated = validate(request);
         CalendarEntry entry = calendarEntryRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Kalendereintrag nicht gefunden"));
@@ -100,6 +105,7 @@ public class CalendarEntryService {
 
     @Transactional
     public void deleteEntry(String id) {
+        lockCalendar();
         CalendarEntry entry = calendarEntryRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Kalendereintrag nicht gefunden"));
         calendarEntryRepository.delete(entry);

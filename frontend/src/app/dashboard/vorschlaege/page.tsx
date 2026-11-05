@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { discoveryStatusLabel } from "../discoveryLabels";
 import DashboardModal from "../DashboardModal";
 import { useCatalog } from "../CatalogProvider";
+import EventChangesPanel from "./EventChangesPanel";
 import DiscoveryResetDialog, { type ResetMode } from "./DiscoveryResetDialog";
 
 type Candidate = {id: string; title: string; venue_name: string; instagram: string; source_url: string; event_date: string | null; party_id: string | null; status: string; reason: string; evidence: string; inquiry_status: string; dm_text: string; calendar_entry_id: string | null; decision_origin: string; matching_class: string; automatic_reason: string; matcher_version: string; evaluated_at: string | null; previous_status: string | null; last_evaluation_id: string | null};
@@ -37,6 +38,7 @@ export default function SuggestionsPage() {
   const [source,setSource] = useState<Source | null>(null);
   const [party,setParty] = useState(""); const [date,setDate] = useState("");
   const [status,setStatus] = useState("NEEDS_REVIEW"); const [inquiry,setInquiry] = useState("NONE"); const [dm,setDm] = useState("");
+  const [showChanges,setShowChanges] = useState(false);
   const [notice,setNotice] = useState("");
   const [resetMode, setResetMode] = useState<ResetMode | null>(null);
   const [operationId, setOperationId] = useState<string | null>(null);
@@ -64,6 +66,8 @@ export default function SuggestionsPage() {
   async function save() { if (!candidate) return; await api(`/candidates/${candidate.id}`,"PUT",{partyId: party || null,date: date || null,status,inquiryStatus: inquiry,dmText: dm}); }
   return <main className="min-w-0 space-y-5 p-4 sm:p-7">
     <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-bold">Vorgeschlagene</h1><div className="flex flex-wrap gap-2"><button className={button} disabled={running} onClick={() => void action(async () => { await api("/scan","POST"); setNotice("Suchlauf angefordert. Ergebnisse werden automatisch aktualisiert."); })}>Jetzt suchen</button><button className={button} disabled={running} onClick={() => setResetMode("ALL")}>Neu bewerten</button><button className={button} disabled={running} onClick={() => setResetMode("IGNORED")}>Suchlauf zurücksetzen</button></div></div>
+    <button className={button} aria-expanded={showChanges} onClick={() => setShowChanges(!showChanges)}>Änderungen &amp; Absagen</button>
+    {showChanges && <EventChangesPanel onReviewCandidate={id => void action(async () => { edit(await api(`/candidates/${id}`)); })} />}
     <p className="text-sm text-neutral-400">Gefundene Partys prüfen und in den Kalender übernehmen.</p>
     {error && <p role="alert" className="text-red-400">{error}</p>}{notice && <p role="status">{notice}</p>}
     <div className="flex flex-wrap gap-2">{["NEEDS_REVIEW","NEEDS_INQUIRY","OPEN","IMPORTED","ARCHIVE", ...Object.keys(extraFilters)].map(value => <button key={value} aria-pressed={filter === value} className={`${button} ${filter === value ? "bg-white/15" : ""}`} onClick={() => setFilter(value)}>{extraFilters[value] ?? (value === "OPEN" ? "Rückfragen offen" : value === "ARCHIVE" ? "Abgelehnt / Archiv" : labels[value])} ({countFor(value)})</button>)}</div>

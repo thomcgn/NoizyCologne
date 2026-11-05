@@ -18,7 +18,7 @@ public class DiscoveryEvaluationService {
         this.store=store;this.parties=parties;this.genres=genres;this.matcher=matcher;
     }
     public Rules rules() { return new Rules(parties.findAll(),store.aliases(),genres.terms()); }
-    public String raw(EventExtractor.Event event) { return json.writeValueAsString(event); }
+    public String raw(EventExtractor.Event event) { return json.writeValueAsString(EventPrivacy.safe(event)); }
     public EventExtractor.Event event(Map<String,Object> row) {
         if (row.get("raw_event") instanceof String raw && !raw.isBlank())
             return json.readValue(raw,EventExtractor.Event.class);

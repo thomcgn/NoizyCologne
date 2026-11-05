@@ -35,6 +35,8 @@
 22. **Dokumentation-first-Workflow, Smartphone-Notizen und Coding-Agent-Übergaben**
 23. **Ist-Stand 31.10.2026, Flyer- und Redaktionskonzept sowie nächste Implementierungsschritte (neu v1.7)**
 24. **Location Discovery, Vorschläge und manuelle Instagram-Rückfragen (v1.8)**
+25. **Permanente Code-Quality-Routine**
+26. **Event Change Monitoring und zentraler Cancellation-Prozess**
 
 ---
 
@@ -2121,6 +2123,7 @@ Bei jeder Ergänzung gleichzeitig **Kapitel 3 (Lastenheft), 4 (Pflichtenheft), 5
 | v1.8 Quellennavigation | 05.11.2026 | PARTY-/LIVE-Navigation und zugängliche Linkbeschriftungen erkennen, Programmseiten vor Detailabrufen priorisieren, leere Wix-HTML-Einbettungen korrekt diagnostizieren. |
 | v1.8 Wix-Programm | 05.11.2026 | Wix-Eventkarten, deutsche Datumsbereiche und textbasierte Jahresvorschauen ergänzt; aktuelles Blue-Shell-Programm mit 55 Einträgen geprüft. |
 | v1.8 Detailabruf | 05.11.2026 | Veranstaltungslinks erst nach positivem Abgleich mit aktiven Genres/Aliasen abrufen; Übersicht und Detaildaten mit Konflikterhalt zusammenführen. |
+| v1.8 Monitoring | 05.11.2026 | Tägliche Änderungsprüfung, Quellenhistorie, Ersatzpartys und zentraler Cancellation-Service mit separater Grafik/Absageentwurf; Publishing-/Reconciliation-Grenzen ausdrücklich dokumentiert, siehe Kapitel 26. |
 | v1.8 Korrektur | 05.11.2026 | robots.txt: führende Wildcards korrekt auswerten, Allow-Priorität und Bot-Gruppen beachten; Blue-Shell-Regressionsfixture ergänzt. |
 | v1.8 | 05.11.2026 | Location Discovery mit additiver Migration V12, abgesichertem HTTPS-Crawler, persistenten Vorschlägen und Scanberichten, dienstäglicher Suche, Kalender-Matching und manuellem Instagram-Rückfrageworkflow; siehe Kapitel 24. |
 | 0.1 | 29.10.2026 | Grundkonzept Flyer → normaler Instagram-Foto-Post → iOS/Android-Musik-Handoff |
@@ -3538,3 +3541,76 @@ Versionierte Hooks liegen in `.githooks`; `scripts/install-hooks.sh` aktiviert s
 Die gemeinsame lokale/CI-Routine umfasst javac mit `-Xlint:all`/Warnungsfehlern, Tests und Maven-Paket, eine gepinnte zusätzliche ECJ-Analyse einschließlich Testcode, Next-Typegen, TypeScript, ESLint mit `--max-warnings=0`, Frontend-Tests und Produktionsbuild. Diff, Konfliktmarker und konfigurierte Secret-Muster werden auch im tatsächlichen Index geprüft. Backend-Schreibtests laufen stets in einem eigenen kurzlebigen PostgreSQL-Container mit zufälligem Loopback-Port, niemals gegen bestehende Datenbanken.
 
 Reproduzierter Ausgangsbestand: 21 Warnungen mit den lokalen IDE-Einstellungen, 43 im zusätzlichen Profil (11 Deprecations, vier unbenutzte Imports, eine Serialisierungs-ID, 27 Null-/Typflusswarnungen). Zusätzlich wurde eine javac-`this-escape`-Warnung beim Lexikon-Konstruktor fachlich behoben und per Regression abgesichert; insgesamt 44 bereinigte Warnungen ohne Suppressions. Die zusätzliche Analyse lässt 98 sichtbare Informationshinweise an Bibliotheks-/Generik-Annotationsgrenzen übrig; sie ist kein vollständiger JSpecify- oder Live-VS-Code-Problemlisten-Nachweis. Der optionale historische Offline-Discovery-Test wird ohne privaten Export ausdrücklich als nicht ausgeführt gemeldet. Voraussetzungen, verbleibende Diagnosegrenzen, Fehlerbehandlung und getestete Fehler-/Hook-Szenarien sind in [QUALITY.md](QUALITY.md) dokumentiert.
+
+# 26. Event Change Monitoring und zentraler Cancellation-Prozess (05.11.2026)
+
+Diese Erweiterung setzt die Anforderungen aus Kapitel 10 teilweise technisch um und ergänzt Kapitel 24 um die Überwachung bekannter Veranstaltungen. Es entstehen keine zweiten Event-/Party-Modelle: Quellenbeobachtungen referenzieren `discovery_candidates`, bestätigte Absagen referenzieren `calendar_entries`.
+
+## 26.1 Bestandsanalyse: Soll und tatsächlicher Code
+
+Vor dieser Änderung waren wöchentliche Suche (Dienstag 09:00 Europe/Berlin), ICS-UID/JSON-LD-ID/Detail-URL, Identitätsaliasse, konservative Übernahme, manuelle Prüfentscheidungen und Fingerprint-Änderungen vorhanden. Bei einem geänderten bereits übernommenen Kandidaten wurde nur allgemein `NEEDS_REVIEW` gesetzt. Ein versionierter Quellenverlauf, eigene Änderungsmeldungen, ein täglicher Check und ein zentraler Cancellation-Service fehlten.
+
+Kapitel 10 beschrieb einen **Soll-Workflow**, keine vorhandene Implementierung. Insbesondere existieren im aktuellen Backend **keine Instagram-Publication-Entität, keine Publishing-Queue, keine laufenden Publishing-Jobs und keine Remote-Reconciliation**. Redaktionsentwürfe enden bei `APPROVED`; dieser Status bedeutet ausdrücklich nicht „veröffentlicht“. Die Erweiterung erfindet keine Instagram-Erfolge oder erfolgreichen Jobabbrüche. Eine spätere Publisher-Integration muss vor dem Senden die serverseitige Sperre berücksichtigen und angefangene/unklare Remote-Vorgänge reconciliieren. Das reguläre Publishing bleibt gemäß Projektvorbehalt deaktiviert. Reale Tests „geplanten Job storniert“, „laufenden Instagram-Vorgang gestoppt“ und „veröffentlichten Remote-Post erhalten“ sind mangels dieser Komponenten nicht ausführbar; geprüft wird der Erhalt der bestehenden lokalen Inhalte und das Unterlassen jeglicher Remote-Aktion.
+
+## 26.2 Daten, Identität und Änderungsvergleich
+
+Additive Migration **V14** ergänzt Kandidaten um erste Beobachtung, letzte erfolgreiche Bestätigung, letzte Änderung, normalisierten Monitoring-Fingerprint und letzten Quellenbefund. Bei Altzeilen bleibt die unbekannte erste Sichtung unbekannt. `discovery_observations` hält begrenzte extrahierte Eventversionen einschließlich stabiler Identität, Quelle, Vorgang und Zeitpunkt; keine vollständigen HTML-Archive. ICS-UID, strukturierte ID, HTML-`data-event-id` und Detail-URL werden genutzt, soweit vorhanden. Ohne stabile Identität wird ausschließlich ein gleichnamiges Vorkommen am selben Ort und Tag konservativ zugeordnet; ein anderer Tag wird nicht durch unscharfes Titelmatching als sichere Verschiebung behauptet.
+
+`event_changes` enthält Vorher-/Nachher-Befund, Kalenderverknüpfung, Quelle, Grund, Sperre und Bearbeitungsrevision. `event_change_history` protokolliert Entscheidungen. Der Vergleich findet vor weiteren automatischen Übernahmen über den gesammelten Quellenstand statt. Unterstützte Befunde:
+
+- `CANCELLATION_DETECTED`: ausdrücklicher offizieller Absagebefund; redaktionelle Bestätigung nötig.
+- `CANCELLATION_UNCONFIRMED`: ausdrücklich unsicherer Absagehinweis, keine öffentliche Absage.
+- `RESCHEDULE_DETECTED`: geändertes Datum derselben Identität oder expliziter Verschiebungsstatus.
+- `POSSIBLE_REPLACEMENT`: andere Party am belegten Location-/Kalendertag, bisheriges Event nicht gleichzeitig bestätigt. Mehrere Events bleiben möglich; kein automatisches Ersetzen.
+- `SOURCE_MISSING`: nach zwei vollständigen erfolgreichen Abrufen derselben Quelle nicht bestätigt, keine Absage.
+- `EVENT_CHANGED`, `LINEUP_CHANGE`, `CONFLICTING_SOURCES`: weitere Änderungen beziehungsweise widersprüchliche Angaben.
+
+Eine unvollständige HTML-Liste, Navigation, Rendering-Anforderung, Abrufbegrenzung oder Netzwerk-/Robotsfehler darf keine Abwesenheit beweisen. Automatisch nachweisbare Vollständigkeit ist derzeit bewusst auf vollständig parsebare, nicht abgeschnittene ICS-Kalender begrenzt. HTML-Änderungen werden positiv erkannt; das Fehlen in beliebigen HTML-Programmlisten wird ohne Vollständigkeitsnachweis **nicht** als `SOURCE_MISSING` ausgegeben. Eine erneute tägliche vollständige ICS-Prüfung ist der Kontrollabruf; Wiederholung desselben Vorgangs zählt nicht doppelt.
+
+## 26.3 Zeitplan und Schutz vor konkurrierenden Änderungen
+
+Die wöchentliche Suche bleibt erhalten. Zusätzlich gilt täglich 09:00 Europe/Berlin für bekannte relevante Kandidaten und übernommene Veranstaltungen im kommenden 21-Tage-Fenster. Der tägliche Check verwendet vorhandene Locations, offizielle gespeicherte Detailseiten, Übersichten und Quellenprofile; keine neue Location-Recherche. Pro Location bleiben Abruf-/Seitenbudgets begrenzt. Die Zeitzone und Cron-Ausdrücke sind konfigurierbar:
+
+```properties
+DISCOVERY_ENABLED=true
+DISCOVERY_CRON=0 0 9 * * TUE
+DISCOVERY_MONITOR_ENABLED=true
+DISCOVERY_MONITOR_CRON=0 0 9 * * *
+DISCOVERY_ZONE=Europe/Berlin
+```
+
+Suche, Reset und Monitoring teilen den bestehenden PostgreSQL-Sessionlock. Gleichzeitige lokale Scheduler-Termine werden hinter dem laufenden Worker erneut angefordert; manuelle konkurrierende Aufträge erhalten weiterhin einen Konflikt. Ein belegter Lock einer anderen Backend-Instanz erlaubt keine parallele Verarbeitung. Globale Transaktionslocks schützen Quellenentscheidungen, Kalenderänderungen, Originalfreigaben und Cancellation. Kalenderaktualisierungen prüfen zusätzlich den beim Befund gespeicherten Kalenderstand; veraltete Kalender-/Dialogrevisionen führen zu HTTP 409. Das Aufheben einer Sperre stellt eine frühere Freigabe nicht automatisch wieder her.
+
+## 26.4 Ein zentraler Cancellation-Service
+
+`CancellationService` verarbeitet ausschließlich **bestätigte vollständige Veranstaltungsabsagen**. Auslöser: manuell bestätigtes Teamwissen, ausdrücklicher offizieller Quellenbefund oder dokumentierte bestätigte DM-Antwort. Pro Kalendertermin existiert höchstens eine Cancellation. `event_cancellations` speichert Auslöser, allgemeinen Grund, Quelle, Zeitpunkt, optionalen Ersatzkandidaten und einen **separaten Absageentwurf**; `cancellation_history` protokolliert den Verlauf.
+
+Die Bestätigung markiert das bestehende Kalender-Event `CANCELLED`, setzt die Originalfreigabe auf prüfbedürftig und sperrt serverseitig weitere Originalfreigaben. Originalcaption, Hashtags, Genres, Musik, Mentions, Flyer und PartySeries-ID werden nicht umgewandelt. Ein Ersatz bleibt ein eigener Discovery-Kandidat und wird separat geprüft; die Absage kann ihn verknüpfen. Es erfolgt keine automatische Erstellung eines zweiten Kalendereintrags und keine Löschung des alten Eintrags.
+
+`PERSONALBEDINGTER_AUSFALL` ist ein allgemeiner interner Grund, keine Diagnose. Erkannte Gesundheitsbegriffe in externem Belegtext beziehungsweise Titeln führen vor Speicherung zu neutralem Ersatztext. Das ist eine konservative lexikalische Redaktion, keine vollständige DLP-/Medizinklassifikation; zusätzliche private Inhalte dürfen auch manuell nicht übernommen werden. Rückfragen, Antworten, Gründe und öffentliche Absagetexte dürfen keine privaten Gesundheitsdetails enthalten; die automatisch erzeugte Caption bleibt neutral. Nur-DJ-Ausfälle bleiben `LINEUP_CHANGE`: Event aktiv, Originalentwurf erhalten, redaktionelle Prüfung/Sperre bis zur Klärung. Es werden keine Ersatz-DJs erfunden.
+
+Die Aktion „Absagegrafik vorbereiten“ erzeugt idempotent ein **neues PNG-MediaAsset** mit kontrastreichem CANCELLED-/ABGESAGT-Balken. Vorhandener Event-Flyer, sonst Dauerflyer, dient als Hintergrund; ohne Flyer entsteht eine neutrale Grafik. Originaldateien und -referenzen bleiben erhalten. Das Backend-Runtime-Image installiert dafür `fontconfig` und DejaVu-Schriften; die Java2D-Grafikerstellung läuft headless. Der Absageentwurf hat eigene Zustände `DRAFT`, `READY_FOR_REVIEW`, `APPROVED`; die Freigabe verlangt eigene Grafik und Text. Sie sendet nichts an Instagram. Die Notfallausnahme der Feed-3er-Regel wird nicht automatisch aktiviert: Feed-Queue, Publisher-Rollen und deren protokollierte Notfallpriorisierung bleiben bis zur tatsächlichen Publishing-Implementierung Soll-Zustand.
+
+## 26.5 Oberfläche und API
+
+Unter „Vorgeschlagene“ öffnet **„Änderungen & Absagen“** den eigenen Bereich mit Kategorien, Vorher-/Nachher-Tabelle, Quellenlink, Historie, bestätigter Kalenderaktualisierung, Trennung mehrerer Events, Ablehnung und begründetem Aufheben der Sperre. Der DM-Entwurf enthält Location, alte/neue Party und Datum, ist editierbar/kopierbar und kann manuell als gesendet oder beantwortet markiert werden. Die App versendet keine DM. Bestätigte Absagen verwenden dasselbe Cancellation-Modal wie manuelle Absagen. Die Redaktion zeigt Warnungen/Sperrgründe; der Kalender kennzeichnet bestätigte Absagen.
+
+- `POST /api/v1/discovery/monitor`: separaten Änderungscheck anfordern.
+- `GET /api/v1/discovery/changes`: Änderungsvergleiche; `/{id}/history`, `/{id}/dm`, `/{id}/replacements` für Verlauf/Rückfrage/Ersatzkandidaten.
+- `PUT /api/v1/discovery/changes/{id}`: versionierte, begründete redaktionelle Entscheidung.
+- `GET /api/v1/discovery/candidates/{id}`: Ersatzkandidaten direkt prüfen.
+- `GET/POST /api/v1/cancellations`: zentrale Liste/manuelle oder belegte bestätigte Absage.
+- `POST/GET /api/v1/cancellations/{id}/graphic`: eigene Grafik vorbereiten/lesen.
+- `PUT /api/v1/cancellations/{id}/announcement`: versionierten separaten Absageentwurf speichern/freigeben.
+- `GET /api/v1/cancellations/{id}/history`: Absagehistorie.
+
+Neue APIs folgen der bestehenden lokalen/staging-API- und Caddy-Sessionabsicherung. Individuelle Team-/Publisher-Identitäten und deren differenzierte Rollen sind in diesem Repository noch nicht umgesetzt und werden nicht durch frei übergebene Actor-IDs vorgetäuscht.
+
+
+## 26.6 Lokale Validierung und Grenzen
+
+Regressionen prüfen stabile Identität trotz Datum-/Titelwechsel, echte kanonische Detail-URLs, Uhrzeit/Location/Beschreibung, offizielle Absage versus Gerücht und DJ-Ausfall, vollständige versus beschädigte ICS-Quellen, Quellenverlust nach wiederholter vollständiger Prüfung, widersprüchliche Quellen ohne doppelte Meldung, bestehende manuelle Kalendertermine, wiederverwendete Identitäten, eigenständige Ersatzkandidaten und deren ausdrücklich geprüfte Übernahme nach bestätigter Absage. Getestet sind unveränderte Originalcaptions/-genres/-freigabestatus und Originalflyerbytes, serverseitig blockierte Originalfreigaben, separate Grafik-/Absagefreigabe, veraltete Revisionen und das 21-Tage-Fenster.
+
+Frontend-DOM-Regressionen prüfen Vergleichstabelle, editierbaren Rückfragetext ohne Fokusverlust, manuelle Versandmarkierung, Konfliktmeldung ohne Verlust der Eingaben, zentrale manuelle Absage und separates Grafikvorbereiten ohne Publishing-/Instagram-Aufruf. Sie ersetzen keine visuelle Abnahme in realen mobilen Browsern oder einen realen Instagram-/Publishing-Test. Vor dem lokalen Commit laufen TypeScript, ESLint, Production-Build, Maven-Paket, Java-Analysen und sämtliche Tests über das verbindliche vollständige Quality Gate. Datenbankschreibtests und Flyway V14 laufen ausschließlich im kurzlebigen Testcontainer; die bestehende Entwicklungs-/Produktionsdatenbank wird nicht migriert. Kein Push oder Deployment.
+
+Der zuletzt vollständig bestätigte Lauf umfasst **119 Backend-Tests (118 erfolgreich, ein ausdrücklich optionaler historischer Offline-Test ohne Exportdatei übersprungen)** und **21 erfolgreiche Frontend-Tests**, zusätzlich die Selbst-/Negativtests der Prüfroutine. javac und ECJ melden keine Compilerfehler oder -warnungen; **109 sichtbare ECJ-Informationshinweise** betreffen weiterhin Bibliotheks-/Generik-Annotationsgrenzen, siehe `docs/QUALITY.md`. Ein zusätzlicher gezielter Lauf mit 19 Extraktions-/Klassifikationstests prüft insbesondere die ausdrückliche Gesamtabsage trotz erwähnten DJ-Ausfalls.
