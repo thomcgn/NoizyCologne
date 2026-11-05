@@ -2115,6 +2115,7 @@ Bei jeder Ergänzung gleichzeitig **Kapitel 3 (Lastenheft), 4 (Pflichtenheft), 5
 
 | Version | Datum | Änderungen |
 |---|---|---|
+| v1.8 Korrektur | 05.11.2026 | robots.txt: führende Wildcards korrekt auswerten, Allow-Priorität und Bot-Gruppen beachten; Blue-Shell-Regressionsfixture ergänzt. |
 | v1.8 | 05.11.2026 | Location Discovery mit additiver Migration V12, abgesichertem HTTPS-Crawler, persistenten Vorschlägen und Scanberichten, dienstäglicher Suche, Kalender-Matching und manuellem Instagram-Rückfrageworkflow; siehe Kapitel 24. |
 | 0.1 | 29.10.2026 | Grundkonzept Flyer → normaler Instagram-Foto-Post → iOS/Android-Musik-Handoff |
 | 0.2 | 29.10.2026 | Manuelle Posting-Reihenfolge, 3er-Venue-Regel, Freitag-/Samstag-Balance, Feed-Vorschau |
@@ -3352,7 +3353,7 @@ Compose und `.env.example` enthalten die Durchleitung dieser Variablen; es wurde
 
 Nur HTTPS, Port 443/Standardport, ohne URL-Credentials, IP-Literale oder Fragmente. Sämtliche DNS-Ergebnisse werden vom tatsächlichen Verbindungsresolver geprüft; Loopback, private, Link-Local-, Multicast-, Dokumentations- und weitere reservierte Adressen werden abgelehnt. Der Client verbindet über genau diesen Resolver und verwendet keinen Systemproxy. Automatische Redirects sind deaktiviert; eine Weiterleitung muss durch die explizite endgültige URL ersetzt werden. Das verhindert auch Weiterleitungen auf interne Ziele.
 
-robots.txt wird vor jeder Website-Suche geprüft. Die Implementierung wertet passende Bot-/Wildcard-Disallow-Regeln konservativ aus; komplexe Muster oder `Crawl-delay` führen eher zum Blockieren als zum Umgehen. Nicht abrufbare robots.txt-Dateien außer HTTP 404 blockieren die Suche. Login-/403-/429-Schranken werden nicht umgangen. Es gibt keine Browser-Cookies, automatischen Bildabrufe, Codeausführung oder HTML-Ausgabe externer Inhalte. Das Frontend rendert Belege als Text; externe Links müssen HTTPS verwenden. Gzip/sonstige komprimierte Responses werden im MVP abgelehnt, damit kein Dekompressionsbombenpfad entsteht. UTF-8 ist der derzeitige Textdecodierungsstandard.
+robots.txt wird vor jeder Website-Suche geprüft. Die Implementierung wertet passende Bot-Gruppen aus (explizite NoizyCologneDiscovery-Gruppe vor Wildcard-Gruppe), unterstützt `Allow`, `Disallow`, `*` und abschließendes `$` und bevorzugt die spezifischste passende Regel; bei Gleichstand gewinnt `Allow`. Ein passendes `Crawl-delay` führt weiterhin zum Blockieren, bis individuelle Host-Pausen unterstützt werden. Nicht abrufbare robots.txt-Dateien außer HTTP 404 blockieren die Suche. Login-/403-/429-Schranken werden nicht umgangen. Es gibt keine Browser-Cookies, automatischen Bildabrufe, Codeausführung oder HTML-Ausgabe externer Inhalte. Das Frontend rendert Belege als Text; externe Links müssen HTTPS verwenden. Gzip/sonstige komprimierte Responses werden im MVP abgelehnt, damit kein Dekompressionsbombenpfad entsteht. UTF-8 ist der derzeitige Textdecodierungsstandard.
 
 Selektoren und Quellenfreigaben sind redaktionelle Konfiguration, keine fremden Website-Anweisungen. Änderungen an Website-Regeln und die inhaltliche Zuverlässigkeit einer Quelle bleiben redaktionell zu prüfen. Discovery ersetzt keine individuelle rechtliche Prüfung einer Website.
 
@@ -3374,3 +3375,9 @@ Zusätzlich geprüft: unbekanntes Layout, fehlender Kalender, ausdrücklicher Le
 Die PostgreSQL-Integrationstests liefen ausschließlich gegen einen separaten kurzlebigen Testcontainer auf Port 55434. Die vorhandene lokale Datenbank auf Port 5433 und produktive Systeme wurden nicht verwendet. Maven kompiliert für Java 21; Docker- und CI-Konfiguration verwenden ebenfalls Java 21. Der lokale Testhost hatte JDK 25. Validierung: 46 Backend-Tests erfolgreich, davon 20 Discovery-Tests; Maven-Paket erfolgreich. Frontend: ESLint und Next.js-Produktionsbuild erfolgreich. Compose-Konfiguration mit neutralen Testwerten validiert. Eine Prüfung im realen iPhone-/Instagram-Client und ein Live-Abgleich der fünf Website-Layouts sind damit nicht behauptet.
 
 Technische Referenzen: [jsoup-Selektoren](https://jsoup.org/cookbook/extracting-data/selector-syntax), [Apache HttpClient DNS-Resolver](https://hc.apache.org/components/httpcomponents-client-5.6.x/5.6.1/httpclient5/apidocs/org/apache/hc/client5/http/impl/io/PoolingHttpClientConnectionManagerBuilder.html).
+
+## 24.10 Korrektur der Blue-Shell-Quellenprüfung
+
+Die am 05.11.2026 öffentlich abgerufene [Blue-Shell-robots.txt](https://www.blue-shell.de/robots.txt) erlaubt `/` und sperrt für allgemeine Bots `*?lightbox=`. Der erste Parser hatte den Teil vor `*` als Präfix verwendet. Bei einer führenden Wildcard war dieses Präfix leer und sperrte dadurch irrtümlich sämtliche Seiten. Die Korrektur prüft das gesamte Muster und berücksichtigt Allow-Regeln sowie passende Bot-Gruppen; die Website-Regeln werden weiterhin eingehalten.
+
+Die robots.txt liegt als lokale Regression unter `blue-shell-robots.txt`. Die gezielten `RobotsRulesTests` und bestehenden `DiscoveryTests` laufen ohne Datenbank oder Live-Website. Diese Korrektur beseitigt die falsche robots-Sperre; sie ist kein Nachweis einer vollständigen Wix-Eventextraktion.
