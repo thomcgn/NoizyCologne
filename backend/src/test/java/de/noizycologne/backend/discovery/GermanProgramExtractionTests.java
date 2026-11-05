@@ -1,6 +1,8 @@
 package de.noizycologne.backend.discovery;
 
+import static java.util.Objects.requireNonNull;
 import org.junit.jupiter.api.Test;
+import org.jspecify.annotations.NonNull;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -8,7 +10,7 @@ import static org.assertj.core.api.Assertions.*;
 
 class GermanProgramExtractionTests {
     private final EventExtractor extractor = new EventExtractor();
-    private EventExtractor.Extraction extract(String html) {
+    private EventExtractor.Extraction extract(@NonNull String html) {
         return extractor.extract(new EventPageFetcher.Page(URI.create("https://unknown.example/programm"),html,"text/html"),EventExtractor.Profile.defaults());
     }
     @Test void wixCardsAndTextPreviewAreBothExtractedWithoutJavascript() throws Exception {
@@ -19,17 +21,17 @@ class GermanProgramExtractionTests {
         var result=extract(html);
         assertThat(result.status()).isEqualTo("EVENTS_FOUND");
         assertThat(result.events()).hasSize(6);
-        var party=result.events().get(0);
+        var party=requireNonNull(result.events().get(0));
         assertThat(party.title()).isEqualTo("TESTNACHT - Indieparty");
         assertThat(party.starts()).containsExactly("2026-11-13T23:00");
         assertThat(party.url()).isEqualTo("https://unknown.example/events/testnacht");
-        assertThat(result.events().get(1).state()).contains("UNCONFIRMED");
-        var ambiguous=result.events().stream().filter(e -> e.title().equals("VORSCHAU PARTY")).findFirst().orElseThrow();
+        assertThat(requireNonNull(result.events().get(1)).state()).contains("UNCONFIRMED");
+        var ambiguous=requireNonNull(result.events().stream().filter(e -> e.title().equals("VORSCHAU PARTY")).findFirst().orElseThrow());
         assertThat(ambiguous.starts()).isEmpty(); assertThat(ambiguous.state()).contains("UNCONFIRMED");
-        var january=result.events().stream().filter(e -> e.title().equals("JANUAR PARTY")).findFirst().orElseThrow();
+        var january=requireNonNull(result.events().stream().filter(e -> e.title().equals("JANUAR PARTY")).findFirst().orElseThrow());
         assertThat(january.starts()).containsExactly("2027-01-09");
         assertThat(january.state()).contains("UNCONFIRMED");
-        var missing=result.events().stream().filter(e -> e.title().equals("OHNE JAHRESKONTEXT")).findFirst().orElseThrow();
+        var missing=requireNonNull(result.events().stream().filter(e -> e.title().equals("OHNE JAHRESKONTEXT")).findFirst().orElseThrow());
         assertThat(missing.starts()).isEmpty();
     }
     @Test void germanMonthsAndNumericFullDatesPreserveExactStartTime() {
@@ -45,10 +47,10 @@ class GermanProgramExtractionTests {
     }
     @Test void previewYearComesFromItsSectionAndNoTimeIsInvented() {
         var result=extract("<div><p>2027</p><p>09.01. Party A</p></div><div><p>09.01. Party B</p></div>");
-        assertThat(result.events().get(0).starts()).containsExactly("2027-01-09");
-        assertThat(EventNormalizer.time(result.events().get(0).starts().get(0))).isNull();
-        assertThat(result.events().get(1).starts()).isEmpty();
-        assertThat(result.events().get(0).identity()).isNotEqualTo(result.events().get(1).identity());
+        assertThat(requireNonNull(result.events().get(0)).starts()).containsExactly("2027-01-09");
+        assertThat(EventNormalizer.time(requireNonNull(result.events().get(0)).starts().get(0))).isNull();
+        assertThat(requireNonNull(result.events().get(1)).starts()).isEmpty();
+        assertThat(requireNonNull(result.events().get(0)).identity()).isNotEqualTo(requireNonNull(result.events().get(1)).identity());
     }
     @Test void indiepartyIsExplicitGenreAndPartyEvidenceButIndienIsNot() {
         var party=new EventExtractor.Event("id","TESTNACHT - Indieparty","https://unknown.example/event",List.of("2027-01-09"),"", "", "");
@@ -60,6 +62,6 @@ class GermanProgramExtractionTests {
     @Test void semanticEventsAndTextPreviewCoexist() {
         var result=extract("<script type='application/ld+json'>{\"@type\":\"Event\",\"name\":\"Structured\",\"startDate\":\"2027-01-09\"}</script><div><p>2027</p><p>10.01. Text Party</p></div>");
         assertThat(result.events()).hasSize(2);
-        assertThat(result.events().get(1).starts()).containsExactly("2027-01-10");
+        assertThat(requireNonNull(result.events().get(1)).starts()).containsExactly("2027-01-10");
     }
 }

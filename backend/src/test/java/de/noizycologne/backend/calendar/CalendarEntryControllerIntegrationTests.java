@@ -1,5 +1,8 @@
 package de.noizycologne.backend.calendar;
 
+import static java.util.Objects.requireNonNull;
+import org.jspecify.annotations.NonNull;
+import de.noizycologne.backend.json.JsonValues;
 import de.noizycologne.backend.actor.Actor;
 import de.noizycologne.backend.actor.ActorRepository;
 import de.noizycologne.backend.party.PartyDjAssignment;
@@ -52,10 +55,10 @@ class CalendarEntryControllerIntegrationTests {
     @Autowired
     private PartySeriesRepository partySeriesRepository;
 
-    private final List<String> entryIds = new ArrayList<>();
-    private final List<String> partyIds = new ArrayList<>();
-    private final List<String> venueIds = new ArrayList<>();
-    private final List<String> actorIds = new ArrayList<>();
+    private final @NonNull List<String> entryIds = new ArrayList<>();
+    private final @NonNull List<String> partyIds = new ArrayList<>();
+    private final @NonNull List<String> venueIds = new ArrayList<>();
+    private final @NonNull List<String> actorIds = new ArrayList<>();
 
     @AfterEach
     void cleanUpTestData() {
@@ -100,13 +103,13 @@ class CalendarEntryControllerIntegrationTests {
                 .filter(entry -> entry.id().equals(created.id()))
                 .findFirst().orElseThrow().locationId()).isEqualTo(venue.getId());
 
-        CalendarEntryResponse updated = objectMapper.readValue(
-                mockMvc.perform(put("/api/v1/calendar-entries/{id}", created.id())
+        CalendarEntryResponse updated = JsonValues.readRequired(objectMapper,
+                mockMvc.perform(requireNonNull(put("/api/v1/calendar-entries/{id}", created.id())
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(objectMapper.writeValueAsString(request(
+                                .content(JsonValues.write(objectMapper,request(
                                         "2027-01-09", venue.getId(), "event", "Geändert", party.getId(), "20:15", null,
                                         Set.of()
-                                ))))
+                                )))))
                         .andExpect(status().isOk())
                         .andReturn().getResponse().getContentAsString(),
                 CalendarEntryResponse.class
@@ -134,11 +137,11 @@ class CalendarEntryControllerIntegrationTests {
         assertThat(created.partyId()).isNull();
         assertThat(created.mentionDjIds()).isEmpty();
 
-        mockMvc.perform(put("/api/v1/calendar-entries/{id}", created.id())
+        mockMvc.perform(requireNonNull(put("/api/v1/calendar-entries/{id}", created.id())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request(
+                        .content(JsonValues.write(objectMapper,request(
                                 "2027-02-15", venue.getId(), "closure", "Geändert", null, null, "Geschlossen", Set.of()
-                        ))))
+                        )))))
                 .andExpect(status().isOk());
         assertThat(getEntries()).extracting(entry -> entry.reason()).contains("Geschlossen");
 
@@ -154,27 +157,27 @@ class CalendarEntryControllerIntegrationTests {
         Actor organizer = createActor("NC Calendar Organizer " + suffix, "organizer_user");
 
         long before = calendarEntryRepository.count();
-        mockMvc.perform(post("/api/v1/calendar-entries")
+        mockMvc.perform(requireNonNull(post("/api/v1/calendar-entries")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request(
+                        .content(JsonValues.write(objectMapper,request(
                                 "2027-01-01", venue.getId(), "event", "", "missing-party", "20:00", null,
                                 Set.of(organizer.getId())
-                        ))))
+                        )))))
                 .andExpect(status().isBadRequest());
 
-        mockMvc.perform(post("/api/v1/calendar-entries")
+        mockMvc.perform(requireNonNull(post("/api/v1/calendar-entries")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request(
+                        .content(JsonValues.write(objectMapper,request(
                                 "2027-01-01", venue.getId(), "closure", "", null, null, "Geschlossen",
                                 Set.of(organizer.getId())
-                        ))))
+                        )))))
                 .andExpect(status().isBadRequest());
 
-        mockMvc.perform(post("/api/v1/calendar-entries")
+        mockMvc.perform(requireNonNull(post("/api/v1/calendar-entries")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request(
+                        .content(JsonValues.write(objectMapper,request(
                                 "2027-01-01", venue.getId(), "event", "", null, "20:00", null, Set.of()
-                        ))))
+                        )))))
                 .andExpect(status().isBadRequest());
 
         assertThat(calendarEntryRepository.count()).isEqualTo(before);
@@ -202,19 +205,19 @@ class CalendarEntryControllerIntegrationTests {
     }
 
     private CalendarEntryResponse createEntry(CalendarEntryRequest request) throws Exception {
-        String body = mockMvc.perform(post("/api/v1/calendar-entries")
+        String body = mockMvc.perform(requireNonNull(post("/api/v1/calendar-entries")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                        .content(JsonValues.write(objectMapper,request))))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
-        return objectMapper.readValue(body, CalendarEntryResponse.class);
+        return JsonValues.readRequired(objectMapper,body, CalendarEntryResponse.class);
     }
 
     private CalendarEntryResponse[] getEntries() throws Exception {
         String body = mockMvc.perform(get("/api/v1/calendar-entries"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-        return objectMapper.readValue(body, CalendarEntryResponse[].class);
+        return JsonValues.readRequired(objectMapper,body, CalendarEntryResponse[].class);
     }
 
     private CalendarEntryRequest request(String date, String locationId, String type,

@@ -1,6 +1,8 @@
 package de.noizycologne.backend.discovery;
 
+import static java.util.Objects.requireNonNull;
 import de.noizycologne.backend.party.PartySeries;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
 import java.net.*;
 import java.util.*;
@@ -12,15 +14,15 @@ class DiscoveryTests {
     private DiscoveryGenreFilter genres() {
         var genres=mock(DiscoveryGenreFilter.class); when(genres.terms()).thenReturn(Set.of("Indie")); return genres;
     }
-    private EventPageFetcher.Page page(String body) { return new EventPageFetcher.Page(URI.create("https://unknown.example/programm"),body,"text/html"); }
-    private String fixture(String name) throws Exception { try(var in=getClass().getResourceAsStream("/discovery/"+name)) { return new String(Objects.requireNonNull(in).readAllBytes(),java.nio.charset.StandardCharsets.UTF_8); } }
+    private EventPageFetcher.Page page(@NonNull String body) { return new EventPageFetcher.Page(URI.create("https://unknown.example/programm"),body,"text/html"); }
+    private @NonNull String fixture(String name) throws Exception { try(var in=getClass().getResourceAsStream("/discovery/"+name)) { return new String(Objects.requireNonNull(in).readAllBytes(),java.nio.charset.StandardCharsets.UTF_8); } }
     @Test void fiveRepresentativeStructuresAndUnknownVenue() throws Exception {
         for(String file:List.of("mtc.html","blue-shell.html","tsunami.ics","garagen.html","live-music-hall.html","unknown.html")) {
             var result=extractor.extract(page(fixture(file)),EventExtractor.Profile.defaults());
             org.junit.jupiter.api.Assertions.assertEquals("EVENTS_FOUND",result.status(),file);
             assertThat(result.events()).as(file).hasSize(1);
-            assertThat(result.events().get(0).title()).isEqualTo("Indie Party");
-            assertThat(EventNormalizer.date(result.events().get(0).starts().get(0))).isEqualTo(java.time.LocalDate.of(2027,1,9));
+            assertThat(requireNonNull(result.events().get(0)).title()).isEqualTo("Indie Party");
+            assertThat(EventNormalizer.date(requireNonNull(result.events().get(0)).starts().get(0))).isEqualTo(java.time.LocalDate.of(2027,1,9));
         }
     }
     @Test void emptyUnknownJavascriptAndMalformedAreDistinct() {
@@ -31,7 +33,14 @@ class DiscoveryTests {
     }
     @Test void configurableProfileNeedsNoVenueCode() {
         var result=extractor.extract(page("<section class='gig'><b>Indie Party</b><i>2027-01-09</i></section>"),new EventExtractor.Profile(".gig","b","i"));
-        assertThat(result.events()).hasSize(1); assertThat(result.events().get(0).starts()).containsExactly("2027-01-09");
+        assertThat(result.events()).hasSize(1); assertThat(requireNonNull(result.events().get(0)).starts()).containsExactly("2027-01-09");
+    }
+    @Test void nullProfileSelectorsRetainTheDefaultExtractionBehavior() {
+        var nullableProfile = new EventExtractor.Profile(null, null, null);
+        assertThat(nullableProfile).isEqualTo(EventExtractor.Profile.defaults());
+        var page = page("<article><h2>Indie Party</h2><time datetime='2027-01-09'></time></article>");
+        assertThat(extractor.extract(page, nullableProfile))
+                .isEqualTo(extractor.extract(page, EventExtractor.Profile.defaults()));
     }
     @Test void crawlsHomepageCalendarAndDetailsWithinDomainOnly() throws Exception {
         var fetcher=mock(EventPageFetcher.class);
@@ -54,7 +63,7 @@ class DiscoveryTests {
         assertThatThrownBy(() -> new VenueSourceDiscoveryService(fetcher,extractor,genres()).discover(root.toString(),EventExtractor.Profile.defaults())).isInstanceOf(EventPageFetcher.FetchFailure.class);
     }
     private @org.jspecify.annotations.NonNull PartySeries party() { var p=mock(PartySeries.class); when(p.getId()).thenReturn("party"); when(p.getName()).thenReturn("Indie Party"); return p; }
-    private EventExtractor.Event event(String title,List<String> dates,String state) { return new EventExtractor.Event("id",title,"https://new.example/event",dates,title,state,""); }
+    private EventExtractor.Event event(String title,List<@NonNull String> dates,String state) { return new EventExtractor.Event("id",title,"https://new.example/event",dates,title,state,""); }
     @Test void exactNameAliasConservativeGenreAndUnknownParty() {
         var matcher=new EventMatcher(); var p=party();
         assertThat(matcher.match(event("Indie Party",List.of("2027-01-09T23:00"),""),"New",List.of(p),Map.of(),List.of("Indie"),true).status()).isEqualTo("READY");
@@ -65,13 +74,13 @@ class DiscoveryTests {
     }
     @Test void missingConflictingAndCancelledDatesRequireInquiry() {
         var matcher=new EventMatcher(); var p=party();
-        for(var dates:List.of(List.<String>of(),List.of("2027-01"),List.of("2027-01-08","2027-01-09")))
+        for(var dates:List.of(List.<@NonNull String>of(),List.<@NonNull String>of("2027-01"),List.<@NonNull String>of("2027-01-08","2027-01-09")))
             assertThat(matcher.match(event("Indie Party",dates,""),"New",List.of(p),Map.of(),List.of(),true).status()).isEqualTo("NEEDS_INQUIRY");
         for(String state:List.of("EventCancelled","EventRescheduled","TENTATIVE","UNCONFIRMED"))
             assertThat(matcher.match(event("Indie Party",List.of("2027-01-09"),state),"New",List.of(p),Map.of(),List.of(),true).status()).isEqualTo("NEEDS_INQUIRY");
     }
     @Test void overnightAndMissingTimesAreNotInvented() throws Exception {
-        var event=extractor.extract(page(fixture("mtc.html")),EventExtractor.Profile.defaults()).events().get(0);
+        var event=requireNonNull(extractor.extract(page(fixture("mtc.html")),EventExtractor.Profile.defaults()).events().get(0));
         assertThat(event.starts()).containsExactly("2027-01-09T23:00:00+01:00");
         assertThat(EventNormalizer.time("2027-01-09")).isNull();
         assertThat(EventNormalizer.date("2027-01-09T23:30:00Z")).isEqualTo(java.time.LocalDate.of(2027,1,10));
@@ -80,7 +89,7 @@ class DiscoveryTests {
         var first=party(); var second=party();
         when(second.getId()).thenReturn("other"); when(second.getName()).thenReturn("Alternative");
         assertThat(new EventMatcher().match(event("Indie Party",List.of("2027-01-09"),""),"New",List.of(first,second),Map.of("other",List.of("Indie Party")),List.of(),true).status()).isEqualTo("NEEDS_REVIEW");
-        var extracted=extractor.extract(page("<article><h2>Indie Party</h2><time datetime='2027-01-09'>Freitag oder Samstag</time></article>"),EventExtractor.Profile.defaults()).events().get(0);
+        var extracted=requireNonNull(extractor.extract(page("<article><h2>Indie Party</h2><time datetime='2027-01-09'>Freitag oder Samstag</time></article>"),EventExtractor.Profile.defaults()).events().get(0));
         assertThat(new EventMatcher().match(extracted,"New",List.of(first),Map.of(),List.of(),true).status()).isEqualTo("NEEDS_INQUIRY");
         assertThat(EventNormalizer.date("2027-01-09 oder 2027-01-10")).isNull();
     }
@@ -89,7 +98,7 @@ class DiscoveryTests {
         when(fetcher.fetch(any())).thenAnswer(call -> {
             URI url=call.getArgument(0); StringBuilder html=new StringBuilder();
             for(int n=0;n<100;n++) html.append("<a href='/events/").append(n).append("'>Events</a>");
-            return new EventPageFetcher.Page(url,html.toString(),"text/html");
+            return new EventPageFetcher.Page(url,requireNonNull(html.toString()),"text/html");
         });
         var service=new VenueSourceDiscoveryService(fetcher,extractor,genres());
         assertThat(service.discover("https://new.example/",EventExtractor.Profile.defaults())).hasSize(8);

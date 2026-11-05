@@ -1,5 +1,7 @@
 package de.noizycologne.backend.media;
 
+import static java.util.Objects.requireNonNull;
+import org.jspecify.annotations.NonNull;
 import de.noizycologne.backend.party.PartySeries;
 import de.noizycologne.backend.party.PartySeriesRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -36,8 +38,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @TestPropertySource(properties = "noizy.media.root=target/test-party-flyers")
 class PartyFlyerControllerIntegrationTests {
 
-    private static final byte[] PNG = java.util.Base64.getDecoder().decode(
-            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+    private static final byte @NonNull[] PNG = requireNonNull(java.util.Base64.getDecoder().decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="));
 
     @Autowired
     private MockMvc mockMvc;
@@ -51,8 +53,8 @@ class PartyFlyerControllerIntegrationTests {
     @Autowired
     private MediaAssetRepository mediaAssetRepository;
 
-    private final List<String> partyIds = new ArrayList<>();
-    private final List<String> assetIds = new ArrayList<>();
+    private final @NonNull List<String> partyIds = new ArrayList<>();
+    private final @NonNull List<String> assetIds = new ArrayList<>();
 
     @AfterEach
     void cleanUp() throws Exception {
@@ -80,8 +82,8 @@ class PartyFlyerControllerIntegrationTests {
 
         MockMultipartFile first = new MockMultipartFile(
                 "file", "first.png", MediaType.IMAGE_PNG_VALUE, PNG);
-        String firstResponse = mockMvc.perform(multipart("/api/v1/parties/{id}/default-flyer", party.getId())
-                        .file(first))
+        String firstResponse = mockMvc.perform(requireNonNull(multipart("/api/v1/parties/{id}/default-flyer", party.getId())
+                        .file(first)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andReturn().getResponse().getContentAsString();
@@ -108,8 +110,8 @@ class PartyFlyerControllerIntegrationTests {
 
         MockMultipartFile replacement = new MockMultipartFile(
                 "file", "replacement.png", MediaType.IMAGE_PNG_VALUE, PNG);
-        String replacementResponse = mockMvc.perform(multipart("/api/v1/parties/{id}/default-flyer", party.getId())
-                        .file(replacement))
+        String replacementResponse = mockMvc.perform(requireNonNull(multipart("/api/v1/parties/{id}/default-flyer", party.getId())
+                        .file(replacement)))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         String replacementAssetId = objectMapper.readTree(replacementResponse).get("id").stringValue();
@@ -133,8 +135,8 @@ class PartyFlyerControllerIntegrationTests {
 
         MockMultipartFile invalid = new MockMultipartFile(
                 "file", "script.html", MediaType.TEXT_HTML_VALUE, "<script>".getBytes());
-        mockMvc.perform(multipart("/api/v1/parties/{id}/default-flyer", party.getId())
-                        .file(invalid))
+        mockMvc.perform(requireNonNull(multipart("/api/v1/parties/{id}/default-flyer", party.getId())
+                        .file(invalid)))
                 .andExpect(status().isBadRequest());
         assertThat(mediaAssetRepository.count()).isEqualTo(assetCountBefore);
     }

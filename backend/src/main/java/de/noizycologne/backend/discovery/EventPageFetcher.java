@@ -1,5 +1,6 @@
 package de.noizycologne.backend.discovery;
 
+import org.jspecify.annotations.NonNull;
 import org.apache.hc.client5.http.DnsResolver;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.config.ConnectionConfig;
@@ -25,7 +26,7 @@ public class EventPageFetcher {
             throw new IllegalArgumentException("Discovery-Antwortlimit muss zwischen 64 KiB und 4 MiB liegen");
         this.maxBytes = maxBytes;
     }
-    public record Page(URI url, String body, String contentType) { }
+    public record Page(URI url, @NonNull String body, String contentType) { }
     public static class FetchFailure extends IOException {
         private static final long serialVersionUID = 1L;
         public final String status;

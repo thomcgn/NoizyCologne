@@ -1,5 +1,6 @@
 package de.noizycologne.backend.discovery;
 
+import org.jspecify.annotations.NonNull;
 import de.noizycologne.backend.venue.*;
 import de.noizycologne.backend.party.*;
 
@@ -160,7 +161,7 @@ public class DiscoveryScheduler {
         record Pending(String sourceId, EventExtractor.@org.jspecify.annotations.NonNull Event event, boolean approved,boolean official) { }
         List<Pending> pending=new ArrayList<>();
         List<String> statuses=new ArrayList<>(); int count=0;
-        record Checked(String sourceId,List<EventExtractor.Event> events,boolean complete) { }
+        record Checked(String sourceId,List<EventExtractor.@NonNull Event> events,boolean complete) { }
         List<Checked> checks=new ArrayList<>();
         for (var root : roots.entrySet().stream().limit(changesOnly ? 23 : 3).toList()) {
             String rootId=store.source(venue.getId(),root.getKey(),official(venue,root.getKey()) ? "OFFICIAL" : "EXTERNAL",official(venue,root.getKey()));
@@ -184,7 +185,7 @@ public class DiscoveryScheduler {
         // must not arrive after an already committed automatic import from the first source.
         monitor.batch(venue,pending.stream().map(item -> new EventChangeMonitor.Observation(item.sourceId(),item.event(),item.official())).toList(),operation,changesOnly);
         for (var check:checks) monitor.missing(venue,check.sourceId(),check.events(),operation,check.complete() && count<=300);
-        Map<String,List<String>> startsByTitle=new HashMap<>();
+        Map<String,List<@NonNull String>> startsByTitle=new HashMap<>();
         Map<String,List<String>> statesByTitle=new HashMap<>();
         for (var item:pending) {
             var e=item.event();

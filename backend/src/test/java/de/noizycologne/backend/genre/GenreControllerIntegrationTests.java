@@ -1,5 +1,8 @@
 package de.noizycologne.backend.genre;
 
+import static java.util.Objects.requireNonNull;
+import org.jspecify.annotations.NonNull;
+import de.noizycologne.backend.json.JsonValues;
 import de.noizycologne.backend.media.GenreLexicon;
 import de.noizycologne.backend.media.TesseractOcrService;
 import org.junit.jupiter.api.AfterEach;
@@ -34,8 +37,8 @@ class GenreControllerIntegrationTests {
     @Autowired private GenreAliasRepository aliasRepository;
     @Autowired private GenreLexicon lexicon;
 
-    private final List<String> genreIds = new ArrayList<>();
-    private final List<String> aliasIds = new ArrayList<>();
+    private final @NonNull List<String> genreIds = new ArrayList<>();
+    private final @NonNull List<String> aliasIds = new ArrayList<>();
 
     @AfterEach
     void cleanUp() {
@@ -56,32 +59,32 @@ class GenreControllerIntegrationTests {
         assertThat(initial).contains("Electronicore", "Emo");
 
         String suffix = UUID.randomUUID().toString();
-        String createdBody = mockMvc.perform(post("/api/v1/genres")
+        String createdBody = mockMvc.perform(requireNonNull(post("/api/v1/genres")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new GenreRequest("Testcore" + suffix, "Testcore " + suffix, true))))
+                        .content(JsonValues.write(objectMapper,new GenreRequest("Testcore" + suffix, "Testcore " + suffix, true)))))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
-        GenreResponse created = objectMapper.readValue(createdBody, GenreResponse.class);
+        GenreResponse created = JsonValues.readRequired(objectMapper,createdBody, GenreResponse.class);
         genreIds.add(created.id());
 
-        String aliasBody = mockMvc.perform(post("/api/v1/genres/{id}/aliases", created.id())
+        String aliasBody = mockMvc.perform(requireNonNull(post("/api/v1/genres/{id}/aliases", created.id())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"value\":\"test core\"}"))
+                        .content("{\"value\":\"test core\"}")))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
-        GenreAliasResponse alias = objectMapper.readValue(aliasBody, GenreAliasResponse.class);
+        GenreAliasResponse alias = JsonValues.readRequired(objectMapper,aliasBody, GenreAliasResponse.class);
         aliasIds.add(alias.id());
 
         assertThat(lexicon.findGenres(List.of(word("test"), word("core")))).contains("Testcore" + suffix);
 
-        mockMvc.perform(post("/api/v1/genres/{id}/aliases", created.id())
+        mockMvc.perform(requireNonNull(post("/api/v1/genres/{id}/aliases", created.id())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"value\":\"TEST-CORE\"}"))
+                        .content("{\"value\":\"TEST-CORE\"}")))
                 .andExpect(status().isConflict());
 
-        mockMvc.perform(put("/api/v1/genres/{genreId}/aliases/{aliasId}", created.id(), alias.id())
+        mockMvc.perform(requireNonNull(put("/api/v1/genres/{genreId}/aliases/{aliasId}", created.id(), alias.id())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"value\":\"testcore updated\"}"))
+                        .content("{\"value\":\"testcore updated\"}")))
                 .andExpect(status().isOk());
         mockMvc.perform(delete("/api/v1/genres/{genreId}/aliases/{aliasId}", created.id(), alias.id()))
                 .andExpect(status().isNoContent());
@@ -91,19 +94,19 @@ class GenreControllerIntegrationTests {
     @Test
     void deactivatingGenreRemovesItFromTheNextOcrSnapshot() throws Exception {
         String suffix = UUID.randomUUID().toString();
-        String body = mockMvc.perform(post("/api/v1/genres")
+        String body = mockMvc.perform(requireNonNull(post("/api/v1/genres")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new GenreRequest("Ephemeral" + suffix, "Ephemeral " + suffix, true))))
+                        .content(JsonValues.write(objectMapper,new GenreRequest("Ephemeral" + suffix, "Ephemeral " + suffix, true)))))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
-        GenreResponse genre = objectMapper.readValue(body, GenreResponse.class);
+        GenreResponse genre = JsonValues.readRequired(objectMapper,body, GenreResponse.class);
         genreIds.add(genre.id());
-        String aliasBody = mockMvc.perform(post("/api/v1/genres/{id}/aliases", genre.id())
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"value\":\"ephemeral alias\"}"))
+        String aliasBody = mockMvc.perform(requireNonNull(post("/api/v1/genres/{id}/aliases", genre.id())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"value\":\"ephemeral alias\"}")))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
-        aliasIds.add(objectMapper.readValue(aliasBody, GenreAliasResponse.class).id());
+        aliasIds.add(JsonValues.readRequired(objectMapper,aliasBody, GenreAliasResponse.class).id());
 
-        mockMvc.perform(put("/api/v1/genres/{id}", genre.id()).contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new GenreRequest(genre.canonicalName(), genre.displayName(), false))))
+        mockMvc.perform(requireNonNull(put("/api/v1/genres/{id}", genre.id()).contentType(MediaType.APPLICATION_JSON)
+                        .content(JsonValues.write(objectMapper,new GenreRequest(genre.canonicalName(), genre.displayName(), false)))))
                 .andExpect(status().isOk());
         assertThat(lexicon.findGenres(List.of(word("ephemeral"), word("alias")))).doesNotContain(genre.canonicalName());
     }

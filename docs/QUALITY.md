@@ -7,6 +7,12 @@ sein.** Fehler beheben, relevante Prüfungen wiederholen, Diff prüfen und erst 
 committen. Keine `--no-verify`-Umgehung, Regelabschwächung, pauschale Suppression oder
 Entfernung fachlicher Funktionen zur „Reparatur“ eines Checks.
 
+Verbindliches Ziel ist **null projektbezogene Fehler und Warnungen in VS Code vor
+jedem Commit**, einschließlich bereits vorhandener Warnungen. Conversion-,
+Unchecked-Conversion- und Null-Type-Safety-Diagnosen sind immer fachlich zu beheben.
+Auch als `INFO` eingeordnete unsichere Konvertierungen gelten als blockierend;
+ein Warnungsbestand darf nicht durch eine bloße Dokumentation freigegeben werden.
+
 Codex lädt Repository-Anweisungen aus `AGENTS.md` entlang des Pfads vom Root zum
 Arbeitsverzeichnis; spezifischere Dateien ergänzen beziehungsweise überschreiben
 übergeordnete Regeln. Siehe die [offizielle AGENTS.md-Dokumentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md).
@@ -51,6 +57,12 @@ Backend:
    separate Ausgabeordner, `-failOnWarning`, versionierte Einstellungen in
    `config/java-quality.prefs`. Erfasst zusätzlich unbenutzte Imports,
    annotierte Null-Zugriffe und weitere standardmäßig aktive ECJ-Prüfungen.
+   Zusätzlich werden die erzeugten XML-Berichte unabhängig vom Compiler-Exitcode
+   ausgewertet: **jeder Problem-Eintrag, einschließlich INFO, blockiert**. Fehlende,
+   kaputte oder unvollständige Berichte gelten ebenfalls als Fehler; alte Berichte
+   werden vor jedem Lauf gelöscht.
+   JSpecify-`@NullMarked`-Defaults einschließlich der Bibliotheksverträge werden
+   erkannt; unannotierte Bibliotheksgrenzen benötigen ausdrückliche Null-Prüfungen.
 3. Echte negative Compiler-/JUnit-Fixtures in temporären Verzeichnissen.
 4. `mvn verify` einschließlich aller regulären Tests und Paketierung gegen die
    ausschließlich für diesen Lauf gestartete PostgreSQL-Instanz.
@@ -103,29 +115,67 @@ geprüft, optionale Medien ohne nullable `Optional<T>.orElse`-Typkonflikte behan
 Repository-/Eventlisten deklarieren ihre tatsächlich nicht-null Elemente.
 Fachliche Assertions und Fehlerprüfungen wurden erhalten.
 
-**Kein Nachweis „0 VS-Code-Probleme“:** ECJ 3.46.100 ist eine eigenständige,
+**CLI und Live-IDE-Nachweis getrennt behandeln:** ECJ 3.46.100 ist eine eigenständige,
 fest versionierte Batch-Analyse; die lokal installierte Java-Erweiterung verwendet
-einen anderen JDT-Snapshot (3.46.200). Ihre laufende Problems-Ansicht ist über diese
-Shell nicht vollständig auslesbar. IDE-spezifische Erweiterungen, Projektmodell,
+einen anderen JDT-Snapshot (3.46.200). Es ist keine automatisierte Schnittstelle zur
+laufenden Problems-Ansicht angebunden; eine direkte Sichtprüfung muss den aktuellen
+Projektstand zeigen. IDE-spezifische Erweiterungen, Projektmodell,
 Annotation-Inferenz und Zusatz-Inspections können weitere Diagnosen erzeugen.
+Ein erfolgreicher Batch-Lauf erlaubt deshalb allein keine Behauptung „VS Code
+zeigt null Probleme“. Aktuelle erreichbare IDE-Diagnosen sind ebenfalls zu prüfen;
+fehlender Live-Zugriff muss im Abschluss benannt werden. Bekannte IDE-Warnungen
+bleiben blockierend und dürfen nicht mit dem Hinweis auf ein grünes CLI-Gate
+übergangen werden. Ohne aktuellen IDE-Diagnosenachweis wird nicht committet.
 
-Das Profil erhält den im bestehenden Workspace konfigurierten
-`org.springframework.lang.NonNullApi`-Default und ergänzt explizite
-`org.jspecify.annotations.NonNull`/`Nullable`-Verträge sowie die älteren Spring-
-Annotationen. **Es ist kein vollständiger JSpecify-/`@NullMarked`-Verifier.**
-JSpecify-Package-Defaults, freie generische Typvariablen und externe Bibliotheks-
-Metadaten sind gesondert in der IDE beziehungsweise mit einem weitergehenden,
-kompatibel eingerichteten Analyseprofil zu prüfen. Neue `@NullMarked`-Scopes dürfen
-nicht allein mit diesem Kompatibilitätsprofil freigegeben werden.
+`.vscode/settings.json` verwendet dieselben Java-Präferenzen und legt JSpecify als
+primäre Annotationsfamilie fest. Die Spring-Inspection „Convert @Autowired field
+into Constructor Parameter“ ist ebenfalls blockierend (`ERROR`). Die vier beim
+direkten IDE-Abgleich gefundenen Felder in `CalendarEntryService`,
+`EditorialPostDraftService` und `DiscoveryController` werden jetzt über die
+Konstruktoren injiziert. Bei mehreren absichtlich vorhandenen Konstruktoren bleibt
+`@Autowired` am ausgewählten Konstruktor zulässig, etwa im `GenreLexicon`.
 
-Im ursprünglichen bereinigten ECJ-Lauf blieben **98 Informationshinweise** (15 main, 83 test); mit Event Change Monitoring sind es derzeit **109 Informationshinweise** (19 main, 90 test) zur
-Null-Annotation-Interpretation an Bibliotheks-/Generikgrenzen, etwa Jackson,
-Spring Data und generischen Assertion-Rückgaben. Sie sind sichtbar im Analyse-Log,
-keine unterdrückten Warnungen und kein Beweis für 98 Laufzeitfehler. Es wurden
-keine Inspections deaktiviert und keine `@SuppressWarnings` ergänzt. Die Grenze
-wird explizit dokumentiert, statt eine vollständige IDE-Freiheit vorzutäuschen.
-Neue Errors/Warnings blockieren das Gate; konkrete zusätzliche IDE-Probleme müssen
-wie in `AGENTS.md` beschrieben untersucht und dokumentiert werden.
+Das Profil modelliert `org.jspecify.annotations.NullMarked` als primären
+Package-/Typ-Default und erkennt explizite JSpecify-`NonNull`/`Nullable`-Verträge.
+Die früheren Spring-`NonNullApi`-/`NonNull`-/`Nullable`-Annotationen bleiben als
+zusätzliche Verträge aktiv. Damit werden die tatsächlichen JSpecify-Defaults
+moderner Spring-Bibliotheken ausgewertet; sie dürfen nicht als unbekannte
+Legacy-Verträge behandelt werden.
+
+Das ist **kein vollständiger JSpecify-Verifier**. Insbesondere wird der Reset eines
+`@NullMarked`-Defaults durch `@NullUnmarked` nicht vollständig ausgewertet. Neue
+`@NullUnmarked`-Scopes im Projekt müssen daher gesondert mit einer dafür geeigneten
+Analyse validiert werden; aus diesem Profil allein folgt keine Freigabe dafür.
+Diese Modellgrenze ist keine Ausnahme für vorhandene Compiler-/IDE-Warnungen:
+konkrete Diagnosen bleiben zu beheben. Auch übereinstimmend erfolgreiche Läufe mit
+beiden Compiler-Versionen ersetzen keinen aktuellen Nachweis der Live-IDE-Diagnosen.
+
+An unannotierten JDK-/Framework-Grenzen werden erforderliche Rückgaben mit echten
+Null-Prüfungen abgesichert, beispielsweise `Objects.requireNonNull(...)`.
+Nullable Werte behalten ihre Bedeutung; sie werden nicht durch pauschale
+Bibliotheksmodelle oder Annotationen als nicht-null erklärt. Für Jackson-Rückgaben
+weist `JsonValues.readRequired(...)` den JSON-Wert `null` ausdrücklich zurück.
+Positive und negative Compiler-Fixtures prüfen JDK-Generik, binäre
+`@NullMarked`-Package-Defaults und nullable flexible Typvariablen. Die Batch-Analyse
+ist dennoch kein Nachweis sämtlicher Inspections einer laufenden VS-Code-Installation;
+der eigenständige IDE-Nachweis bleibt erforderlich.
+
+Der frühere ECJ-Lauf tolerierte zunächst **98**, nach Event Change Monitoring
+**109 Informationshinweise** (19 main, 90 test) an Null-/Generikgrenzen. Dieser
+Bestand ist seit der Verschärfung ausdrücklich **keine zulässige Ausnahme** mehr.
+Die unsichere Weitergabe annotierter Generics wird über
+`org.eclipse.jdt.core.compiler.problem.annotatedTypeArgumentToUnannotated=warning`
+blockiert. Für unsicher interpretierte Bibliotheksrückgaben gilt
+`org.eclipse.jdt.core.compiler.problem.nonnullTypeVariableFromLegacyInvocation=error`:
+eine echte Compiler-Fixture zeigt, dass ECJ 3.46.100 die Einstellung `warning` in
+diesem Fall weiterhin als INFO ausgeben kann. Zusätzlich schützt die XML-Prüfung
+vor jedem weiteren nichtfatalen Compilerproblem.
+
+Die fachliche Korrektur erhält Null-Verträge durchgängig und prüft Werte an
+Bibliotheksgrenzen ausdrücklich, statt sie blind als nicht-null anzunehmen.
+Inspections, Annotationen und Schweregrade dürfen dafür nicht abgeschwächt,
+Informationshinweise nicht ausgeblendet und Suppressions nicht pauschal ergänzt
+werden. Auch Warnungen in Tests sind zu beheben.
 
 Referenzen: [ECJ-Batch-Optionen](https://help.eclipse.org/latest/topic/org.eclipse.jdt.doc.user/tasks/task-using_batch_compiler.htm),
 [Jackson-JsonNode-Aliasse](https://github.com/FasterXML/jackson-databind/blob/3.x/src/main/java/tools/jackson/databind/JsonNode.java).
@@ -170,6 +220,11 @@ Prüfumgebung die Ursache dokumentieren und die Umgebung reparieren; nicht
 
 Die Tests unter `scripts/tests` prüfen echte negative Java-/Null-/Deprecated-/Import-,
 javac-Warnungs-, TypeScript-, ESLint-Warnungs- und JUnit-Fixtures. Zusätzlich
+prüfen echte ECJ-Fixtures den Verlust von Null-Annotationen und die unsichere
+Interpretation generischer Bibliotheksrückgaben; erhaltene Annotationen und explizit
+geprüfte Rückgaben müssen ohne Diagnosen kompilieren. Die XML-Regressionen sichern,
+dass selbst ein erfolgreicher Compiler-Exit mit INFO, ein fehlender Bericht oder
+ein alter sauberer Bericht keinen falschen Erfolg erzeugen kann. Weiterhin
 simulieren isolierte Mini-Repositories die Werkzeug-Rückgabecodes, fehlende
 Abhängigkeiten und den vollständigen Hook-Ablauf. Ein realer temporärer Git-Commit
 wird bei Fehler blockiert und bei Erfolg erlaubt; der Index wird dabei nicht

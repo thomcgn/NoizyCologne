@@ -1,5 +1,6 @@
 package de.noizycologne.backend.discovery;
 
+import org.jspecify.annotations.NonNull;
 import de.noizycologne.backend.party.PartySeries;
 import org.springframework.stereotype.Component;
 import java.util.*;
@@ -23,7 +24,7 @@ public class EventMatcher {
         return EventNormalizer.text(event.title()+" "+event.evidence()).matches(
             ".*\\b(poetry slam|comedy|stand up|lesung|reisevortrag|geschlossene gesellschaft|pitchen statt swipen|ausschließlich kölsche musik)\\b.*");
     }
-    public Match match(EventExtractor.Event event, String venueName, List<PartySeries> parties,
+    public Match match(EventExtractor.Event event, String venueName, List<@NonNull PartySeries> parties,
                        Map<String,List<String>> aliases, Collection<String> genres, boolean approved) {
         if (PartyOnlyPolicy.concert(event)) return new Match("IGNORED",null,"Konzert statt Clubparty", "IGNORED");
         var matched=parties.stream().filter(p -> {
@@ -31,13 +32,13 @@ public class EventMatcher {
             return names.stream().anyMatch(n -> nameMatches(event.title(),n));
         }).toList();
         if (matched.size()>1) return new Match("NEEDS_REVIEW",null,"Mehrere Partyreihen passen; eindeutige Zuordnung fehlt","UNVERIFIED");
-        String party=matched.isEmpty() ? null : matched.get(0).getId();
+        String party=matched.isEmpty() ? null : Objects.requireNonNull(matched.get(0), "Passende Partyreihe fehlt").getId();
         var hits=DiscoveryGenreFilter.matchingTerms(event,genres);
         if (party==null && unrelated(event))
             return new Match("IGNORED",null,"Fachfremde Veranstaltung: expliziter Nicht-Party-Beleg","IGNORED");
         String classification=party!=null ? "MATCH" : hits.isEmpty() ? "UNVERIFIED" : "POSSIBLE_MATCH";
         String reason=party!=null ? "Bekannte Partyreihe erkannt" +
-                (matched.get(0).getStandardGenres().isEmpty() ? "" : "; Standardgenres: "+String.join(", ",matched.get(0).getStandardGenres()))
+                (Objects.requireNonNull(matched.get(0), "Passende Partyreihe fehlt").getStandardGenres().isEmpty() ? "" : "; Standardgenres: "+String.join(", ",Objects.requireNonNull(matched.get(0), "Passende Partyreihe fehlt").getStandardGenres()))
                 : hits.isEmpty() ? "Nicht genügend Informationen zur Genrezuordnung; fehlende Angaben sind keine Ablehnung"
                 : "Partyreihe unbekannt, aber musikalisch passend; Genre-Match: "+String.join(", ",hits);
         if (!event.location().isBlank() && !EventNormalizer.text(event.location()).contains(EventNormalizer.text(venueName)))

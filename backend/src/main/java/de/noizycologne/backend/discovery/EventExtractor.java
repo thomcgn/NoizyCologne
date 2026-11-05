@@ -1,5 +1,7 @@
 package de.noizycologne.backend.discovery;
 
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Element;
 import org.springframework.stereotype.Component;
@@ -9,10 +11,15 @@ import java.util.*;
 
 @Component
 public class EventExtractor {
-    public record Profile(String itemSelector, String titleSelector, String dateSelector) {
+    public record Profile(@NonNull String itemSelector, @NonNull String titleSelector, @NonNull String dateSelector) {
+        public Profile(@Nullable String itemSelector, @Nullable String titleSelector, @Nullable String dateSelector) {
+            this.itemSelector = itemSelector == null ? "" : itemSelector;
+            this.titleSelector = titleSelector == null ? "" : titleSelector;
+            this.dateSelector = dateSelector == null ? "" : dateSelector;
+        }
         public static Profile defaults() { return new Profile("", "", ""); }
     }
-    public record Event(String identity, String title, String url, List<String> starts,
+    public record Event(String identity, String title, String url, List<@NonNull String> starts,
                         String evidence, String state, String location) { }
     public record Extraction(List<@org.jspecify.annotations.NonNull Event> events, String status, boolean complete) {
         public Extraction(List<@org.jspecify.annotations.NonNull Event> events,String status) { this(events,status,false); }
@@ -22,7 +29,7 @@ public class EventExtractor {
         List<@org.jspecify.annotations.NonNull Event> events = new ArrayList<>();
         boolean malformed = false;
         if (page.body().contains("BEGIN:VCALENDAR")) return ics(page);
-        var doc = Jsoup.parse(page.body(), page.url().toString());
+        var doc = Jsoup.parse(page.body(), Objects.requireNonNull(page.url().toString()));
         if (PartyOnlyPolicy.concertPage(doc) || PartyOnlyPolicy.concertLink("",page.url())) return new Extraction(List.of(), "EXCLUDED_CONCERTS");
         for (Element script : doc.select("script[type=application/ld+json]")) {
             try { collect(json.readTree(script.data()), events, page.url().toString(), 0); }
@@ -33,15 +40,15 @@ public class EventExtractor {
             catch (RuntimeException e) { malformed = true; }
         }
         if (events.isEmpty()) {
-            String selector = profile.itemSelector().isBlank()
+            @NonNull String selector = profile.itemSelector().isBlank()
                     ? "[data-hook=event-list-item], [itemscope][itemtype*=Event], article:has(time), article:has(a[href]), .event:has(time), .event:has(a[href]), .event-item, .event-list-item"
                     : profile.itemSelector();
             for (Element item : doc.select(selector).stream().limit(200).toList()) {
                 var title = item.selectFirst(profile.titleSelector().isBlank() ? "[data-hook=ev-list-item-title], [itemprop=name], h1, h2, h3, .title" : profile.titleSelector());
                 if (title == null) title = item.selectFirst("a[href]");
                 if (title == null || title.text().isBlank()) { malformed = true; continue; }
-                String dateSelector = profile.dateSelector().isBlank() ? "time:not([itemprop=endDate]), [itemprop=startDate], [data-hook=ev-full-date-location] [data-hook=date]" : profile.dateSelector();
-                List<String> dates = item.select(dateSelector).stream().flatMap(e -> {
+                @NonNull String dateSelector = profile.dateSelector().isBlank() ? "time:not([itemprop=endDate]), [itemprop=startDate], [data-hook=ev-full-date-location] [data-hook=date]" : profile.dateSelector();
+                List<@NonNull String> dates = item.select(dateSelector).stream().flatMap(e -> {
                     if (e.hasAttr("datetime")) return java.util.stream.Stream.of(e.attr("datetime"));
                     if (e.hasAttr("content")) return java.util.stream.Stream.of(e.attr("content"));
                     return GermanProgramText.starts(e.text()).stream();
@@ -90,7 +97,7 @@ public class EventExtractor {
             try {
                 var types = json.readTree(warmup.data()).path("pages").path("compIdToTypeMap");
                 for (String id : types.propertyNames()) {
-                    var element = doc.getElementById(id);
+                    var element = doc.getElementById(Objects.requireNonNull(id, "JSON-Objektschlüssel fehlt"));
                     if (types.path(id).asString("").equals("HtmlComponent") && element != null
                             && element.text().isBlank() && element.selectFirst("iframe[src], a[href], time, [itemprop=startDate]") == null)
                         return true;
@@ -107,10 +114,10 @@ public class EventExtractor {
         if (type.contains("Event")) {
             String title = node.path("name").asString("");
             if (!title.isBlank()) {
-                List<String> starts = new ArrayList<>();
+                List<@NonNull String> starts = new ArrayList<>();
                 var start = node.path("startDate");
-                if (start.isArray()) for (var value : start) starts.add(value.asString());
-                else if (start.isString()) starts.add(start.asString());
+                if (start.isArray()) for (var value : start) starts.add(Objects.requireNonNull(value.asString(), "Startdatumswert fehlt"));
+                else if (start.isString()) starts.add(Objects.requireNonNull(start.asString(), "Startdatumswert fehlt"));
                 String url = java.net.URI.create(page).resolve(node.path("url").asString(page)).toString();
                 String state = node.path("eventStatus").asString("") + " " + riskyState(node.path("description").asString(""));
                 if (node.has("previousStartDate")) state += " RESCHEDULED " + node.path("previousStartDate").asString();
@@ -123,19 +130,19 @@ public class EventExtractor {
     }
     private Extraction ics(EventPageFetcher.Page page) {
         List<@org.jspecify.annotations.NonNull Event> events = new ArrayList<>();
-        Map<String, List<String>> fields = null;
+        Map<String, List<@NonNull String>> fields = null;
         for (String line : page.body().replaceAll("\\r?\\n[ \\t]", "").split("\\R")) {
             if (line.equals("BEGIN:VEVENT")) fields = new LinkedHashMap<>();
             else if (line.equals("END:VEVENT") && fields != null) {
                 if (events.size() >= 200) break;
                 String title = first(fields, "SUMMARY");
                 if (!title.isBlank()) {
-                    List<String> starts = fields.getOrDefault("DTSTART", List.of()).stream().map(value -> {
+                    List<@NonNull String> starts = fields.getOrDefault("DTSTART", List.of()).stream().map(value -> {
                         try {
-                            if (value.matches("\\d{8}T\\d{6}Z")) return java.time.ZonedDateTime.of(
+                            if (value.matches("\\d{8}T\\d{6}Z")) return Objects.requireNonNull(java.time.ZonedDateTime.of(
                                     java.time.LocalDateTime.parse(value.substring(0, 15), java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss")),
-                                    java.time.ZoneOffset.UTC).withZoneSameInstant(java.time.ZoneId.of("Europe/Berlin")).toLocalDateTime().toString();
-                            if (value.matches("\\d{8}T\\d{6}")) return java.time.LocalDateTime.parse(value, java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss")).toString();
+                                    java.time.ZoneOffset.UTC).withZoneSameInstant(java.time.ZoneId.of("Europe/Berlin")).toLocalDateTime().toString());
+                            if (value.matches("\\d{8}T\\d{6}")) return Objects.requireNonNull(java.time.LocalDateTime.parse(value, java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss")).toString());
                             return value;
                         } catch (RuntimeException e) { return value; }
                     }).toList();
@@ -148,7 +155,7 @@ public class EventExtractor {
             } else if (fields != null && line.contains(":")) {
                 int colon = line.indexOf(':'); String header = line.substring(0, colon);
                 String key = header.split(";", 2)[0];
-                fields.computeIfAbsent(key, k -> new ArrayList<>()).add(line.substring(colon + 1).replace("\\n", "\n").replace("\\,", ","));
+                fields.computeIfAbsent(key, k -> new ArrayList<>()).add(Objects.requireNonNull(line.substring(colon + 1).replace("\\n", "\n").replace("\\,", ",")));
                 if (header.contains("TZID=") && !header.contains("TZID=Europe/Berlin")) fields.put("UNSUPPORTED_TZ", List.of(header));
             }
         }
@@ -159,7 +166,7 @@ public class EventExtractor {
         events.removeIf(PartyOnlyPolicy::concert);
         return new Extraction(events, events.isEmpty() ? (concerts ? "EXCLUDED_CONCERTS" : !page.body().contains("BEGIN:VEVENT") && page.body().contains("END:VCALENDAR") ? "NO_EVENTS" : "UNINTERPRETABLE") : "EVENTS_FOUND", complete);
     }
-    private static String first(Map<String, List<String>> map, String key) { return map.getOrDefault(key, List.of("")).get(0); }
+    private static String first(Map<String, List<@NonNull String>> map, String key) { return map.getOrDefault(key, List.of("")).get(0); }
     private static String riskyState(String text) {
         String normalized=EventNormalizer.text(text);
         if (normalized.matches(".*\\b(vielleicht|gerücht|geruecht|möglicherweise|moeglicherweise|nicht abgesagt)\\b.*")) return "CANCELLATION_HINT UNCONFIRMED";

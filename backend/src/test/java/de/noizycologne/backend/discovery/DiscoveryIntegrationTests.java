@@ -1,5 +1,6 @@
 package de.noizycologne.backend.discovery;
 
+import static java.util.Objects.requireNonNull;
 import de.noizycologne.backend.venue.*;
 import de.noizycologne.backend.party.*;
 import org.junit.jupiter.api.*;
@@ -117,15 +118,15 @@ class DiscoveryIntegrationTests {
     }
     @Test void apiSerializesDatesAndValidatesSources() throws Exception {
         found(event("api",party.getName(),"2027-01-09","")); scheduler.scan();
-        var mvc=org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup(context).build();
+        var mvc=org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup(requireNonNull(context)).build();
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/discovery"))
             .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk())
             .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.candidates[0].event_date").value("2027-01-09"));
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/venues"))
             .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk());
-        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/v1/discovery/sources")
+        mvc.perform(requireNonNull(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/v1/discovery/sources")
             .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-            .content("{\"venueId\":\""+venue.getId()+"\",\"url\":\"https://127.0.0.1/\",\"approved\":true}"))
+            .content("{\"venueId\":\""+venue.getId()+"\",\"url\":\"https://127.0.0.1/\",\"approved\":true}")))
             .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isBadRequest());
     }
     @Test void navigationStatusDoesNotHideExplicitEmptyCalendar() throws Exception {

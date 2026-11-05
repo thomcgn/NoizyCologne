@@ -1,5 +1,6 @@
 package de.noizycologne.backend.discovery;
 
+import org.jspecify.annotations.NonNull;
 import de.noizycologne.backend.venue.Venue;
 import de.noizycologne.backend.party.PartySeries;
 import org.springframework.stereotype.Service;
@@ -18,11 +19,11 @@ public class EventCandidateProcessor {
     public EventCandidateProcessor(DiscoveryStore store,DiscoveryEvaluationService evaluator,EventImportService importer,EventChangeMonitor monitor) {
         this.store=store;this.evaluator=evaluator;this.importer=importer;this.monitor=monitor;
     }
-    public void process(Venue venue,String sourceId,EventExtractor.Event event,List<PartySeries> known,
+    public void process(Venue venue,String sourceId,EventExtractor.Event event,List<@NonNull PartySeries> known,
             Map<String,List<String>> aliases,List<String> genres,boolean approved) {
         process(venue,sourceId,event,known,aliases,genres,approved,null);
     }
-    public void process(Venue venue,String sourceId,EventExtractor.Event sourceEvent,List<PartySeries> known,
+    public void process(Venue venue,String sourceId,EventExtractor.Event sourceEvent,List<@NonNull PartySeries> known,
             Map<String,List<String>> aliases,List<String> genres,boolean approved,String operation) {
         var event=EventPrivacy.safe(sourceEvent);
         store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
@@ -31,7 +32,7 @@ public class EventCandidateProcessor {
         catch (IllegalArgumentException e) { url=store.jdbc().queryForObject("SELECT url FROM discovery_sources WHERE id=?",String.class,sourceId); }
         String identity=EventNormalizer.hash(event.identity().isBlank() ? EventNormalizer.text(event.title())+"|"+event.starts() : event.identity());
         String fingerprint=EventNormalizer.hash(event.title()+event.starts()+event.state()+event.evidence());
-        var previous=store.jdbc().queryForList("""
+        List<Map<String,Object>> previous=store.jdbc().queryForList("""
             SELECT c.* FROM discovery_candidates c WHERE c.venue_id=? AND
             (c.identity_key=? OR c.id IN (SELECT candidate_id FROM discovery_candidate_identities WHERE venue_id=? AND identity_key=?))
             """,venue.getId(),identity,venue.getId(),identity);

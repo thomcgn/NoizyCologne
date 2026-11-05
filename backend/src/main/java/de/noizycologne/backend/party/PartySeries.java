@@ -1,5 +1,6 @@
 package de.noizycologne.backend.party;
 
+import org.jspecify.annotations.NonNull;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
@@ -61,7 +62,7 @@ public class PartySeries {
 
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "party_djs", joinColumns = @JoinColumn(name = "party_id"))
-    private Set<PartyDjAssignment> djAssignments = new LinkedHashSet<>();
+    private Set<@NonNull PartyDjAssignment> djAssignments = new LinkedHashSet<>();
 
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "party_organizers", joinColumns = @JoinColumn(name = "party_id"))
@@ -75,7 +76,7 @@ public class PartySeries {
                        String djMentionDefault, String recurrenceKind,
                        Short recurrenceWeekday, Short recurrenceOccurrence,
                        String recurrenceDescription,
-                       Collection<PartyDjAssignment> djAssignments,
+                       Collection<@NonNull PartyDjAssignment> djAssignments,
                        Collection<String> organizerIds,
                        Collection<String> standardGenres) {
         this.name = name;
@@ -95,7 +96,7 @@ public class PartySeries {
                        String djMentionDefault, String recurrenceKind,
                        Short recurrenceWeekday, Short recurrenceOccurrence,
                        String recurrenceDescription,
-                       Collection<PartyDjAssignment> djAssignments,
+                       Collection<@NonNull PartyDjAssignment> djAssignments,
                        Collection<String> organizerIds) {
         this(name, instagram, color, djMentionDefault, recurrenceKind, recurrenceWeekday,
                 recurrenceOccurrence, recurrenceDescription, djAssignments, organizerIds, Set.of());
@@ -157,7 +158,7 @@ public class PartySeries {
         this.defaultFlyerMediaId = defaultFlyerMediaId;
     }
 
-    public Set<PartyDjAssignment> getDjAssignments() {
+    public Set<@NonNull PartyDjAssignment> getDjAssignments() {
         return djAssignments;
     }
 
@@ -173,7 +174,7 @@ public class PartySeries {
                        String djMentionDefault, String recurrenceKind,
                        Short recurrenceWeekday, Short recurrenceOccurrence,
                        String recurrenceDescription,
-                       Collection<PartyDjAssignment> djAssignments,
+                       Collection<@NonNull PartyDjAssignment> djAssignments,
                        Collection<String> organizerIds,
                        Collection<String> standardGenres) {
         this.name = name;

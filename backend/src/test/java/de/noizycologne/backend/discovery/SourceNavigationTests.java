@@ -1,6 +1,8 @@
 package de.noizycologne.backend.discovery;
 
+import static java.util.Objects.requireNonNull;
 import org.junit.jupiter.api.Test;
+import org.jspecify.annotations.NonNull;
 import java.net.URI;
 import java.util.*;
 import static org.assertj.core.api.Assertions.*;
@@ -16,10 +18,10 @@ class SourceNavigationTests {
         when(fetcher.robotsAllowed(any(),any())).thenReturn(true);
         return new VenueSourceDiscoveryService(fetcher,extractor,genres);
     }
-    private void page(URI uri,String html) throws Exception {
+    private void page(URI uri,@NonNull String html) throws Exception {
         when(fetcher.fetch(uri)).thenReturn(new EventPageFetcher.Page(uri,html,"text/html"));
     }
-    private String widget(String type,String id) {
+    private @NonNull String widget(String type,String id) {
         return "<h1>Programm</h1><p>"+"Öffentliche Kontaktinformationen und Navigation. ".repeat(12)+"</p>"
                 +"<div id='widget'></div><script id='wix-warmup-data' type='application/json'>{\"pages\":{\"compIdToTypeMap\":{\""+id+"\":\""+type+"\"}}}</script>";
     }
@@ -29,7 +31,7 @@ class SourceNavigationTests {
         page(live,widget("HtmlComponent","widget")); page(party,widget("HtmlComponent","widget"));
         var found=service.discover(root.toString(),EventExtractor.Profile.defaults());
         assertThat(found).hasSize(2);
-        assertThat(found.get(0).extraction().status()).isEqualTo("SOURCE_LINKS_FOUND");
+        assertThat(requireNonNull(found.get(0)).extraction().status()).isEqualTo("SOURCE_LINKS_FOUND");
         assertThat(found.stream().skip(1).map(f -> f.extraction().status())).containsOnly("JAVASCRIPT_REQUIRED");
         verify(fetcher,never()).fetch(live);verify(fetcher).fetch(party);
         verify(fetcher,never()).fetch(root.resolve("/live-shows?lang=en"));
@@ -38,7 +40,7 @@ class SourceNavigationTests {
         var service=service();StringBuilder html=new StringBuilder();
         for(int i=0;i<45;i++) html.append("<a href='/unrelated/").append(i).append("'>Home</a>");
         html.append("<a href='/about' aria-label='PARTY'><img alt=''></a>");
-        page(root,html.toString());page(root.resolve("/about"),"<p>Keine Veranstaltungen</p>");
+        page(root,requireNonNull(html.toString()));page(root.resolve("/about"),"<p>Keine Veranstaltungen</p>");
         var found=service.discover(root.toString(),EventExtractor.Profile.defaults());
         assertThat(found).hasSize(2); verify(fetcher,times(2)).fetch(any());
     }
@@ -50,7 +52,7 @@ class SourceNavigationTests {
             html.append("<article><h2>Indie Party ").append(i).append("</h2><a href='/night/").append(i).append("'>Details</a></article>");
             page(root.resolve("/night/"+i),"<h1>Indie Party "+i+"</h1><time datetime='2027-01-09'>Samstag</time>");
         }
-        page(live,html.toString());page(party,"<p>Keine Veranstaltungen</p>");
+        page(live,requireNonNull(html.toString()));page(party,"<p>Keine Veranstaltungen</p>");
         var found=service.discover(root.toString(),EventExtractor.Profile.defaults());
         assertThat(found).hasSize(8);
         var order=inOrder(fetcher);order.verify(fetcher).fetch(root);order.verify(fetcher).fetch(live);order.verify(fetcher).fetch(party);

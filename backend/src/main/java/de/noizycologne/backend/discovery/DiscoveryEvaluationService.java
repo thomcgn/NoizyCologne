@@ -1,5 +1,7 @@
 package de.noizycologne.backend.discovery;
 
+import de.noizycologne.backend.json.JsonValues;
+import org.jspecify.annotations.NonNull;
 import de.noizycologne.backend.party.*;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.json.JsonMapper;
@@ -13,7 +15,7 @@ public class DiscoveryEvaluationService {
     private final DiscoveryGenreFilter genres;
     private final EventMatcher matcher;
     private final JsonMapper json=JsonMapper.builder().build();
-    public record Rules(List<PartySeries> parties, Map<String,List<String>> aliases, Collection<String> genres) { }
+    public record Rules(List<@NonNull PartySeries> parties, Map<String,List<String>> aliases, Collection<String> genres) { }
     public DiscoveryEvaluationService(DiscoveryStore store,PartySeriesRepository parties,DiscoveryGenreFilter genres,EventMatcher matcher) {
         this.store=store;this.parties=parties;this.genres=genres;this.matcher=matcher;
     }
@@ -21,7 +23,7 @@ public class DiscoveryEvaluationService {
     public String raw(EventExtractor.Event event) { return json.writeValueAsString(EventPrivacy.safe(event)); }
     public EventExtractor.Event event(Map<String,Object> row) {
         if (row.get("raw_event") instanceof String raw && !raw.isBlank())
-            return json.readValue(raw,EventExtractor.Event.class);
+            return JsonValues.readRequired(json,raw,EventExtractor.Event.class);
         // Old rows did not retain state/location/conflicting starts. Never invent confirmation.
         String start=Objects.toString(row.get("event_date"),"");
         if (!start.isBlank() && row.get("start_time")!=null) start+="T"+row.get("start_time");

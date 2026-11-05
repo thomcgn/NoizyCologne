@@ -1,0 +1,15 @@
+{
+    "java.compile.nullAnalysis.mode": "automatic",
+    "java.configuration.updateBuildConfiguration": "automatic",
+    "java.settings.url": "config/java-quality.prefs",
+    "java.compile.nullAnalysis.nonnull": [
+        "org.jspecify.annotations.NonNull"
+    ],
+    "java.compile.nullAnalysis.nullable": [
+        "org.jspecify.annotations.Nullable"
+    ],
+    "java.compile.nullAnalysis.nonnullbydefault": [
+        "org.jspecify.annotations.NullMarked"
+    ],
+    "spring-boot.ls.problem.boot2.JAVA_CONSTRUCTOR_PARAMETER_INJECTION": "ERROR"
+}

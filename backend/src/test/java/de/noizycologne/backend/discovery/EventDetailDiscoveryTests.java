@@ -1,7 +1,9 @@
 package de.noizycologne.backend.discovery;
 
+import static java.util.Objects.requireNonNull;
 import de.noizycologne.backend.genre.*;
 import org.junit.jupiter.api.Test;
+import org.jspecify.annotations.NonNull;
 import java.net.URI;
 import java.util.*;
 import static org.assertj.core.api.Assertions.*;
@@ -17,10 +19,10 @@ class EventDetailDiscoveryTests {
         when(fetcher.robotsAllowed(any(), any())).thenReturn(true);
         return new VenueSourceDiscoveryService(fetcher, new EventExtractor(), genres);
     }
-    private void page(URI url, String body) throws Exception {
+    private void page(URI url, @NonNull String body) throws Exception {
         when(fetcher.fetch(url)).thenReturn(new EventPageFetcher.Page(url, body, "text/html"));
     }
-    private String overview(String description, String href) {
+    private @NonNull String overview(String description, String href) {
         return "<article><h2>Neue Party</h2><p>" + description + "</p><a href='" + href + "'>Details</a></article>";
     }
     @Test void filtersBeforeFetchingArbitraryDetailLinkAndEnrichesIncompleteListing() throws Exception {
@@ -29,11 +31,11 @@ class EventDetailDiscoveryTests {
         page(detail, "<h1>Neue Party</h1><time datetime='2027-01-09T23:00'>Samstag</time><p>Party im Club</p>");
         var result = service.discover(root.toString(), EventExtractor.Profile.defaults());
         verify(genres).terms(); verify(fetcher).fetch(detail);
-        var event = result.get(0).extraction().events().get(0);
+        var event = requireNonNull(requireNonNull(result.get(0)).extraction().events().get(0));
         assertThat(event.starts()).containsExactly("2027-01-09T23:00");
         assertThat(event.evidence()).contains("Indie und DJs", "Detailseite", "Party im Club");
         assertThat(event.url()).isEqualTo(detail.toString());
-        assertThat(result.get(1).extraction().events()).containsExactly(event);
+        assertThat(requireNonNull(result.get(1)).extraction().events()).containsExactly(event);
     }
     @Test void negativeGenreCheckCannotBeBypassedByEventPath() throws Exception {
         var service = service();
@@ -53,7 +55,7 @@ class EventDetailDiscoveryTests {
         var service = service();
         page(root, "<script type='application/ld+json'>{\"@type\":\"Event\",\"name\":\"Neue Party\",\"description\":\"Alternative Rock Party\",\"url\":\"/nacht/123\",\"startDate\":\"2027-01-09\"}</script>");
         page(detail, "<h1>Neue Party</h1><time datetime='2027-01-10'>Sonntag</time><p>Abgesagt</p>");
-        var event = service.discover(root.toString(), EventExtractor.Profile.defaults()).get(0).extraction().events().get(0);
+        var event = requireNonNull(requireNonNull(service.discover(root.toString(), EventExtractor.Profile.defaults()).get(0)).extraction().events().get(0));
         assertThat(event.starts()).containsExactly("2027-01-09", "2027-01-10");
         assertThat(event.state()).contains("UNCONFIRMED");
     }
@@ -64,13 +66,13 @@ class EventDetailDiscoveryTests {
         var result = service.discover(root.toString(), EventExtractor.Profile.defaults());
         verify(fetcher, never()).fetch(detail);
         verify(fetcher, never()).fetch(URI.create("https://other.example/event"));
-        assertThat(result.get(0).extraction().events().get(0).state()).contains("UNCONFIRMED");
-        assertThat(result.get(1).extraction().status()).isEqualTo("ROBOTS_BLOCKED");
+        assertThat(requireNonNull(requireNonNull(result.get(0)).extraction().events().get(0)).state()).contains("UNCONFIRMED");
+        assertThat(requireNonNull(result.get(1)).extraction().status()).isEqualTo("ROBOTS_BLOCKED");
     }
     @Test void unrelatedDetailTitleDoesNotReplaceOriginalEvent() throws Exception {
         var service = service(); page(root, overview("Indie Party", "/nacht/123"));
         page(detail, "<h1>Andere Party</h1><time datetime='2027-01-09'>Samstag</time>");
-        var event = service.discover(root.toString(), EventExtractor.Profile.defaults()).get(0).extraction().events().get(0);
+        var event = requireNonNull(requireNonNull(service.discover(root.toString(), EventExtractor.Profile.defaults()).get(0)).extraction().events().get(0));
         assertThat(event.title()).isEqualTo("Neue Party");
         assertThat(event.starts()).isEmpty(); assertThat(event.state()).contains("UNCONFIRMED");
     }
@@ -97,7 +99,7 @@ class EventDetailDiscoveryTests {
         var service=new VenueSourceDiscoveryService(fetcher,new EventExtractor(),genres,repository,store);
         var found=service.discover(root.toString(),EventExtractor.Profile.defaults());
         verify(fetcher).fetch(detail);
-        assertThat(found.getFirst().extraction().events().getFirst().starts()).containsExactly("2027-01-09");
+        assertThat(requireNonNull(requireNonNull(found.getFirst()).extraction().events().getFirst()).starts()).containsExactly("2027-01-09");
     }
 
 }

@@ -2,6 +2,7 @@ package de.noizycologne.backend.calendar;
 
 import de.noizycologne.backend.actor.Actor;
 import de.noizycologne.backend.actor.ActorRepository;
+import de.noizycologne.backend.discovery.DiscoveryStore;
 import de.noizycologne.backend.media.MediaAssetRepository;
 import de.noizycologne.backend.media.PartyFlyerResponse;
 import de.noizycologne.backend.party.PartySeriesRepository;
@@ -24,7 +25,7 @@ import java.util.Set;
 @Service
 public class CalendarEntryService {
 
-    @org.springframework.beans.factory.annotation.Autowired private de.noizycologne.backend.discovery.DiscoveryStore discoveryStore;
+    private final DiscoveryStore discoveryStore;
     private void lockCalendar() { discoveryStore.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)"); }
 
     private static final DateTimeFormatter DATE_FORMAT =
@@ -42,12 +43,14 @@ public class CalendarEntryService {
                                 VenueRepository venueRepository,
                                 PartySeriesRepository partySeriesRepository,
                                 ActorRepository actorRepository,
-                                MediaAssetRepository mediaAssetRepository) {
+                                MediaAssetRepository mediaAssetRepository,
+                                DiscoveryStore discoveryStore) {
         this.calendarEntryRepository = calendarEntryRepository;
         this.venueRepository = venueRepository;
         this.partySeriesRepository = partySeriesRepository;
         this.actorRepository = actorRepository;
         this.mediaAssetRepository = mediaAssetRepository;
+        this.discoveryStore = discoveryStore;
     }
 
     @Transactional(readOnly = true)

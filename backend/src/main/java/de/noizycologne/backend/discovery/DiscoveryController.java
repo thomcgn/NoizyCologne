@@ -1,5 +1,6 @@
 package de.noizycologne.backend.discovery;
 
+import org.jspecify.annotations.NonNull;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import org.springframework.context.annotation.Profile;
@@ -18,10 +19,10 @@ public class DiscoveryController {
     private final VenueSourceDiscoveryService discovery;
     private final EventImportService importer;
     private final DiscoveryResetService resets;
-    public DiscoveryController(DiscoveryStore store,DiscoveryScheduler scheduler,VenueSourceDiscoveryService discovery,EventImportService importer,DiscoveryResetService resets) {
-        this.store=store; this.scheduler=scheduler; this.discovery=discovery; this.importer=importer; this.resets=resets;
+    private final EventChangeService changes;
+    public DiscoveryController(DiscoveryStore store,DiscoveryScheduler scheduler,VenueSourceDiscoveryService discovery,EventImportService importer,DiscoveryResetService resets,EventChangeService changes) {
+        this.store=store; this.scheduler=scheduler; this.discovery=discovery; this.importer=importer; this.resets=resets; this.changes=changes;
     }
-    @org.springframework.beans.factory.annotation.Autowired private EventChangeService changes;
     @GetMapping("/changes") public List<Map<String,Object>> changes() { return changes.list(); }
     @GetMapping("/changes/{id}/replacements") public List<Map<String,Object>> replacements(@PathVariable String id) { return changes.replacements(id); }
     @GetMapping("/candidates/{id}") public Map<String,Object> candidate(@PathVariable String id) { return DiscoveryStore.forApi(store.candidate(id)); }
@@ -72,7 +73,7 @@ public class DiscoveryController {
     }
     public record Probe(@NotBlank @Size(max=2048) String url) { }
     private final java.util.concurrent.Semaphore probeLock=new java.util.concurrent.Semaphore(1);
-    @PostMapping("/probe") public List<VenueSourceDiscoveryService.Found> probe(@Valid @RequestBody Probe request) throws java.io.IOException {
+    @PostMapping("/probe") public List<VenueSourceDiscoveryService.@NonNull Found> probe(@Valid @RequestBody Probe request) throws java.io.IOException {
         if (!probeLock.tryAcquire()) throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,"Quellenprüfung läuft bereits");
         try { return discovery.discover(request.url(),EventExtractor.Profile.defaults()); }
         catch (java.io.IOException e) {

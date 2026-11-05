@@ -96,7 +96,7 @@ public class PartyFlyerService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Flyerdatei nicht gefunden");
         }
         try {
-            Resource resource = new UrlResource(path.toUri());
+            Resource resource = new UrlResource(java.util.Objects.requireNonNull(path.toUri()));
             return new DownloadedFlyer(asset, resource);
         } catch (IOException exception) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Flyerdatei nicht gefunden", exception);

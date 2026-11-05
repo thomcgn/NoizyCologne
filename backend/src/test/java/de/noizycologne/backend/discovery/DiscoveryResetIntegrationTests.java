@@ -1,5 +1,7 @@
 package de.noizycologne.backend.discovery;
 
+import static java.util.Objects.requireNonNull;
+import de.noizycologne.backend.json.JsonValues;
 import de.noizycologne.backend.party.*;
 import de.noizycologne.backend.venue.*;
 import org.junit.jupiter.api.*;
@@ -174,19 +176,19 @@ class DiscoveryResetIntegrationTests {
         String automatic=candidate("Unknown Emo Night","Emo DJs");
         String manual=candidate("Rejected Emo Night","Emo DJs");
         importer.review(manual,null,LocalDate.of(2027,1,9),"REJECTED","NONE","");
-        var mvc=org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup(context).build();
+        var mvc=org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup(requireNonNull(context)).build();
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/discovery"))
             .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.metrics.automaticallyIgnored").value(1))
             .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.metrics.manuallyRejected").value(1));
         var r=request(DiscoveryResetService.Mode.ALL,false);
         var json=tools.jackson.databind.json.JsonMapper.builder().build();
         var invalid=new DiscoveryResetService.Request(r.mode(),true,"",r.previewToken(),UUID.randomUUID());
-        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/v1/discovery/reset")
-            .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(json.writeValueAsString(invalid)))
+        mvc.perform(requireNonNull(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/v1/discovery/reset")
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(JsonValues.write(json,invalid))))
             .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isBadRequest());
         for (int retry=0;retry<2;retry++) {
-            mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/v1/discovery/reset")
-                .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(json.writeValueAsString(r)))
+            mvc.perform(requireNonNull(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/v1/discovery/reset")
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(JsonValues.write(json,r))))
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isAccepted());
             assertThat(await(r.operationId().toString()).get("status")).isEqualTo("COMPLETED");
         }
@@ -210,7 +212,7 @@ class DiscoveryResetIntegrationTests {
     @Test void freshConcertEvidenceBlocksImportWithoutOverwritingTheManualDecision() {
         String id=candidate("Manual Night","Emo DJs");
         importer.review(id,party.getId(),LocalDate.of(2027,1,9),"NEEDS_REVIEW","ANSWERED","Editorial response");
-        var original=tools.jackson.databind.json.JsonMapper.builder().build().readValue((String)store.candidate(id).get("raw_event"),EventExtractor.Event.class);
+        var original=JsonValues.readRequired(tools.jackson.databind.json.JsonMapper.builder().build(),(String)store.candidate(id).get("raw_event"),EventExtractor.Event.class);
         var changed=new EventExtractor.Event(original.identity(),"Emo Konzert",original.url(),original.starts(),"Emo DJs live","","");
         processor.process(venue,source,changed,parties.findAll(),Map.of(),List.of("Emo"),true);
         assertThat(store.candidate(id)).containsEntry("status","NEEDS_REVIEW").containsEntry("decision_origin","MANUAL")

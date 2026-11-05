@@ -1,5 +1,6 @@
 package de.noizycologne.backend.discovery;
 
+import de.noizycologne.backend.json.JsonValues;
 import de.noizycologne.backend.venue.Venue;
 import org.springframework.stereotype.Service;
 import org.jspecify.annotations.NonNull;
@@ -49,8 +50,8 @@ public class EventChangeMonitor {
     public void batch(Venue venue,List<@NonNull Observation> observations,String operation,boolean horizonOnly) {
         store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
         observations=observations.stream().map(o -> new Observation(o.sourceId(),EventPrivacy.safe(o.event()),o.official())).toList();
-        var candidates=store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE venue_id=? AND (calendar_entry_id IS NOT NULL OR status NOT IN ('IGNORED','REJECTED','DUPLICATE'))",venue.getId());
-        var calendars=store.jdbc().queryForList("SELECT e.*,p.name AS party_name FROM calendar_entries e JOIN party_series p ON p.id=e.party_id WHERE e.location_id=? AND e.entry_type='event' AND e.event_status='ACTIVE' AND NOT EXISTS(SELECT 1 FROM discovery_candidates c WHERE c.calendar_entry_id=e.id)",venue.getId());
+        List<Map<String,Object>> candidates=store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE venue_id=? AND (calendar_entry_id IS NOT NULL OR status NOT IN ('IGNORED','REJECTED','DUPLICATE'))",venue.getId());
+        List<Map<String,Object>> calendars=store.jdbc().queryForList("SELECT e.*,p.name AS party_name FROM calendar_entries e JOIN party_series p ON p.id=e.party_id WHERE e.location_id=? AND e.entry_type='event' AND e.event_status='ACTIVE' AND NOT EXISTS(SELECT 1 FROM discovery_candidates c WHERE c.calendar_entry_id=e.id)",venue.getId());
         if(horizonOnly) {
             var today=LocalDate.now(ZoneId.of("Europe/Berlin"));
             candidates=candidates.stream().filter(row -> inHorizon(row,today)).toList();
@@ -81,7 +82,7 @@ public class EventChangeMonitor {
             var dates=officialMatches.stream().flatMap(o -> o.event().starts().stream()).map(EventNormalizer::date).filter(Objects::nonNull).distinct().toList();
             var times=officialMatches.stream().flatMap(o -> o.event().starts().stream()).map(EventNormalizer::time).filter(Objects::nonNull).distinct().toList();
             if(dates.size()>1 || times.size()>1) {
-                var representative=officialMatches.getFirst();
+                var representative=Objects.requireNonNull(officialMatches.getFirst(), "Offizieller Quellenbefund fehlt");
                 var event=representative.event();
                 var conflicting=new EventExtractor.Event(event.identity(),event.title(),event.url(),officialMatches.stream().flatMap(o -> o.event().starts().stream()).distinct().sorted().toList(),officialMatches.stream().map(o -> sourceUrl(o.sourceId())+": "+o.event().starts()).distinct().sorted().collect(java.util.stream.Collectors.joining("\n")), "SOURCE_CONFLICT",event.location());
                 alert(candidate,venue,"CONFLICTING_SOURCES",old,conflicting,sourceUrl(representative.sourceId()),"Offizielle Quellen nennen widersprüchliche Datums-/Zeitangaben");
@@ -120,7 +121,7 @@ public class EventChangeMonitor {
     }
     private EventExtractor.Event baseline(Map<String,Object> candidate) {
         Object raw=candidate.get("monitored_event");
-        return raw instanceof String value && !value.isBlank() ? json.readValue(value,EventExtractor.Event.class) : evaluator.event(candidate);
+        return raw instanceof String value && !value.isBlank() ? JsonValues.readRequired(json,value,EventExtractor.Event.class) : evaluator.event(candidate);
     }
     /** Explicit state tokens avoid turning a DJ's illness mentioned in prose into an event cancellation. */
     public static String classify(EventExtractor.Event old,EventExtractor.Event event,boolean conflict) {
@@ -148,7 +149,7 @@ public class EventChangeMonitor {
         store.jdbc().update("INSERT INTO discovery_observations(candidate_id,source_id,operation_id,fingerprint,event_data) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING",candidate,source,operation,fingerprint(event),evaluator.raw(event));
     }
     @Transactional
-    public void missing(Venue venue,String source,List<EventExtractor.Event> events,String operation,boolean complete) {
+    public void missing(Venue venue,String source,List<EventExtractor.@NonNull Event> events,String operation,boolean complete) {
         if (!complete) return;
         store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
         var rows=store.jdbc().queryForList("SELECT c.* FROM discovery_candidates c WHERE c.venue_id=? AND EXISTS(SELECT 1 FROM discovery_observations o WHERE o.candidate_id=c.id AND o.source_id=?) AND (c.calendar_entry_id IS NOT NULL OR c.status NOT IN ('IGNORED','REJECTED','DUPLICATE'))",venue.getId(),source);

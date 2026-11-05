@@ -1,5 +1,6 @@
 package de.noizycologne.backend.discovery;
 
+import de.noizycologne.backend.json.JsonValues;
 import de.noizycologne.backend.calendar.*;
 import de.noizycologne.backend.cancellation.CancellationService;
 import org.springframework.stereotype.Service;
@@ -84,8 +85,8 @@ public class EventChangeService {
     }
     public String dm(String id) {
         var row=store.jdbc().queryForMap("SELECT c.*,v.name AS venue_name FROM event_changes c JOIN venues v ON v.id=c.venue_id WHERE c.id=?",id);
-        var before=json.readValue((String)row.get("before_data"),EventExtractor.Event.class);
-        var after=json.readValue((String)row.get("after_data"),EventExtractor.Event.class);
+        var before=JsonValues.readRequired(json,(String)row.get("before_data"),EventExtractor.Event.class);
+        var after=JsonValues.readRequired(json,(String)row.get("after_data"),EventExtractor.Event.class);
         var date=EventChangeMonitor.date(before);
         String day=date==null ? "den bisher genannten Termin" : date.format(DateTimeFormatter.ofPattern("dd.MM.uuuu"));
         return "Hallo liebes "+row.get("venue_name")+"-Team! 👋\n\nWir haben bei euch ursprünglich „"+before.title()+"“ für "+day+" gesehen. Jetzt finden wir „"+after.title()+"“ beziehungsweise abweichende Veranstaltungsangaben.\n\nIst die ursprüngliche Party abgesagt, verschoben oder ersetzt worden, oder finden beide Veranstaltungen statt? Könnt ihr Datum, Beginn und Location bestätigen?\n\nDanke euch und liebe Grüße\nNoizyCologne";

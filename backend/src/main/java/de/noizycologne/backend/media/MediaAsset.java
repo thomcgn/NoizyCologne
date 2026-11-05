@@ -5,9 +5,11 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import org.jspecify.annotations.NonNull;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
+import java.util.Objects;
 
 @Entity
 @Table(name = "media_assets")
@@ -61,6 +63,9 @@ public class MediaAsset {
     public String getId() { return id; }
     public String getStoragePath() { return storagePath; }
     public String getOriginalFilename() { return originalFilename; }
-    public String getMediaType() { return mediaType; }
+    public @NonNull String getMediaType() {
+        // JPA populates required fields after its no-argument constructor returns.
+        return Objects.requireNonNull(mediaType, "Ein MediaAsset benötigt einen Medientyp");
+    }
     public long getFileSize() { return fileSize; }
 }

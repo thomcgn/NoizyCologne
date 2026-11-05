@@ -1,11 +1,13 @@
 # NoizyCologne – Lastenheft, Pflichtenheft & Entwicklungs-/Lernhandbuch
 
-> **Version:** 1.8 · **Stand:** 5. November 2026 · **Status:** Fachliche Gesamtspezifikation mit lokal bestätigtem Frontend-Prototyp
+> **Version:** 1.9 · **Stand:** 5. November 2026 · **Status:** Persistente Team-Anwendung mit Redaktion, Party-Discovery und Änderungsprüfung; Instagram-Publishing nicht implementiert
 > **Zielgruppe:** NoizyCologne-Team und Entwickler  
 > **Source of Truth:** Diese Version ersetzt v1.6 und frühere Projektdokumente fachlich. Für das tatsächlich implementierte Verhalten gilt zusätzlich der aktuelle Codezustand; nur dokumentierte Features sind noch nicht automatisch umgesetzt.  
 > **Wichtig:** Dieses Handbuch enthält Lastenheft, Pflichtenheft, technische Lern-/Agenten-Referenzen **und einen Ist-/Soll-Abgleich**. Die früheren Beispielskripte sind nicht automatisch identisch mit der aktuellen Codebasis. Die Entwicklung erfolgt auf Arch Linux; der Benutzer hat den lokalen Kalender-Prototyp erfolgreich getestet. Plattform-Funktionen werden vor Produktivstart im realen Meta-Konto verifiziert.  
 > **Verbindlicher Projektumfang (05.11.2026):** Ausschließlich Partys. Konzerte sind ausdrücklich unerwünscht und von Discovery sowie deren Kalenderübernahme ausgeschlossen. Frühere Konzertbezüge in diesem Handbuch gelten als überholte Beschreibung.
 > **Verbindlicher Vorbehalt:** Weitere fachliche Pflichtschritte **vor** dem Posting sind angekündigt und noch nicht beschrieben. Bis zu deren Freigabe bleibt das reguläre automatische Publishing **deaktiviert** (`NOIZY_PUBLISH_ENABLED=false`).
+
+**Für die tägliche Arbeit im Team:** Das [Team-Handbuch](TEAM-HANDBUCH.md) erklärt die tatsächlich vorhandenen Abläufe ohne technische Vorkenntnisse. Dieses Projektdokument bleibt die fachliche und technische Referenz mit ausdrücklich getrenntem Ist- und Soll-Zustand. Aktueller Bedienstand: Kapitel 23 bis 26; Qualitätsregeln: Kapitel 25 und [QUALITY.md](QUALITY.md). Das Publishing-Flag allein aktiviert keinen Versand: Ein Instagram-Publisher und seine Warteschlange sind im aktuellen Code nicht vorhanden.
 
 ---
 
@@ -33,7 +35,7 @@
 20. **Location- und DJ/Act-Stammdaten, Zuordnungen und Tabellenimport**
 21. **Google-Sheets-Modell: Party-Portfolio, Partyreihen und Jahreskalender (neu v1.5)**
 22. **Dokumentation-first-Workflow, Smartphone-Notizen und Coding-Agent-Übergaben**
-23. **Ist-Stand 31.10.2026, Flyer- und Redaktionskonzept sowie nächste Implementierungsschritte (neu v1.7)**
+23. **Aktueller Produktstand, Flyer- und Redaktionskonzept sowie offene Schritte (aktualisiert 05.11.2026)**
 24. **Location Discovery, Vorschläge und manuelle Instagram-Rückfragen (v1.8)**
 25. **Permanente Code-Quality-Routine**
 26. **Event Change Monitoring und zentraler Cancellation-Prozess**
@@ -65,10 +67,10 @@
 ### 1.1a Verbindliche Entscheidungen vom 31.10.2026 (v1.7; ersetzen ältere Vorschläge bei Widerspruch)
 
 - **Manuelle Stammdaten statt Excel-Automatismus:** Die früheren Tabellen dienen nur als historische Orientierung. Der MVP ersetzt sie durch die manuelle Pflege im NoizyCologne-Party-Portfolio und Kalender. Die in Kapitel 20/21 beschriebenen Importer bleiben **historische/optionale Später-Ideen**, **kein aktueller Muss-Entwicklungsschritt**. Insbesondere wird keine XLSX-Datei automatisch importiert oder synchronisiert.
-- **Partyreihen-Dauerflyer:** Jede Partyreihe kann optional genau einen **Standard-/Dauerflyer** referenzieren. Er gehört zur Partyreihe und ist unabhängig vom Turnus; ein Dauerflyer kann auch bei unregelmäßigen Partys bestehen. **Noch nicht implementiert.**
+- **Partyreihen-Dauerflyer:** Jede Partyreihe kann optional genau einen **Standard-/Dauerflyer** referenzieren. Er gehört zur Partyreihe und ist unabhängig vom Turnus; ein Dauerflyer kann auch bei unregelmäßigen Partys bestehen. **Inzwischen persistent implementiert; aktueller Stand siehe Kapitel 23.**
 - **Veranstaltungsflyer hat Vorrang:** Für eine konkrete Veranstaltung kann im Redaktionsbereich ein eigenes Bild hinterlegt werden. Dieses überschreibt den Standardflyer **nur für den zugehörigen Instagram-Beitragsentwurf**, niemals das Original der Partyreihe oder andere Termine.
-- **Instagram-artige Redaktion verpflichtend:** Jede Veranstaltung, die für einen Instagram-Feed-Beitrag bearbeitet wird, erscheint im Redaktionsbereich als realistische **Instagram-Foto-Post-Vorschau** mit Bild, Account-Kopf, Caption, Hashtags und Mentions. Eingaben aktualisieren die Post-Ansicht live. Eine reine Tabellenzeile oder Formularvorschau allein reicht dort nicht. **Geplant; noch nicht implementiert.**
-- **Kalender ist eigenständig:** Kalendereinträge und Location-Sperren können lokal bereits angelegt, angezeigt, bearbeitet und gelöscht werden; farbige Partyreihen und ein optionaler Turnus sind bedienbar. Daten liegen bisher nur im **React-State**, werden nach Browser-Reload verloren und sind **keine dauerhaft gespeicherten, publishfähigen Posts**.
+- **Instagram-artige Redaktion verpflichtend:** Jede Veranstaltung, die für einen Instagram-Feed-Beitrag bearbeitet wird, erscheint im Redaktionsbereich als realistische **Instagram-Foto-Post-Vorschau** mit Bild, Account-Kopf, Caption, Hashtags und Mentions. Eingaben aktualisieren die Post-Ansicht live. **Inzwischen mit persistenten Entwürfen implementiert; die Vorschau ist keine Instagram-Veröffentlichung.**
+- **Kalender ist eigenständig:** Kalendereinträge und Location-Sperren können angelegt, angezeigt, bearbeitet und gelöscht werden; farbige Partyreihen und ein optionaler Turnus sind bedienbar. **Gespeicherte Daten liegen inzwischen in PostgreSQL und bleiben nach einem Browser-Reload erhalten.** Ein Kalendertermin erzeugt weiterhin keinen Instagram-Post.
 - **Mentions ≠ Auftritt:** Eine Partyreihe kennt Resident-DJs, weitere DJs und Veranstalter. In einem Event werden Instagram-DJ-Mentions abhängig von der Party-Vorgabe vorausgewählt oder manuell angehakt. Eine Mention behauptet **nicht automatisch** einen bestätigten Auftritt; tatsächliches Event-Line-up bleibt ein eigenständiges, später zu pflegendes Fachdatum.
 - **Keine automatische Posting-Freigabe:** Kein Kalendertermin und kein Turnus erzeugt automatisch einen veröffentlichbaren Beitrag. Abnahme, echte Bilddatei, bereinigte Caption und zusätzliche Pre-Publish-Gates bleiben erforderlich. `NOIZY_PUBLISH_ENABLED=false`.
 
@@ -91,7 +93,7 @@
 4. Keine erfundenen Veranstaltungsdaten. Unklare Flyer-Felder bleiben offen und blockieren nötigenfalls die Freigabe.
 5. Secrets niemals in Git, Screenshots, Tickets oder Browser-Logs.
 6. Jede Workflow-Regel wird über `PublishEligibilityService` **serverseitig** erzwungen. Ein Frontend-Schalter allein ist keine Sicherheit.
-7. **Git-Konvention:** Lokal entwickeln → committen → `git push origin main` → automatisch Tests, Docker-Build, GHCR, Deploy und Smoke-Test; andere Branches gehen nicht direkt live.
+7. **Git-Konvention:** Lokal entwickeln → vollständiges Quality Gate und null IDE-Fehler/-Warnungen nachweisen → committen → freigegebenen Arbeitsbranch pushen. Ein Push auf `main` startet automatisch Tests, Docker-Build, GHCR, Deploy und Smoke-Test und erfordert deshalb einen entsprechenden Deployment-Auftrag. Andere Branches gehen nicht direkt live; die Referenzkonfiguration in Kapitel 19 ist kein zusätzliches Approval-Gate des tatsächlich vorhandenen Workflows.
 8. Kein Live-Deploy überspringt Tests; technische Bereitstellung ≠ Freigabe zum Instagram-Posting (`NOIZY_PUBLISH_ENABLED=false`).
 9. Das Dokument bei jeder Anforderungsänderung mit einer Zeile im Änderungsprotokoll aktualisieren.
 
@@ -2118,6 +2120,7 @@ Bei jeder Ergänzung gleichzeitig **Kapitel 3 (Lastenheft), 4 (Pflichtenheft), 5
 
 | Version | Datum | Änderungen |
 |---|---|---|
+| v1.9 Team und Qualität | 05.11.2026 | Verständliches Team-Handbuch ergänzt; veraltete Prototyp-/Reload-Angaben korrigiert, gespeicherte Freigabe von Instagram-Publishing und noch fehlender Bildversion-Fixierung getrennt. Conversion-/Null-Diagnosen einschließlich INFO blockieren; vier Feldinjektionen auf Konstruktoren umgestellt. Vollständiges Quality Gate und aktueller IDE-Nachweis vor jedem Commit verpflichtend. |
 | v1.8 Nur Partys | 05.11.2026 | Konzerte ausdrücklich aus dem Projektumfang ausgeschlossen; Konzertnavigation, Extraktion, Detailabrufe, Matching und manuelle Discovery-Übernahme abgesichert. |
 | v1.8 Abrufbudget | 05.11.2026 | Konfigurierbares 2-MiB-Response-Limit mit 4-MiB-Hardcap; Größen- und Zeitlimit getrennt; beide aktuellen Live-Music-Hall-Listen lesend geprüft. |
 | v1.8 Quellennavigation | 05.11.2026 | PARTY-/LIVE-Navigation und zugängliche Linkbeschriftungen erkennen, Programmseiten vor Detailabrufen priorisieren, leere Wix-HTML-Einbettungen korrekt diagnostizieren. |
@@ -3106,24 +3109,26 @@ Ein Coding-Agent darf erklären, Tests erzeugen und Code vorschlagen; **die Lern
 
 ---
 
-# 23. Aktueller Produktstand, Flyer-Hierarchie und Instagram-Redaktion (v1.7, 31.10.2026)
+# 23. Aktueller Produktstand, Flyer-Hierarchie und Instagram-Redaktion (aktualisiert 05.11.2026)
 
-> **Normativ:** Dieses Kapitel präzisiert und überstimmt ältere Annahmen aus Kapiteln 3, 4, 7, 13, 16, 20 und 21, soweit sie der manuellen MVP-Pflege oder der getrennten Redaktion widersprechen. **„Bedienbar“ bedeutet nicht „dauerhaft gespeichert“ und nicht „live veröffentlicht“.**
+> **Normativ:** Dieses Kapitel präzisiert und überstimmt ältere Annahmen aus Kapiteln 3, 4, 7, 13, 16, 20 und 21, soweit sie der manuellen MVP-Pflege oder der getrennten Redaktion widersprechen. **Gespeicherte Stammdaten, Kalendertermine und Redaktionsentwürfe bleiben nach dem Neuladen erhalten. „Gespeichert“ oder „Freigegeben“ bedeutet weiterhin nicht „auf Instagram veröffentlicht“.**
 
 ## 23.1 Verifizierter Bedienstand und technische Grenzen
 
-| Bereich | Tatsächlich aktuell bedienbar, nach lokaler Rückmeldung | Grenze / nicht fertig |
+| Bereich | Tatsächlich implementiert, lokal geprüft | Grenze / nicht fertig |
 |---|---|---|
-| Partyreihen | Neue Partyreihe anlegen/bearbeiten, Instagram-Handle, Farbe, DJ- und Veranstalterzuordnung, Vorauswahlregel für DJ-Mentions | Nur React-State; **kein** Dauerflyer-Upload |
-| Akteure | Personen/Kollektive erfassen; Rollen DJ/Veranstalter und Beziehungen zu Partys | Nur React-State; keine persistierte Datenbank |
-| Turnus | Optional kein Turnus, wöchentlich nach Wochentag, monatlich nach n-tem/letztem Wochentag oder Freitext | Keine automatische Terminerzeugung; nach Reload verloren |
-| Location-Portfolio | Locations mit Instagram-Handle verwalten | Nur React-State |
+| Partyreihen | Persistentes Anlegen/Bearbeiten, Instagram-Handle, Farbe, DJs/Veranstalter, Mention-Vorauswahl, lesbare Standardgenres und optionaler Dauerflyer | Ein Turnus erzeugt keine Termine; Änderungen an Standardgenres ändern keine bereits gespeicherten Entwürfe |
+| Akteure | Personen/Kollektive mit Rollen DJ/Veranstalter und Partyzuordnungen persistent pflegen | Eine Zuordnung ist kein bestätigter Auftritt |
+| Turnus | Optional kein Turnus, wöchentlich nach Wochentag, monatlich nach n-tem/letztem Wochentag oder Freitext; wird an der Partyreihe gespeichert | Keine automatische Terminerzeugung |
+| Location-Portfolio | Locations mit Instagram-Handle, Website und Discovery-Aktivierung persistent verwalten | Website-Abrufe können begrenzt oder gesperrt sein; leere Ergebnisse beweisen keine Absage |
 | Kalender | Eintrag erstellen, als farbige Party im Monatsraster sehen, mehrere Events am Tag, Location-Sperre, Bearbeiten/Löschen, DJ-Mentions in Event-Editor | Kein veröffentlichtes Instagram-Ereignis |
 | Webauftritt | Öffentliche Landingpage und geschützte Team-Oberfläche mit Login | Keine öffentlich freigegebene REST-Fach-API |
 | Backend/Deployment | Spring Boot, PostgreSQL, Flyway und persistente CRUD-Anbindung der Stammdaten, Kalenderdaten und Medien | Meta-Publishing bleibt deaktiviert |
 | Flyer/Redaktion | Dauerflyer, Event-Flyer, Instagram-nahe Vorschau und persistente Redaktionsentwürfe | Kein Meta-Publishing; Freigabe ist technisch lokal/serverseitig gespeichert, aber nicht an Instagram gekoppelt |
+| Genres/Musik | Aktive Genres und Aliasse verwalten, lokale Flyer-Genre-Vorschläge prüfen, verifizierte Musik manuell zu Entwürfen zuordnen | Keine automatische Songrecherche, kein automatisches Instagram-Audio |
+| Vorgeschlagene/Änderungen | Begrenzte offizielle Quellensuche, gespeicherte Vorschläge, manuelle Rückfragen, täglicher Änderungscheck und zentraler Absageentwurf | Keine automatischen DMs oder Absageveröffentlichungen; Quellenbefunde benötigen die vorgesehene Prüfung |
 
-**Qualifizierung des Status:** Diese Bestandsaufnahme basiert auf den bis 31.10.2026 im gemeinsamen Entwicklungsgespräch erfolgreich getesteten lokalen Schritten und auf der bekannten Repository-Struktur. Sie ist **kein** behaupteter End-to-End-Test gegen einen produktiven Server. Ein lokal bestätigter `npx tsc --noEmit`-Check ersetzt keine Integrationstests.
+**Qualifizierung des Status:** Diese Bestandsaufnahme wurde am 05.11.2026 mit dem aktuellen Code und den lokalen Backend-/Frontend-Regressionen abgeglichen. Sie ist **kein** behaupteter End-to-End-Test gegen einen produktiven Server oder Instagram. Ein einzelner TypeScript-Check ersetzt weder Integrationstests noch die vollständige Prüfroutine.
 
 ## 23.2 Fachliche Entitäten sauber unterscheiden
 
@@ -3135,7 +3140,7 @@ Ein Coding-Agent darf erklären, Tests erzeugen und Code vorschlagen; **die Lern
 
 ## 23.3 Dauerflyer: bewusst im Party-Portfolio
 
-**Bedienung (Soll):** Im Editor einer Partyreihe erscheint optional „Dauerflyer (Standardbild)“ mit Upload/Auswählen, Preview, Austauschen und Entfernen. Die normale Partyreihe darf auch **ohne Dauerflyer** gespeichert werden. Eine Änderung des Dauerflyers ändert **keinen** bestehenden, bereits freigegebenen Instagram-Beitrag. Flyer ist unabhängig von einem festen Turnus.
+**Bedienung (Ist):** Im Editor einer Partyreihe kann ein optionaler Dauerflyer hochgeladen, angesehen, ausgetauscht und entfernt werden. Die Partyreihe darf auch **ohne Dauerflyer** gespeichert werden. Der Flyer ist unabhängig von einem festen Turnus.
 
 **Priorität der Bildquelle im Redaktionsentwurf:**
 
@@ -3152,7 +3157,7 @@ Partyreihe hat Dauerflyer?   ── ja ──> Dauerflyer vorschlagen
         (nicht freigabefähig)
 ```
 
-Ein eigener Flyer zu einem Termin **überschreibt nur die Bildauswahl dieses Beitrags**, nicht den Dauerflyer und nicht die Vorschau anderer Events derselben Partyreihe. Die redaktionell gewählte Bildreferenz wird spätestens bei Freigabe als unveränderliche Version fixiert. Wurde ein Standardflyer ersetzt, behalten bereits freigegebene Beiträge ihre zugeordnete Bildversion. Ein Platzhalter darf nie als echtes Postbild veröffentlicht werden.
+Ein eigener Flyer zu einem Termin **überschreibt nur die Bildauswahl dieses Beitrags**, nicht den Dauerflyer und nicht die Vorschau anderer Events derselben Partyreihe. **Offenes Soll:** Eine unveränderliche Medienversion pro freigegebenem Entwurf ist noch nicht implementiert. Die Vorschau verwendet derzeit den aktuellen Event-Flyer beziehungsweise Dauerflyer; ein späterer Austausch kann deshalb auch die Vorschau eines bereits freigegebenen Entwurfs ändern. Das Team muss den betroffenen Entwurf erneut prüfen. Ein Platzhalter darf nie als echtes Postbild veröffentlicht werden.
 
 ## 23.4 Instagram-Redaktion: Veranstaltung MUSS wie ein Feed-Beitrag aussehen
 
@@ -3180,11 +3185,11 @@ Ein eigener Flyer zu einem Termin **überschreibt nur die Bildauswahl dieses Bei
 
 ## 23.6 Turnus und Kalendergrenzen
 
-- Turnus ist **optional**, unabhängig vom Dauerflyer und aktuell nur als Stammdatensatz im Frontend editierbar.
+- Turnus ist **optional**, unabhängig vom Dauerflyer und wird als Teil der Party-Stammdaten gespeichert.
 - Unterstützte lokale Regeln: wöchentlich (Wochentag), monatlich (1.–4. oder letzter Wochentag) und „andere/unklare Regel“ als Beschreibung.
 - Eine Regel erzeugt **heute keine Termine**; künftige Automatik darf nur **Kalender-Entwürfe nach Vorschau/Bestätigung**, keine Posts, erzeugen.
 - Kalender-Events und Location-Sperren sind **separate** Einträge. Sperren dürfen keine Instagram-Post-Entwürfe auslösen.
-- Kalender-CRUD im React-State ist **flüchtig**. Nächster Daten-Meilenstein ist die persistente Anbindung an Spring Boot + PostgreSQL mit Flyway-Migrationen, Validierung und späterer Team-Autorisierung.
+- Kalendertermine und Location-Sperren sind persistent an Spring Boot und PostgreSQL angebunden. Erfolgreich gespeicherte Änderungen bleiben nach einem Neuladen erhalten. Ungespeicherte Formulareingaben können weiterhin verloren gehen; differenzierte Teamrollen sind noch offen.
 
 ## 23.7 Geplante Datenflüsse ohne Vorwegnahme der Implementierung
 
@@ -3211,17 +3216,17 @@ flowchart TD
 | Party mit Dauerflyer, ohne Turnus | Standardbild wird im Redaktionsentwurf angeboten |
 | Party mit Dauerflyer und monatlichem Turnus | Standardbild verfügbar, **keine** automatische Terminerzeugung |
 | Zwei Termine derselben Partyreihe, nur einer mit Spezialflyer | Nur der eine redaktionelle Beitrag zeigt Spezialflyer; anderer zeigt Dauerflyer |
-| Dauerflyer wird nach Freigabe eines Beitrags ersetzt | Bereits freigegebener Beitrag behält die referenzierte ursprüngliche Medienversion |
+| Dauerflyer wird nach Freigabe eines Beitrags ersetzt | **Aktuelle Grenze:** Vorschau kann sich ändern; erneut prüfen. Unveränderliche Medienversion pro Entwurf bleibt ein offenes Abnahmekriterium |
 | Caption/Mentions/Hashtags werden bearbeitet | Sichtbare Instagram-Post-Vorschau aktualisiert sich sofort |
 | Kein Bild vorhanden | Entwurf darf nicht zur Veröffentlichung freigegeben werden |
 | Location-Sperre | Kalenderanzeige möglich, kein Instagram-Entwurf |
 | Resident-Voreinstellung aktiv | Residents mit gültigen Handles vorausgewählt, individuell abwählbar |
 | Kein bestätigter Auftritt, DJ aber verknüpft | DJ-Zuordnung allein erzeugt keine Auftrittsbehauptung |
 | Ein Tag mit zwei Partys verschiedener Farbe | Beide Termine sichtbar, jeweils in Partyfarbe |
-| Eintrag bearbeiten/löschen | Lokaler Kalender reagiert ohne Dublette; spätere API schützt vor Inkonsistenzen |
-| Browser neuladen (aktueller Stand) | Verlust lokaler Daten ist derzeit bekannte Grenze, **kein** Erfolgstest dauerhafter Speicherung |
-| PostgreSQL-CRUD später | Alle Daten bleiben nach Reload erhalten; API-Validierung und Änderungsrechte geprüft |
-| Vorzeitiger Publishing-Aufruf | Blockiert, solange Gate-Freigaben/echtes Bild fehlen oder Feature Flag deaktiviert ist |
+| Eintrag bearbeiten/löschen | Kalender zeigt den gespeicherten Stand; bestehende API prüft fachliche Konflikte und Abhängigkeiten |
+| Browser nach erfolgreichem Speichern neuladen | Stammdaten, Kalender und gespeicherte Entwürfe werden erneut geladen; ungespeicherte Eingaben sind davon ausgenommen |
+| PostgreSQL-CRUD | Persistenz und API-Validierung mit separater Testdatenbank geprüft; differenzierte Teamrollen bleiben offen |
+| Vorzeitiges Publishing | Kein Instagram-Publisher und keine Versandwarteschlange vorhanden; gespeicherte Freigaben und lokale Prüfhaken senden nichts |
 
 ## 23.9 Nächste kleine Coding-Tickets
 
@@ -3231,7 +3236,7 @@ flowchart TD
 
 ## 23.10 Festhaltepunkt für den nächsten Commit
 
-Der Nutzer hat bestätigt, dass der lokale Frontend-TypeScript-Check erfolgreich ist und dass das Anlegen/Anzeigen/Bearbeiten/Löschen von Kalender-Einträgen **funktioniert**. Git-Checkpoint vor weiteren funktionalen Änderungen empfohlen. **Nicht hiermit behaupten**, dass ein Commit oder Push bereits erfolgt ist: Lokales Git ist außerhalb dieses Handbuchs zu prüfen. Danach wird dieses vollständige v1.7-Handbuch als `docs/PROJECT.md` versioniert. Frühere v1.6-MD bleibt Historie.
+Vor jedem Commit gelten das vollständige Quality Gate und der aktuelle IDE-Nachweis aus Kapitel 25. Commit- und Pushstatus werden aus Git geprüft und im Abschluss gemeldet; diese Spezifikation behauptet keinen bereits erfolgten Push oder eine Produktionsabnahme. Das [Team-Handbuch](TEAM-HANDBUCH.md) ergänzt diese Referenz um verständliche Bedienabläufe und ändert keine fachlichen Anforderungen.
 
 ## 23.11 Offline-OCR 2.0 – verbindliche Betriebsgrenzen
 
@@ -3534,13 +3539,13 @@ Validierung der Reset-Korrektur: **100 Backend-Tests erfolgreich**, einschließl
 
 # 25. Permanente Code-Quality-Routine (05.11.2026)
 
-Die Root-`AGENTS.md` enthält das verbindliche **Mandatory Quality Gate** für alle zukünftigen Codex-Aufträge. Nach zusammenhängenden Änderungen gelten passende Tests/Analysen; vor jedem lokalen Commit ist `scripts/check-quality.sh --full` erfolgreich auszuführen. Fehler oder neu verursachte Warnungen verhindern Abschluss und Commit. Keine still übersprungenen Checks, globalen Suppressions, Regelabschwächungen oder `--no-verify`-Umgehungen.
+Die Root-`AGENTS.md` enthält das verbindliche **Mandatory Quality Gate** für alle zukünftigen Codex-Aufträge. Nach zusammenhängenden Änderungen gelten passende Tests/Analysen; vor jedem lokalen Commit ist `scripts/check-quality.sh --full` erfolgreich auszuführen. Zusätzlich muss VS Code vor jedem Commit **null projektbezogene Fehler und Warnungen** anzeigen, einschließlich bestehender Conversion-, Unchecked-Conversion- und Null-Type-Safety-Warnungen. Auch entsprechende ECJ-Informationshinweise blockieren. Ohne aktuellen IDE-Diagnosenachweis kein Commit; ein grüner CLI-Lauf ersetzt diesen Nachweis nicht. Keine still übersprungenen Checks, globalen Suppressions, Regelabschwächungen oder `--no-verify`-Umgehungen.
 
 Versionierte Hooks liegen in `.githooks`; `scripts/install-hooks.sh` aktiviert sie nach Prüfung vorhandener Konfigurationen, ohne andere Hooks unbemerkt zu ersetzen. Neue Klone müssen den Installer einmal ausführen. Der Hook prüft ausschließlich und verändert weder Index noch Commit-/Push-Zustand automatisch.
 
-Die gemeinsame lokale/CI-Routine umfasst javac mit `-Xlint:all`/Warnungsfehlern, Tests und Maven-Paket, eine gepinnte zusätzliche ECJ-Analyse einschließlich Testcode, Next-Typegen, TypeScript, ESLint mit `--max-warnings=0`, Frontend-Tests und Produktionsbuild. Diff, Konfliktmarker und konfigurierte Secret-Muster werden auch im tatsächlichen Index geprüft. Backend-Schreibtests laufen stets in einem eigenen kurzlebigen PostgreSQL-Container mit zufälligem Loopback-Port, niemals gegen bestehende Datenbanken.
+Die gemeinsame lokale/CI-Routine umfasst javac mit `-Xlint:all`/Warnungsfehlern, Tests und Maven-Paket, eine gepinnte zusätzliche ECJ-Analyse einschließlich Testcode, Next-Typegen, TypeScript, ESLint mit `--max-warnings=0`, Frontend-Tests und Produktionsbuild. Die ECJ-XML-Berichte werden unabhängig vom Exitcode ausgewertet: Jeder Problemeintrag einschließlich INFO verhindert einen Erfolg; fehlende oder beschädigte Berichte ebenso. `.vscode/settings.json` bindet dasselbe Java-Profil mit JSpecify-Defaults und den sekundären älteren Spring-Annotationen ein. Diff, Konfliktmarker und konfigurierte Secret-Muster werden auch im tatsächlichen Index geprüft. Backend-Schreibtests laufen stets in einem eigenen kurzlebigen PostgreSQL-Container mit zufälligem Loopback-Port, niemals gegen bestehende Datenbanken.
 
-Reproduzierter Ausgangsbestand: 21 Warnungen mit den lokalen IDE-Einstellungen, 43 im zusätzlichen Profil (11 Deprecations, vier unbenutzte Imports, eine Serialisierungs-ID, 27 Null-/Typflusswarnungen). Zusätzlich wurde eine javac-`this-escape`-Warnung beim Lexikon-Konstruktor fachlich behoben und per Regression abgesichert; insgesamt 44 bereinigte Warnungen ohne Suppressions. Die zusätzliche Analyse lässt 98 sichtbare Informationshinweise an Bibliotheks-/Generik-Annotationsgrenzen übrig; sie ist kein vollständiger JSpecify- oder Live-VS-Code-Problemlisten-Nachweis. Der optionale historische Offline-Discovery-Test wird ohne privaten Export ausdrücklich als nicht ausgeführt gemeldet. Voraussetzungen, verbleibende Diagnosegrenzen, Fehlerbehandlung und getestete Fehler-/Hook-Szenarien sind in [QUALITY.md](QUALITY.md) dokumentiert.
+Die erste Bereinigung behob 44 Java-Warnungen. Die dabei tolerierten zunächst 98, nach Event Change Monitoring 109 Conversion-/Null-Informationshinweise waren eine Lücke des Gates und sind keine zulässige Ausnahme mehr. Die Korrektur erhält generische NonNull-Verträge durchgängig und prüft Werte an Bibliotheksgrenzen tatsächlich. `JsonValues` weist unerwartetes JSON `null` zurück, bevor erforderliche API-/Eventobjekte verwendet werden. Es gibt keine pauschalen Suppressions oder externen Teilmodelle, die unannotierte Bibliotheksmethoden fälschlich als sicher deklarieren. Der optionale historische Offline-Discovery-Test wird ohne privaten Export ausdrücklich als nicht ausgeführt gemeldet. Voraussetzungen, Diagnosegrenzen, Fehlerbehandlung und getestete Fehler-/Hook-Szenarien sind in [QUALITY.md](QUALITY.md) dokumentiert.
 
 # 26. Event Change Monitoring und zentraler Cancellation-Prozess (05.11.2026)
 
@@ -3611,9 +3616,9 @@ Neue APIs folgen der bestehenden lokalen/staging-API- und Caddy-Sessionabsicheru
 
 Regressionen prüfen stabile Identität trotz Datum-/Titelwechsel, echte kanonische Detail-URLs, Uhrzeit/Location/Beschreibung, offizielle Absage versus Gerücht und DJ-Ausfall, vollständige versus beschädigte ICS-Quellen, Quellenverlust nach wiederholter vollständiger Prüfung, widersprüchliche Quellen ohne doppelte Meldung, bestehende manuelle Kalendertermine, wiederverwendete Identitäten, eigenständige Ersatzkandidaten und deren ausdrücklich geprüfte Übernahme nach bestätigter Absage. Getestet sind unveränderte Originalcaptions/-genres/-freigabestatus und Originalflyerbytes, serverseitig blockierte Originalfreigaben, separate Grafik-/Absagefreigabe, veraltete Revisionen und das 21-Tage-Fenster.
 
-Frontend-DOM-Regressionen prüfen Vergleichstabelle, editierbaren Rückfragetext ohne Fokusverlust, manuelle Versandmarkierung, Konfliktmeldung ohne Verlust der Eingaben, zentrale manuelle Absage und separates Grafikvorbereiten ohne Publishing-/Instagram-Aufruf. Sie ersetzen keine visuelle Abnahme in realen mobilen Browsern oder einen realen Instagram-/Publishing-Test. Vor dem lokalen Commit laufen TypeScript, ESLint, Production-Build, Maven-Paket, Java-Analysen und sämtliche Tests über das verbindliche vollständige Quality Gate. Datenbankschreibtests und Flyway V14 laufen ausschließlich im kurzlebigen Testcontainer; die bestehende Entwicklungs-/Produktionsdatenbank wird nicht migriert. Kein Push oder Deployment.
+Frontend-DOM-Regressionen prüfen Vergleichstabelle, editierbaren Rückfragetext ohne Fokusverlust, manuelle Versandmarkierung, Konfliktmeldung ohne Verlust der Eingaben, zentrale manuelle Absage und separates Grafikvorbereiten ohne Publishing-/Instagram-Aufruf. Sie ersetzen keine visuelle Abnahme in realen mobilen Browsern oder einen realen Instagram-/Publishing-Test. Vor dem lokalen Commit laufen TypeScript, ESLint, Production-Build, Maven-Paket, Java-Analysen und sämtliche Tests über das verbindliche vollständige Quality Gate. Datenbankschreibtests und Flyway V14 laufen ausschließlich im kurzlebigen Testcontainer; die bestehende Entwicklungs-/Produktionsdatenbank wird nicht migriert. Diese Prüfungen lösen weder Deployment noch Instagram-Aktionen aus.
 
-Der zuletzt vollständig bestätigte Lauf einschließlich Nachtrag umfasst **123 Backend-Tests (122 erfolgreich, ein ausdrücklich optionaler historischer Offline-Test ohne Exportdatei übersprungen)** und **22 erfolgreiche Frontend-Tests**, zusätzlich die Selbst-/Negativtests der Prüfroutine. javac und ECJ melden keine Compilerfehler oder -warnungen; **109 sichtbare ECJ-Informationshinweise** betreffen weiterhin Bibliotheks-/Generik-Annotationsgrenzen, siehe `docs/QUALITY.md`. Ein zusätzlicher gezielter Lauf mit 19 Extraktions-/Klassifikationstests prüft insbesondere die ausdrückliche Gesamtabsage trotz erwähnten DJ-Ausfalls.
+Der zuletzt vollständig bestätigte Lauf nach der Qualitätskorrektur umfasst **127 Backend-Tests (126 erfolgreich, ein ausdrücklich optionaler historischer Offline-Test ohne Exportdatei übersprungen)** und **22 erfolgreiche Frontend-Tests**, zusätzlich **13 Gate-/Hook-Selbsttests**, **11 Java-Analysetestmethoden** und die Frontend-Negativprüfungen. javac sowie beide lokal geprüften ECJ-Versionen melden im Haupt- und Testcode **null Fehler, Warnungen und INFO-Diagnosen**. Die früher tolerierten 109 Informationshinweise sind behoben; es gibt keine entsprechende Ausnahme mehr, siehe [QUALITY.md](QUALITY.md). TypeScript, ESLint, Backend-Paket, Frontend-Build und `git diff --check` sind erfolgreich. Der Nutzer hat die aktuelle VS-Code-Problemliste mit null Fehlern und Warnungen bestätigt. Dies ist keine visuelle Mobil- oder Instagram-Abnahme.
 
 Nachtrag zur vollständig nachgereichten Anforderung: Bekannte Special-/Edition-Titel bleiben eine Titeländerung desselben Events. Lokale ICS-Fixtures prüfen die stabile UID bei Freitag-/Samstag-Verschiebung und Titelkorrektur. Zusätzliche PostgreSQL-Regressionen prüfen, dass abgelehnte unveränderte Befunde geschlossen bleiben, erst ein neuer relevanter Befund eine weitere Warnung erzeugt und spätere manuelle Kalenderkorrekturen weder vom Scan noch von einem veralteten Vergleich überschrieben werden.
 

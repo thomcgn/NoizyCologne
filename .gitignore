@@ -23,6 +23,7 @@ coverage/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
 *.iml
 
 # Operating System

@@ -1,5 +1,6 @@
 package de.noizycologne.backend.party;
 
+import org.jspecify.annotations.NonNull;
 import de.noizycologne.backend.actor.Actor;
 import de.noizycologne.backend.actor.ActorRepository;
 import de.noizycologne.backend.calendar.CalendarEntryRepository;
@@ -15,6 +16,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 @Service
@@ -72,8 +74,8 @@ public class PartySeriesService {
     @Transactional
     public PartySeriesResponse updateParty(String id, PartySeriesRequest request) {
         validateRequest(request);
-        PartySeries party = partySeriesRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Partyreihe nicht gefunden"));
+        PartySeries party = Objects.requireNonNull(partySeriesRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Partyreihe nicht gefunden")));
         ensureNameAvailable(request.name(), id);
         validateActorReferences(request);
         validateStandardGenres(request.standardGenres());
@@ -96,8 +98,8 @@ public class PartySeriesService {
 
     @Transactional
     public void deleteParty(String id) {
-        PartySeries party = partySeriesRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Partyreihe nicht gefunden"));
+        PartySeries party = Objects.requireNonNull(partySeriesRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Partyreihe nicht gefunden")));
         if (calendarEntryRepository.countByPartyId(id) > 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Die Partyreihe wird noch von Kalendereinträgen verwendet und kann nicht gelöscht werden");
@@ -193,8 +195,8 @@ public class PartySeriesService {
         }
     }
 
-    private List<PartyDjAssignment> djAssignments(PartySeriesRequest request) {
-        List<PartyDjAssignment> assignments = new ArrayList<>();
+    private List<@NonNull PartyDjAssignment> djAssignments(PartySeriesRequest request) {
+        List<@NonNull PartyDjAssignment> assignments = new ArrayList<>();
         request.residentDjIds().forEach(id -> assignments.add(new PartyDjAssignment(id, "resident")));
         request.otherDjIds().forEach(id -> assignments.add(new PartyDjAssignment(id, "other")));
         return assignments;

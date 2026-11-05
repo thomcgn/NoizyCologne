@@ -46,7 +46,7 @@ class WorkflowTests(unittest.TestCase):
             (self.root / directory).mkdir(parents=True)
         for file in ['scripts/check-quality.sh', 'scripts/check-repository.py', 'scripts/install-hooks.sh', '.githooks/pre-commit']:
             shutil.copy2(ROOT / file, self.root / file)
-        (self.root / 'scripts/check-java.py').write_text('print("Simulated Java analysis fixture")\n')
+        (self.root / 'scripts/check-java.py').write_text('from pathlib import Path\nimport sys\nprint("Simulated Java analysis fixture")\nsys.exit(1 if Path("fail-stage").read_text() == "java-null-warning" else 0)\n')
         # Do not recursively invoke this workflow suite inside its miniature fixture repository.
         (self.root / 'scripts/tests/test_quality_fixture.py').write_text('import unittest\nclass Fixture(unittest.TestCase):\n def test_fixture(self): self.assertTrue(True)\n')
         (self.root / 'scripts/tests/test_java_analysis.py').write_text('import unittest\nclass Fixture(unittest.TestCase):\n def test_fixture(self): self.assertTrue(True)\n')
@@ -92,7 +92,7 @@ exit 0
             self.assertIn(command, calls)
 
     def test_failures_propagate_and_never_report_success(self):
-        stages = {'java-error': 'backend-compile', 'java-warning': 'backend-compile', 'test-failure': 'backend-tests', 'typescript': 'typescript', 'eslint-warning': 'eslint', 'frontend-test': 'frontend-tests', 'build': 'frontend-build'}
+        stages = {'java-error': 'backend-compile', 'java-warning': 'backend-compile', 'java-null-warning': 'java-analysis', 'test-failure': 'backend-tests', 'typescript': 'typescript', 'eslint-warning': 'eslint', 'frontend-test': 'frontend-tests', 'build': 'frontend-build'}
         for failure, stage in stages.items():
             with self.subTest(failure=failure):
                 result = self.run_gate(failure)
@@ -125,10 +125,12 @@ exit 0
 
     def test_hook_actually_blocks_and_then_allows_commit(self):
         self.git('config', 'core.hooksPath', '.githooks')
-        (self.root / 'fail-stage').write_text('typescript')
-        failed = subprocess.run(['git', 'commit', '-m', 'blocked fixture'], cwd=self.root, env=self.env, capture_output=True, text=True)
-        self.assertNotEqual(failed.returncode, 0)
-        self.assertNotEqual(subprocess.run(['git', 'rev-parse', '--verify', 'HEAD'], cwd=self.root, capture_output=True).returncode, 0)
+        for failure in ('java-null-warning', 'typescript'):
+            with self.subTest(failure=failure):
+                (self.root / 'fail-stage').write_text(failure)
+                failed = subprocess.run(['git', 'commit', '-m', 'blocked fixture'], cwd=self.root, env=self.env, capture_output=True, text=True)
+                self.assertNotEqual(failed.returncode, 0)
+                self.assertNotEqual(subprocess.run(['git', 'rev-parse', '--verify', 'HEAD'], cwd=self.root, capture_output=True).returncode, 0)
         before = self.git('write-tree').stdout
         (self.root / 'fail-stage').write_text('')
         passed = self.git('commit', '-m', 'allowed fixture')

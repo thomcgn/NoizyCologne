@@ -1,5 +1,6 @@
 package de.noizycologne.backend.discovery;
 
+import org.jspecify.annotations.NonNull;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import java.time.*;
@@ -21,19 +22,19 @@ final class GermanProgramText {
             Map.entry("sep",9), Map.entry("sept",9), Map.entry("september",9), Map.entry("okt",10), Map.entry("oktober",10),
             Map.entry("nov",11), Map.entry("november",11), Map.entry("dez",12), Map.entry("dezember",12));
 
-    static List<String> starts(String text) {
+    static List<@NonNull String> starts(@NonNull String text) {
         // An explicitly separated range supplies one start; the later date/time is the end.
         String start = clean(text).split("\\s+[–—-]\\s+", 2)[0];
         var matcher = FULL_DATE.matcher(start);
-        List<String> dates = new ArrayList<>();
+        List<@NonNull String> dates = new ArrayList<>();
         while (matcher.find()) {
             try {
                 String monthText = matcher.group(2).toLowerCase(Locale.ROOT);
                 int month = monthText.matches("\\d+") ? Integer.parseInt(monthText) : MONTHS.getOrDefault(monthText, 0);
                 var date = LocalDate.of(Integer.parseInt(matcher.group(3)), month, Integer.parseInt(matcher.group(1)));
-                dates.add(matcher.group(4) == null ? date.toString() : date.atTime(
-                        LocalTime.of(Integer.parseInt(matcher.group(4)), Integer.parseInt(matcher.group(5)))).toString());
-            } catch (DateTimeException | NumberFormatException e) { dates.add(matcher.group()); }
+                dates.add(matcher.group(4) == null ? Objects.requireNonNull(date.toString()) : Objects.requireNonNull(date.atTime(
+                        LocalTime.of(Integer.parseInt(matcher.group(4)), Integer.parseInt(matcher.group(5)))).toString()));
+            } catch (DateTimeException | NumberFormatException e) { dates.add(Objects.requireNonNull(matcher.group(), "Datumsbeleg fehlt")); }
         }
         return dates.isEmpty() ? List.of(text) : dates.stream().distinct().toList();
     }
@@ -58,9 +59,9 @@ final class GermanProgramText {
             if (!row.matches() || events.size() >= 200) continue;
             String title = row.group(4).trim();
             Integer explicitYear = row.group(3) == null ? year : Integer.valueOf(row.group(3));
-            List<String> starts = List.of();
+            List<@NonNull String> starts = List.of();
             if (explicitYear != null) {
-                try { starts = List.of(LocalDate.of(explicitYear, Integer.parseInt(row.group(2)), Integer.parseInt(row.group(1))).toString()); }
+                try { starts = List.of(Objects.requireNonNull(LocalDate.of(explicitYear, Integer.parseInt(row.group(2)), Integer.parseInt(row.group(1))).toString())); }
                 catch (DateTimeException ignored) { }
             }
             Element anchor = block.selectFirst("a[href]");

@@ -1,5 +1,6 @@
 package de.noizycologne.backend.discovery;
 
+import org.jspecify.annotations.NonNull;
 import org.jsoup.Jsoup;
 import org.springframework.stereotype.Service;
 import java.net.URI;
@@ -23,12 +24,12 @@ public class VenueSourceDiscoveryService {
     }
     public record Found(URI url, EventExtractor.Extraction extraction) { }
     /** Calendar navigation before details, one host, depth <= 2, at most 8 pages and 200 inspected links/page. */
-    public List<Found> discover(String input, EventExtractor.Profile profile) throws IOException {
+    public List<@NonNull Found> discover(String input, EventExtractor.Profile profile) throws IOException {
         URI root = SafeUrls.parse(input);
         record Step(URI url, int depth, boolean detail) { }
         var queue = new ArrayDeque<Step>(); queue.add(new Step(root, 0, false));
         Set<URI> seen = new HashSet<>(); Map<String, String> robots = new HashMap<>();
-        List<Found> found = new ArrayList<>();
+        List<@NonNull Found> found = new ArrayList<>();
         Set<String> genreTerms = genres.terms();
         List<String> knownNames=new ArrayList<>();
         if (parties!=null) parties.findAll().forEach(p -> knownNames.add(p.getName()));
@@ -63,7 +64,7 @@ public class VenueSourceDiscoveryService {
                 if (page.body().contains("BEGIN:VCALENDAR")) continue;
                 boolean programmeLink = false;
                 int navigationLinks = 0;
-                for (var link : Jsoup.parse(page.body(), step.url().toString()).select("a[href], link[href][type=text/calendar]").stream().limit(200).toList()) {
+                for (var link : Jsoup.parse(page.body(), Objects.requireNonNull(step.url().toString())).select("a[href], link[href][type=text/calendar]").stream().limit(200).toList()) {
                     try {
                         String href = link.absUrl("href").split("#", 2)[0];
                         URI next = SafeUrls.parse(href);
@@ -92,28 +93,28 @@ public class VenueSourceDiscoveryService {
         return enrich(found, eligibleDetails);
     }
     /** Preserve overview evidence, including date conflicts and cancellation, when adding detail data. */
-    private List<Found> enrich(List<Found> found, Set<URI> eligible) {
+    private List<@NonNull Found> enrich(List<@NonNull Found> found, Set<URI> eligible) {
         Map<URI, Found> pages = new HashMap<>();
         found.forEach(f -> pages.put(f.url(), f));
         Map<URI, EventExtractor.Event> mergedDetails = new HashMap<>();
-        List<Found> result = new ArrayList<>();
+        List<@NonNull Found> result = new ArrayList<>();
         for (Found page : found) {
-            List<EventExtractor.Event> events = new ArrayList<>();
+            List<EventExtractor.@NonNull Event> events = new ArrayList<>();
             for (var event : page.extraction().events()) {
                 URI url;
                 try { url = SafeUrls.parse(page.url().resolve(event.url()).toString().split("#", 2)[0]); }
                 catch (IllegalArgumentException e) { events.add(event); continue; }
                 if (!eligible.contains(url) || url.equals(page.url())) { events.add(event); continue; }
                 Found detail = pages.get(url);
-                var matching = detail == null ? List.<EventExtractor.Event>of() : detail.extraction().events().stream()
+                var matching = detail == null ? List.<EventExtractor.@NonNull Event>of() : detail.extraction().events().stream()
                         .filter(e -> EventNormalizer.text(e.title()).equals(EventNormalizer.text(event.title()))).toList();
                 if (matching.size() != 1) {
                     events.add(new EventExtractor.Event(event.identity(), event.title(), event.url(), event.starts(),
                             event.evidence(), event.state() + " UNCONFIRMED Detailseite nicht eindeutig auswertbar", event.location()));
                     continue;
                 }
-                var d = matching.get(0);
-                List<String> starts = new ArrayList<>(event.starts()); starts.addAll(d.starts());
+                var d = Objects.requireNonNull(matching.get(0), "Detailveranstaltung fehlt");
+                List<@NonNull String> starts = new ArrayList<>(event.starts()); starts.addAll(d.starts());
                 String evidence = "Übersicht: " + event.evidence() + "\nDetailseite " + url + ": " + d.evidence();
                 String state = event.state() + " " + d.state();
                 if (!event.location().isBlank() && !d.location().isBlank()

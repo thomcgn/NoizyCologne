@@ -4,6 +4,8 @@ import de.noizycologne.backend.actor.Actor;
 import de.noizycologne.backend.actor.ActorRepository;
 import de.noizycologne.backend.calendar.CalendarEntry;
 import de.noizycologne.backend.calendar.CalendarEntryRepository;
+import de.noizycologne.backend.cancellation.PublishEligibilityService;
+import de.noizycologne.backend.discovery.DiscoveryStore;
 import de.noizycologne.backend.media.MediaAssetRepository;
 import de.noizycologne.backend.music.MusicTrack;
 import de.noizycologne.backend.music.MusicTrackRepository;
@@ -20,8 +22,8 @@ import java.util.Set;
 @Service
 public class EditorialPostDraftService {
 
-    @org.springframework.beans.factory.annotation.Autowired private de.noizycologne.backend.cancellation.PublishEligibilityService eligibility;
-    @org.springframework.beans.factory.annotation.Autowired private de.noizycologne.backend.discovery.DiscoveryStore discoveryStore;
+    private final PublishEligibilityService eligibility;
+    private final DiscoveryStore discoveryStore;
 
     private EditorialPostDraftResponse response(EditorialPostDraft draft) { return EditorialPostDraftResponse.from(draft,eligibility.blockers(draft.getCalendarEntryId())); }
     private void lockEditorial() { discoveryStore.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)"); }
@@ -40,13 +42,17 @@ public class EditorialPostDraftService {
                                      ActorRepository actorRepository,
                                      PartySeriesRepository partySeriesRepository,
                                      MediaAssetRepository mediaAssetRepository,
-                                     MusicTrackRepository musicTrackRepository) {
+                                     MusicTrackRepository musicTrackRepository,
+                                     PublishEligibilityService eligibility,
+                                     DiscoveryStore discoveryStore) {
         this.draftRepository = draftRepository;
         this.calendarEntryRepository = calendarEntryRepository;
         this.actorRepository = actorRepository;
         this.partySeriesRepository = partySeriesRepository;
         this.mediaAssetRepository = mediaAssetRepository;
         this.musicTrackRepository = musicTrackRepository;
+        this.eligibility = eligibility;
+        this.discoveryStore = discoveryStore;
     }
 
     @Transactional(readOnly = true)

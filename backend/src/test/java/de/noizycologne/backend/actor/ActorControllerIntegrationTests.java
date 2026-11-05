@@ -1,5 +1,8 @@
 package de.noizycologne.backend.actor;
 
+import static java.util.Objects.requireNonNull;
+import org.jspecify.annotations.NonNull;
+import de.noizycologne.backend.json.JsonValues;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,7 +38,7 @@ class ActorControllerIntegrationTests {
     @Autowired
     private ActorRepository actorRepository;
 
-    private final List<String> createdActorIds = new ArrayList<>();
+    private final @NonNull List<String> createdActorIds = new ArrayList<>();
 
     @AfterEach
     void cleanUpTestActors() {
@@ -80,10 +83,10 @@ class ActorControllerIntegrationTests {
                 "nc_person_updated",
                 Set.of(collective.id())
         );
-        ActorResponse updated = objectMapper.readValue(
-                mockMvc.perform(put("/api/v1/actors/{id}", person.id())
+        ActorResponse updated = JsonValues.readRequired(objectMapper,
+                mockMvc.perform(requireNonNull(put("/api/v1/actors/{id}", person.id())
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(objectMapper.writeValueAsString(updateRequest)))
+                                .content(JsonValues.write(objectMapper,updateRequest))))
                         .andExpect(status().isOk())
                         .andReturn().getResponse().getContentAsString(),
                 ActorResponse.class
@@ -105,9 +108,9 @@ class ActorControllerIntegrationTests {
                 Set.of("missing-collective")
         );
 
-        mockMvc.perform(post("/api/v1/actors")
+        mockMvc.perform(requireNonNull(post("/api/v1/actors")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(unknownCollective)))
+                        .content(JsonValues.write(objectMapper,unknownCollective))))
                 .andExpect(status().isBadRequest());
 
         ActorRequest collectiveWithMembership = new ActorRequest(
@@ -117,25 +120,25 @@ class ActorControllerIntegrationTests {
                 "",
                 Set.of("missing-collective")
         );
-        mockMvc.perform(post("/api/v1/actors")
+        mockMvc.perform(requireNonNull(post("/api/v1/actors")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(collectiveWithMembership)))
+                        .content(JsonValues.write(objectMapper,collectiveWithMembership))))
                 .andExpect(status().isBadRequest());
     }
 
     private ActorResponse createActor(ActorRequest request) throws Exception {
-        String body = mockMvc.perform(post("/api/v1/actors")
+        String body = mockMvc.perform(requireNonNull(post("/api/v1/actors")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                        .content(JsonValues.write(objectMapper,request))))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
-        return objectMapper.readValue(body, ActorResponse.class);
+        return JsonValues.readRequired(objectMapper,body, ActorResponse.class);
     }
 
     private ActorResponse[] getActors() throws Exception {
         String body = mockMvc.perform(get("/api/v1/actors"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-        return objectMapper.readValue(body, ActorResponse[].class);
+        return JsonValues.readRequired(objectMapper,body, ActorResponse[].class);
     }
 }
