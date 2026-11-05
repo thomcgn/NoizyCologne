@@ -1,6 +1,6 @@
 # NoizyCologne – Lastenheft, Pflichtenheft & Entwicklungs-/Lernhandbuch
 
-> **Version:** 1.7 · **Stand:** 31. Oktober 2026 · **Status:** Fachliche Gesamtspezifikation mit lokal bestätigtem Frontend-Prototyp  
+> **Version:** 1.8 · **Stand:** 5. November 2026 · **Status:** Fachliche Gesamtspezifikation mit lokal bestätigtem Frontend-Prototyp
 > **Zielgruppe:** NoizyCologne-Team und Entwickler  
 > **Source of Truth:** Diese Version ersetzt v1.6 und frühere Projektdokumente fachlich. Für das tatsächlich implementierte Verhalten gilt zusätzlich der aktuelle Codezustand; nur dokumentierte Features sind noch nicht automatisch umgesetzt.  
 > **Wichtig:** Dieses Handbuch enthält Lastenheft, Pflichtenheft, technische Lern-/Agenten-Referenzen **und einen Ist-/Soll-Abgleich**. Die früheren Beispielskripte sind nicht automatisch identisch mit der aktuellen Codebasis. Die Entwicklung erfolgt auf Arch Linux; der Benutzer hat den lokalen Kalender-Prototyp erfolgreich getestet. Plattform-Funktionen werden vor Produktivstart im realen Meta-Konto verifiziert.  
@@ -33,6 +33,7 @@
 21. **Google-Sheets-Modell: Party-Portfolio, Partyreihen und Jahreskalender (neu v1.5)**
 22. **Dokumentation-first-Workflow, Smartphone-Notizen und Coding-Agent-Übergaben**
 23. **Ist-Stand 31.10.2026, Flyer- und Redaktionskonzept sowie nächste Implementierungsschritte (neu v1.7)**
+24. **Location Discovery, Vorschläge und manuelle Instagram-Rückfragen (v1.8)**
 
 ---
 
@@ -2114,6 +2115,7 @@ Bei jeder Ergänzung gleichzeitig **Kapitel 3 (Lastenheft), 4 (Pflichtenheft), 5
 
 | Version | Datum | Änderungen |
 |---|---|---|
+| v1.8 | 05.11.2026 | Location Discovery mit additiver Migration V12, abgesichertem HTTPS-Crawler, persistenten Vorschlägen und Scanberichten, dienstäglicher Suche, Kalender-Matching und manuellem Instagram-Rückfrageworkflow; siehe Kapitel 24. |
 | 0.1 | 29.10.2026 | Grundkonzept Flyer → normaler Instagram-Foto-Post → iOS/Android-Musik-Handoff |
 | 0.2 | 29.10.2026 | Manuelle Posting-Reihenfolge, 3er-Venue-Regel, Freitag-/Samstag-Balance, Feed-Vorschau |
 | 1.0 | 30.10.2026 | Zentrales Lastenheft und Pflichtenheft; Absage-/CANCELLED-Workflow und Einschränkungen veröffentlichter Posts; vollständige VS-Code-/Ubuntu-/VPS-/Docker-Anleitung; Lernmodule, Tests, SQL, APIs, Tickets, Hosting-Kostencheck und Erweiterungspunkt für neue Pre-Publish-Schritte |
@@ -3258,3 +3260,117 @@ Das Dashboard verwendet eine gemeinsame, responsive Navigation mit zugänglichem
 Portfolio-, Akteur- und Genre-Editoren werden in einem gemeinsamen, fokussierbaren Modal geöffnet. Das Modal unterstützt Escape, Fokusfalle und eine klare Abbrechen-/Schließen-Aktion; die vorhandene API-, Validierungs- und State-Logik bleibt unverändert. Weitere fachliche Formulare werden schrittweise nach demselben Muster umgestellt. Die Redaktions- und Kalenderfunktionen bleiben eigenständige Arbeitsseiten.
 
 Die Dashboard-Shell ist Mobile First für eine kleinste Zielbreite von 390 px (iPhone 13 Pro) ausgelegt. Navigation, Theme-/Logout-Steuerung und Modals überlagern den Inhalt auf kleinen Geräten nicht; Desktop-Sidebar und zweispaltige Arbeitsbereiche werden erst ab geeigneten Mindestbreiten aktiviert. Ein erfolgreicher Build ersetzt keine manuelle Prüfung auf realen iOS-Viewports.
+
+# 24. Location Discovery, Vorschläge und manuelle Instagram-Rückfragen (v1.8)
+
+## 24.1 Implementierter Umfang und Bestandsanalyse
+
+Locations (`Venue`), Partyreihen (`PartySeries`), Kalendertermine (`CalendarEntry`) und Genres sind PostgreSQL-Stammdaten. Discovery verwendet ihre bestehenden IDs und die bestehende Genreverwaltung. `DashboardNavigation.tsx` führt zur neuen Route `/dashboard/vorschlaege`; deren Bearbeitungen verwenden `DashboardModal`, einschließlich Fokusfalle und Escape. Das Location-Modal bleibt Teil des Portfolio-Editors.
+
+Die APIs sind wie die bestehenden Stammdaten auf `local` und `staging` beschränkt. Im bestehenden Hosting schützt Caddys `forward_auth` sämtliche `/api/v1/*`-Routen mit der Team-Session. Das Backend besitzt weiterhin keinen eigenen Team-Login und darf nicht öffentlich am Proxy vorbei erreichbar gemacht werden. Lokal gilt derselbe vorhandene Entwicklungszugriff wie für Kalender und Portfolio.
+
+**Discovery erzeugt ausschließlich Kalendereinträge und Prüfdatensätze.** Sie erzeugt keine Medien, lädt keine Bilder herunter, legt keinen Redaktionsentwurf an und ruft keine Instagram-Publishing-Funktion auf. Die bestehenden Flyer-, Genre-, Musik- und redaktionellen Freigabeschritte bleiben eigenständige Vorgänge. `NOIZY_PUBLISH_ENABLED=false` gilt weiterhin.
+
+## 24.2 Eine neue Location hinzufügen
+
+1. Unter „Locations“ einen Namen eintragen und „Website & Partysuche“ aufklappen.
+2. Die offizielle HTTPS-Website eintragen; optional eine direkte Kalender-, Detail- oder ICS-URL angeben.
+3. „Quelle prüfen“ zeigt die gefundenen URLs, Eventzahlen und technische Diagnosen, ohne Kalenderdaten anzulegen. Bei einer noch nicht gespeicherten Location bleiben diese Prüfergebnisse vorerst ungespeichert.
+4. Automatische Suche aktivieren und die Location speichern. Der nächste manuelle oder dienstägliche Scan berücksichtigt sie.
+5. Quellen und eventuelle Fehler anschließend unter „Vorgeschlagene → Location-Quellen“ prüfen.
+
+Es gibt keine Clubnamen-Whitelist und keine Location-spezifischen Java-Verzweigungen. Eine unbekannte Website kann allein durch ihre URL eingebunden werden, sofern Homepage/Links und Eventdaten den unterstützten öffentlich auslesbaren Strukturen entsprechen. Bei abweichendem HTML lässt sich unter „Quelle / Profil bearbeiten“ ohne Java-Änderung eine direkte URL oder ein CSS-Profil für Event-Container, Titel und Startdatum hinterlegen. Das Startdatum muss als vollständiger ISO-Wert, `datetime` oder `content` vorliegen. Freie Texte ohne vollständiges Jahr werden nicht geraten.
+
+Offizielle Quellen werden über den Host der explizit hinterlegten `websiteUrl` zugeordnet. Die aktivierte Location erlaubt für diese Quellen die konservative Kalenderautomatik. Eine abweichende `eventsUrl`, eine allein ohne offizielle Website hinterlegte Eventquelle oder eine zusätzlich angelegte Portalquelle ist **EXTERNAL** und zunächst nicht freigegeben. Eine redaktionelle Quellenfreigabe kann ausdrücklich gesetzt oder entzogen werden; die Quelle bleibt dabei als extern gekennzeichnet. Ein verlinktes fremdes Portal wird nicht automatisch gecrawlt. Die Redaktion muss externe Bestätigungsqualität und anwendbare Nutzungsregeln vor einer Freigabe selbst prüfen.
+
+## 24.3 Architektur und Abrufgrenzen
+
+| Komponente | Aufgabe |
+|---|---|
+| `VenueSourceDiscoveryService` | Direkte Event-URL bevorzugen; interne Links mit Event-/Programm-/Kalender-Hinweisen in einer begrenzten Breitensuche verfolgen |
+| `EventPageFetcher` / `SafeUrls` | HTTPS, DNS-Prüfung beim Verbindungsaufbau, robots.txt, Request- und Response-Limits |
+| `EventExtractor` | JSON-LD einschließlich `@graph`/`ItemList`, ICS, semantische HTML-Listen und Detailseiten; optionale CSS-Profile |
+| `EventNormalizer` | Unicode-/Namensnormalisierung, vollständige Datumswerte, Berliner Zeitzone, stabile Hashes |
+| `EventMatcher` | Exakte Partyreihennamen und explizite Aliase, konservativer Party-/Genrebeleg, Datums- und Statusprüfung |
+| `EventCandidateProcessor` | Transaktionaler Abgleich von Scan-Fingerprints mit manuellen Entscheidungen; gemeinsamer Lock mit Import und Redaktion |
+| `EventImportService` | Transaktionale manuelle/automatische Kalenderübernahme, Konflikt-/Dublettenprüfung, Prüf- und Rückfragestatus |
+| `DiscoveryScheduler` | Ein begrenzter Worker, PostgreSQL-Scanlock, Quellenprüfung pro Location, persistenter Laufbericht |
+
+Pro Location werden höchstens drei Startquellen untersucht. Pro Startquelle gelten maximal acht Seiten, Tiefe zwei, 40 untersuchte Links pro Seite und eine Queue mit höchstens 16 Links; alle müssen auf demselben exakten Host bleiben. Pro Location werden höchstens 300 Eventfunde verarbeitet. Abrufe sind JVM-weit seriell mit mindestens 500 ms Pause, ohne automatische Wiederholungen. Verbindungsaufbau: fünf Sekunden; Socket-/Antwortwartezeit: acht Sekunden; Body-Lesephase: zehn Sekunden, jeweils zusätzlich zum Größenlimit von 1 MB. robots.txt zählt als zusätzlicher Abruf und wird innerhalb einer Quellensuche je Host zwischengespeichert.
+
+Migration **V12** ergänzt `website_url`, `events_url`, `discovery_enabled`, `last_discovery_at` und `discovery_status` additiv an `venues`; Instagram bleibt das bestehende Feld. Weitere Tabellen: `discovery_sources` mit Freigabe/Profil/Status/Abrufzeit, `party_series_aliases`, `discovery_candidates` mit Herkunft/Fingerprint/Rückfrage und `discovery_runs` mit Start/Ende/Bericht. Die Übersicht lädt die neuesten 500 Kandidaten und zehn Laufberichte; Statuszähler beziehen sich auf den gesamten Bestand.
+
+## 24.4 Extraktion und Diagnose
+
+Priorität: JSON-LD → ICS → generische HTML-Listen → semantische Detailseite. HTML-Regeln erkennen u. a. `article` mit `time`, `.event`, `.event-item`, `.event-list-item` und Schema.org-Microdata. Ein CSS-Profil kann die drei Selektoren ersetzen. Es wird kein fremdes JavaScript ausgeführt. RSS/Atom, allgemeines natürlichsprachliches Datumsverstehen, wiederkehrende ICS-Regeln und beliebige Widget-/Ticket-APIs sind nicht Bestandteil dieses MVP.
+
+`EVENTS_FOUND` bedeutet interpretierbare Eventfunde, nicht automatisch relevante oder importierbare Partys. `NO_EVENTS` erfordert eine ausdrückliche Leermeldung oder einen leeren abgeschlossenen ICS-Kalender. Unbekannte/leere HTML-Strukturen ergeben `UNINTERPRETABLE`; eine kurze App-Shell mit externem Script ergibt heuristisch `JAVASCRIPT_REQUIRED`. Weitere Diagnosen: `BLOCKED`, `ROBOTS_BLOCKED`, `SCAN_FAILED`, `PARTIAL_FAILURE`, `REDIRECT_REQUIRES_REVIEW`, `RESPONSE_TOO_LARGE`, `RESPONSE_LIMIT`, `UNSUPPORTED_ENCODING` und `UNSUPPORTED_CONTENT`. Ein fehlender Kalender oder ein unbekanntes Layout ist kein Beweis, dass keine Events existieren.
+
+`last_discovery_at` bezeichnet die letzte erfolgreiche Prüfung mit Eventfunden oder ausdrücklichem Leerbestand. `last_fetched_at` ist der letzte Abrufversuch der einzelnen Quelle. Ein fehlerhafter Teilabruf bleibt in der Quellenübersicht sichtbar. Die JavaScript-Diagnose ist eine Heuristik, keine Garantie, dass ein Browser die Daten darstellen könnte.
+
+## 24.5 Matching, Wiederholung und Änderungen
+
+Ein exakter, normalisierter Partyreihenname oder expliziter Alias muss **genau eine** bekannte Partyreihe treffen. Aliase können im Party-Modal gepflegt werden (`GET/PUT /api/v1/discovery/parties/{id}/aliases`). Ein Genre allein erzeugt keinen positiven Treffer: Für unbekannte Partyreihen sind sowohl ein ausdrücklicher Party-/DJ-/Clubnachtbeleg als auch ein aktives Kataloggenre nötig; das Ergebnis bleibt ein Vorschlag. Standardgenres gehören weiter zur vorhandenen Partyreihe und müssen nicht in Discovery dupliziert werden. Bestehende bekannte Partyreihennamen sind ein stärkerer Beleg als ein generisches Genre.
+
+Automatischer Import verlangt außerdem eine gebundene Location, genau ein vollständiges Startdatum, keine abweichende Locationangabe, keine bekannte Absage/Verschiebung/Unbestätigtheit, eine freigegebene Quelle sowie einen konfliktfreien Kalender. Ein `endDate` nach Mitternacht erzeugt keinen zweiten Starttag. Datumswerte mit Offset werden in `Europe/Berlin` ausgewertet. Die Vorschlags-API serialisiert Kalendertage ausdrücklich als `YYYY-MM-DD`, ohne Timestamp-Verschiebung. Fehlende Uhrzeiten bleiben `NULL`; unterschiedliche Uhrzeitangaben werden nicht zu einer erfundenen Uhrzeit zusammengeführt. Unbekannte ICS-Zeitzonen werden zur Prüfung markiert.
+
+Vor der ersten Übernahme werden alle begrenzten Funde einer Location gesammelt; abweichende Starttage gleichnamiger Funde im selben Batch gehen konservativ gemeinsam zur Rückfrage. Auch reguläre Wiederholungstermine können dadurch eine manuelle Prüfung benötigen.
+
+Kandidatenschlüssel verwenden Quell-IDs/ICS-UIDs oder normalisierten Namen mit Startangaben; Fingerprints erkennen Änderungen. Unveränderte bekannte Funde werden nicht erneut übernommen. Explizit abgelehnte und manuell als Dublette markierte Kandidaten bleiben archiviert. Ein Fund mit bekanntem Namen und geändertem Datum wird vorsichtshalber geprüft: Das kann eine reguläre Wiederholung oder eine Verschiebung sein. Änderungen bereits importierter Funde ändern den Kalender nicht stillschweigend. Die Redaktion prüft sie im bestehenden Kalendereditor. Ein bestehender Termin derselben Party am selben Ort/Tag ist eine Dublette; andere Termine und Location-Sperren am selben Ort/Tag blockieren die Automatik.
+
+Alle Discovery-Importe, Kandidatenabgleiche und manuellen Prüfentscheidungen verwenden denselben PostgreSQL-Transaktionslock. Das schützt auch parallele manuelle Importe und mehrere Backend-Instanzen; normale manuelle Kalenderbearbeitungen gehören weiterhin zur bestehenden Kalender-API. Vor einem manuellen Import muss die Redaktion Partyreihe und bestätigtes Datum wählen. Es entsteht weder ein neues Party-Stammdatum noch eine neue Location.
+
+## 24.6 Vorschläge und Instagram-Rückfragen
+
+| Status | Bedeutung |
+|---|---|
+| `NEEDS_REVIEW` | Neue passende Party, externe Quelle, Mehrdeutigkeit oder Kalender-/Änderungskonflikt |
+| `NEEDS_INQUIRY` | Fehlender/widersprüchlicher Start oder Absage/Verschiebung/Unbestätigtheit |
+| `READY` | Automatikbedingungen erfüllt; interne Zwischenstufe vor Import |
+| `IMPORTED` | Im Kalender; Grund unterscheidet automatische und manuelle Übernahme |
+| `REJECTED` / `DUPLICATE` / `IGNORED` | Abgelehnt, Dublette oder kein ausreichender Relevanzbeleg |
+
+Die Übersicht bietet Prüfung, Partyzuordnung, Datumsänderung, manuelle Übernahme, Ablehnung, Dublettenmarkierung, Quelllink, Quellenprofile und einen manuellen Suchlauf. Quellenbelege und Rückfragen sind einklappbar. Bereits übernommene Kalenderdaten werden über den Kalender geprüft.
+
+„DM vorbereiten“ erzeugt und speichert einen editierbaren deutschen Text mit Location, Party und Klärungsgrund. „Text kopieren“ und „Instagram-Profil öffnen“ sind getrennte Nutzeraktionen. Ohne vorhandenen Instagram-Handle bleibt derselbe neutrale Rückfragetext kopierbar. Rückfragestatus: `NONE` → `PREPARED` → `SENT` → `ANSWERED`, wobei Versand und Antwort ausschließlich manuell gesetzt werden. Ein bestätigtes Datum und eine Partyzuordnung ermöglichen anschließend die Kalenderübernahme.
+
+Es gibt keinen DM-Versand, keine Instagram-Login-Automation, keine Zustellbehauptung, keine Browser-Bots und keine privaten Instagram-APIs.
+
+## 24.7 Scheduler und Betrieb
+
+Standard: **Dienstag, 09:00 Uhr, `Europe/Berlin`**, serverseitig mit Spring `@Scheduled`. Umgebungsvariablen:
+
+| Variable | Standard | Bedeutung |
+|---|---|---|
+| `DISCOVERY_ENABLED` | `true` | Automatischen Scheduler aktivieren; manuelle Suche bleibt separat möglich |
+| `DISCOVERY_CRON` | `0 0 9 * * TUE` | Spring-Cron-Ausdruck mit Sekundenfeld |
+| `DISCOVERY_ZONE` | `Europe/Berlin` | Zeitzone einschließlich Sommer-/Winterzeit |
+
+Compose und `.env.example` enthalten die Durchleitung dieser Variablen; es wurde damit kein Deployment ausgeführt. Bestehende Locations starten durch die Migration deaktiviert. Ein zusätzlicher PostgreSQL-Sessionlock verhindert überlappende Scans über JVM-Grenzen hinweg. Laufberichte bleiben nach Neustarts erhalten; beim nächsten Scan werden verwaiste `RUNNING`-Berichte zu `INTERRUPTED`. Verpasste Dienstagstermine werden nicht automatisch nachgeholt; dafür existiert die manuelle Suche. Quellen- und Locationfehler verhindern nicht die Bearbeitung anderer Locations. Unvollständige Läufe werden als `PARTIAL` protokolliert.
+
+## 24.8 Sicherheitsgrenzen
+
+Nur HTTPS, Port 443/Standardport, ohne URL-Credentials, IP-Literale oder Fragmente. Sämtliche DNS-Ergebnisse werden vom tatsächlichen Verbindungsresolver geprüft; Loopback, private, Link-Local-, Multicast-, Dokumentations- und weitere reservierte Adressen werden abgelehnt. Der Client verbindet über genau diesen Resolver und verwendet keinen Systemproxy. Automatische Redirects sind deaktiviert; eine Weiterleitung muss durch die explizite endgültige URL ersetzt werden. Das verhindert auch Weiterleitungen auf interne Ziele.
+
+robots.txt wird vor jeder Website-Suche geprüft. Die Implementierung wertet passende Bot-/Wildcard-Disallow-Regeln konservativ aus; komplexe Muster oder `Crawl-delay` führen eher zum Blockieren als zum Umgehen. Nicht abrufbare robots.txt-Dateien außer HTTP 404 blockieren die Suche. Login-/403-/429-Schranken werden nicht umgangen. Es gibt keine Browser-Cookies, automatischen Bildabrufe, Codeausführung oder HTML-Ausgabe externer Inhalte. Das Frontend rendert Belege als Text; externe Links müssen HTTPS verwenden. Gzip/sonstige komprimierte Responses werden im MVP abgelehnt, damit kein Dekompressionsbombenpfad entsteht. UTF-8 ist der derzeitige Textdecodierungsstandard.
+
+Selektoren und Quellenfreigaben sind redaktionelle Konfiguration, keine fremden Website-Anweisungen. Änderungen an Website-Regeln und die inhaltliche Zuverlässigkeit einer Quelle bleiben redaktionell zu prüfen. Discovery ersetzt keine individuelle rechtliche Prüfung einer Website.
+
+## 24.9 Lokale Tests und Beispielstrukturen
+
+Die Fixtures unter `backend/src/test/resources/discovery` sind kleine synthetische Referenzfälle. Sie sind **keine aktuellen Mitschnitte** der Club-Websites und belegen keine Live-Kompatibilität dieser Domains. Die Namen dienen der Zuordnung der fünf gewünschten Strukturbeispiele:
+
+| Referenz | Geprüfte Struktur | Lokaler Extraktionstest |
+|---|---|---|
+| MTC | JSON-LD-`@graph` mit `MusicEvent`, Start/Ende über Mitternacht | unterstützt |
+| Blue Shell | HTML-Eventliste mit `article`, Überschrift, `time` und Detail-Link | unterstützt |
+| Tsunami Club | ICS mit UID, DTSTART/DTEND und Berliner Zeitzone | unterstützt |
+| Garagen | Schema.org-Event-Microdata mit `content`-Startdatum | unterstützt |
+| Live Music Hall | Semantische Detailseite mit `h1` und `time` | unterstützt |
+| Vollständig unbekannte Location | Neue Homepage-URL → Programm-Link → generische Eventliste/Detailseite | unterstützt, ohne Clubnamen im Code |
+
+Zusätzlich geprüft: unbekanntes Layout, fehlender Kalender, ausdrücklicher Leerbestand, JavaScript-Shell, fehlerhaftes JSON-LD, direkte URL, CSS-Profil, Startdatum ohne Uhrzeit, Freitag-/Samstag-Widerspruch, exakter Name, Alias und Mehrdeutigkeit, neue Indie-Party versus Konzert, externe Freigabe, wiederholte Scans, Dubletten, Änderungen importierter Events, deutscher DM-Text, bestätigte manuelle Übernahme, parallele Importe, Scanlock, einzelne fehlerhafte Location, Crawl-/Domain-/robots-Grenzen und SSRF-Adressklassen. Kein Test benötigt eine Live-Clubwebsite.
+
+Die PostgreSQL-Integrationstests liefen ausschließlich gegen einen separaten kurzlebigen Testcontainer auf Port 55434. Die vorhandene lokale Datenbank auf Port 5433 und produktive Systeme wurden nicht verwendet. Maven kompiliert für Java 21; Docker- und CI-Konfiguration verwenden ebenfalls Java 21. Der lokale Testhost hatte JDK 25. Validierung: 46 Backend-Tests erfolgreich, davon 20 Discovery-Tests; Maven-Paket erfolgreich. Frontend: ESLint und Next.js-Produktionsbuild erfolgreich. Compose-Konfiguration mit neutralen Testwerten validiert. Eine Prüfung im realen iPhone-/Instagram-Client und ein Live-Abgleich der fünf Website-Layouts sind damit nicht behauptet.
+
+Technische Referenzen: [jsoup-Selektoren](https://jsoup.org/cookbook/extracting-data/selector-syntax), [Apache HttpClient DNS-Resolver](https://hc.apache.org/components/httpcomponents-client-5.6.x/5.6.1/httpclient5/apidocs/org/apache/hc/client5/http/impl/io/PoolingHttpClientConnectionManagerBuilder.html).
