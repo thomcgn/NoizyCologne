@@ -2120,6 +2120,7 @@ Bei jeder Ergänzung gleichzeitig **Kapitel 3 (Lastenheft), 4 (Pflichtenheft), 5
 
 | Version | Datum | Änderungen |
 |---|---|---|
+| v1.9.3 Partyreihen-Standardwerte und Discovery-Fortschritt | 06.11.2026 | Nullable Standard-Startzeit und ganzzahliger Eintritt 0–30 €, Pflichtzeit für neue Reihen, Snapshot-Übernahme nur für neue Kalendertermine; relative Beginnangaben bleiben ohne erfundene Uhrzeit. Persistierter Quellen-/Location-Fortschritt mit Fehlerzählung und bestehendem Polling; Arbeitsnachweis: [PARTY-DEFAULTS-DISCOVERY-PROGRESS.md](PARTY-DEFAULTS-DISCOVERY-PROGRESS.md). |
 | v1.9.3 Location-Matching und Kalenderflyer | 06.11.2026 | Eindeutig bestätigte Location-Zuordnungen aus Sonderquellen verwenden den bestehenden Discovery-Import mit unabhängiger ausdrücklicher Quellenfreigabe; Kalenderdetails zeigen Event-Flyer vor Dauerflyer statt Veranstaltungsnotizen. Keine neue Medienverwaltung oder Migration. Arbeitsnachweis: [DISCOVERY-LOCATION-FLYER.md](DISCOVERY-LOCATION-FLYER.md). |
 | v1.9.3 Geografischer Sonderquellen-Filter | 06.11.2026 | Nur nachgewiesene Kölner Veranstaltungsorte gelangen in den normalen Discovery-Prozess. Eigener Standortbereich, bestätigte Ortsidentitäten/Aliase, bewusste Bestands-Neubewertung ohne Datenverlust, generische kanonische URLs ohne `_rsc`. Migration V18 und Prüfbelege: [DISCOVERY-GEOGRAPHY.md](DISCOVERY-GEOGRAPHY.md). |
 | v1.9.2 Sonderquellen und Sofort-Ablehnung | 06.11.2026 | Unabhängige Sonderquellen hinzufügen/löschen, begrenzter Discovery-Scan ohne Standardlocation, explizite Ortszuordnung und dauerhafte Sofort-Ablehnung durch das Team. Migration V17; Details und Prüfbelege in [SPECIAL-SOURCES.md](SPECIAL-SOURCES.md). |
@@ -3969,3 +3970,34 @@ Medien-URLs werden verwendet. Veranstaltungsnotizen und technische Quellenbelege
 erscheinen dort nicht mehr, bleiben aber unverändert gespeichert, im Editor
 bearbeitbar und in Discovery erhalten. Notizen von Location-Sperren bleiben
 sichtbar. Keine neue Medienverwaltung, Endpunkte oder Datenbankmigrationen.
+
+
+# 34. Partyreihen-Standardwerte und Discovery-Fortschritt (06.11.2026)
+
+Partyreihen besitzen `defaultStartTime` (HH:mm) und `defaultEntryPrice`
+(ganzzahlig 0–30 € oder unbekannt). V20 ergänzt ausschließlich nullable Spalten,
+ohne Altwerte zu füllen. Neue Reihen benötigen eine Standard-Startzeit, auch bei
+der manuellen Portfolioaufnahme aus Discovery; bestehende Reihen dürfen fehlende
+Werte nachträglich ergänzen. Der Preis-Slider bietet ausdrücklich „Preis noch
+unbekannt“. 0 € bedeutet Eintritt frei und ist von NULL getrennt.
+
+Nur neue Kalendertermine übernehmen fehlende Werte aus der Reihe. Belegte
+Eventzeit und Eintrittspreis haben Vorrang. Ein ausschließlich relativer Beginn
+wie „nach dem Konzert“ bleibt ohne abgeleitete genaue Uhrzeit. Discovery übernimmt
+explizite Eventangebote in EUR oder eindeutig beschriftete Eintrittsangaben aus
+vorhandenen Belegen; ohne belegten Eventpreis gilt der bekannte Reihenstandard,
+sonst bleibt der Preis unbekannt. Bestehende Termine und manuelle Änderungen
+werden durch Änderungen an Standardwerten oder erneute Scans nicht überschrieben.
+
+V21 ergänzt nullable Fortschrittsfelder in den vorhandenen Discovery-Vorgängen,
+ohne historische Zähler zu erfinden. Zu Beginn wird die Liste aktivierter
+Sonderquellen und relevanter aktivierter Locations festgelegt. Unabhängige kurze
+Transaktionen speichern abgeschlossene Einheiten und Fehler sowie aktuelle
+Quelle/Location, Phase und Aktualisierungszeit bereits während des Laufs.
+Prozentwerte werden aus abgeschlossenen/geplanten Einheiten berechnet und gerundet.
+COMPLETED/PARTIAL zeigen 100 %, FAILED/INTERRUPTED den tatsächlich gespeicherten
+Stand. Ein leerer Lauf wird mit 0 von 0 abgeschlossen; Reset/Neubewertung erhalten
+keine regulären Suchlauf-Prozente. Seitenwechsel und erneutes Laden lesen den
+persistierten Vorgang über das bestehende Polling. Eine beschriftete Progressbar
+zeigt Prozent, Einheiten, aktuelle Quelle/Location und letzte Aktualisierung.
+Anforderungen und phasenweise Prüfbelege stehen in [PARTY-DEFAULTS-DISCOVERY-PROGRESS.md](PARTY-DEFAULTS-DISCOVERY-PROGRESS.md).

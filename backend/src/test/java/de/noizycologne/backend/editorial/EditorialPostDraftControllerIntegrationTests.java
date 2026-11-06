@@ -77,7 +77,7 @@ class EditorialPostDraftControllerIntegrationTests {
         venueIds.add(venue.getId());
         var savedParty=partyService.createParty(new de.noizycologne.backend.party.PartySeriesRequest(
                 "Draft Party "+suffix,"draft_party","#123456","manual",Set.of(),Set.of(),Set.of(),null,
-                Set.of("Emo","Metalcore","Hardcore")));
+                Set.of("Emo","Metalcore","Hardcore"),"22:00",null));
         PartySeries party=requireNonNull(partyRepository.findById(savedParty.id()).orElseThrow());
         partyIds.add(party.getId());
         CalendarEntry entry = entryRepository.saveAndFlush(new CalendarEntry(

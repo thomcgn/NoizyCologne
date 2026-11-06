@@ -21,6 +21,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -122,6 +123,28 @@ class CalendarEntryControllerIntegrationTests {
                 .andExpect(status().isNoContent());
         entryIds.remove(second.id());
         assertThat(calendarEntryRepository.existsById(second.id())).isFalse();
+    }
+
+    @Test void snapshotsDefaultsOnlyAtCreationAndPreservesEventOverridesAndRelativeStarts() throws Exception {
+        Venue venue=createVenue("Defaults Venue "+UUID.randomUUID());
+        Actor dj=createActor("Defaults DJ "+UUID.randomUUID(),"defaults_dj");
+        PartySeries party=createParty("Defaults Party "+UUID.randomUUID(),dj);
+        assertThat(party.getDefaultStartTime()).isNull();assertThat(party.getDefaultEntryPrice()).isNull();
+        party.setDefaults(LocalTime.of(22,45),0);partySeriesRepository.saveAndFlush(party);
+        var inherited=createEntry(new CalendarEntryRequest("2027-01-09",venue.getId(),"event","",party.getId(),null,null,Set.of()));entryIds.add(inherited.id());
+        assertThat(inherited.startTime()).isEqualTo("22:45");assertThat(inherited.entryPrice()).isEqualTo("Eintritt frei");
+        var explicit=createEntry(new CalendarEntryRequest("2027-01-16",venue.getId(),"event","", "15 €",party.getId(),"23:30",null,Set.of()));entryIds.add(explicit.id());
+        assertThat(explicit.startTime()).isEqualTo("23:30");assertThat(explicit.entryPrice()).isEqualTo("15 €");
+        var relative=createEntry(new CalendarEntryRequest("2027-01-23",venue.getId(),"event","Beginn: nach dem Konzert",party.getId(),null,null,Set.of()));entryIds.add(relative.id());
+        assertThat(relative.startTime()).isNull();
+        party.setDefaults(LocalTime.of(21,0),null);partySeriesRepository.saveAndFlush(party);
+        assertThat(getEntries()).anySatisfy(item->{assertThat(item.id()).isEqualTo(inherited.id());assertThat(item.startTime()).isEqualTo("22:45");assertThat(item.entryPrice()).isEqualTo("Eintritt frei");});
+        var unknown=createEntry(new CalendarEntryRequest("2027-02-06",venue.getId(),"event","",party.getId(),null,null,Set.of()));entryIds.add(unknown.id());
+        assertThat(unknown.entryPrice()).isEmpty();
+        var update=new CalendarEntryRequest(inherited.date(),venue.getId(),"event","Manuell geändert","9 €",party.getId(),"00:30",null,Set.of());
+        mockMvc.perform(requireNonNull(put("/api/v1/calendar-entries/{id}",inherited.id()).contentType(MediaType.APPLICATION_JSON).content(JsonValues.write(objectMapper,update)))).andExpect(status().isOk());
+        party.setDefaults(LocalTime.of(20,0),30);partySeriesRepository.saveAndFlush(party);
+        assertThat(getEntries()).anySatisfy(item->{assertThat(item.id()).isEqualTo(inherited.id());assertThat(item.startTime()).isEqualTo("00:30");assertThat(item.entryPrice()).isEqualTo("9 €");});
     }
 
     @Test

@@ -49,7 +49,7 @@ public class DiscoveryController {
                     count(*) FILTER (WHERE inquiry_status IN ('PREPARED','SENT') AND status NOT IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED') AND (geo_status='INSIDE' OR source_id IN (SELECT id FROM discovery_sources WHERE venue_id IS NOT NULL))) AS open,
                     count(*) FILTER (WHERE status IN ('REJECTED','DUPLICATE','IGNORED')) AS archive FROM discovery_candidates
                     """),
-                "operations",store.jdbc().queryForList("SELECT * FROM discovery_operations ORDER BY started_at DESC LIMIT 10").stream().map(DiscoveryStore::forApi).toList(),
+                "operations",store.jdbc().queryForList("SELECT * FROM discovery_operations ORDER BY started_at DESC LIMIT 10").stream().map(DiscoveryProgress::forApi).toList(),
                 "diagnoses",store.jdbc().queryForList("SELECT d.*,c.title,v.name AS venue_name FROM discovery_decisions d JOIN discovery_candidates c ON c.id=d.candidate_id LEFT JOIN venues v ON v.id=c.venue_id ORDER BY d.id DESC LIMIT 500").stream().map(DiscoveryStore::forApi).toList(),
                 "runs",store.jdbc().queryForList("SELECT * FROM discovery_runs ORDER BY started_at DESC LIMIT 10").stream().map(DiscoveryStore::forApi).toList());
     }
@@ -71,7 +71,7 @@ public class DiscoveryController {
     @GetMapping("/operations/{id}") public Map<String,Object> operation(@PathVariable String id) {
         var rows=store.jdbc().queryForList("SELECT * FROM discovery_operations WHERE id=?",id);
         if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Vorgang fehlt");
-        return DiscoveryStore.forApi(rows.getFirst());
+        return DiscoveryProgress.forApi(rows.getFirst());
     }
     @PostMapping("/onboard") public DiscoveryOnboardingService.Report onboard(@Valid @RequestBody Probe request) throws java.io.IOException {
         return onboarding.preview(request.url());
@@ -109,9 +109,10 @@ public class DiscoveryController {
     }
     @PostMapping("/candidates/{id}/reject") public void reject(@PathVariable String id) { importer.reject(id); }
     @GetMapping("/candidates/{id}/dm") public Map<String,String> dm(@PathVariable String id) { return Map.of("text",importer.dm(id)); }
-    public record PortfolioApproval(@NotBlank @Size(max=200) String name,@Size(max=200) String seriesAlias) { }
+    public record PortfolioApproval(@NotBlank @Size(max=200) String name,@Size(max=200) String seriesAlias,
+                                   @jakarta.validation.constraints.Pattern(regexp="(?:[01][0-9]|2[0-3]):[0-5][0-9]") String defaultStartTime) { }
     @PostMapping("/candidates/{id}/portfolio") public Map<String,String> portfolio(@PathVariable String id,@Valid @RequestBody PortfolioApproval request) {
-        return Map.of("partyId",portfolio.approve(id,request.name(),request.seriesAlias()));
+        return Map.of("partyId",portfolio.approve(id,request.name(),request.seriesAlias(),request.defaultStartTime()));
     }
     @GetMapping("/sources") public List<Map<String,Object>> sources(@RequestParam String venueId) {
         return store.jdbc().queryForList("SELECT s.*,v.name AS venue_name FROM discovery_sources s JOIN venues v ON v.id=s.venue_id WHERE venue_id=? ORDER BY priority,url",venueId).stream().map(DiscoveryStore::forApi).toList();

@@ -114,6 +114,8 @@ export default function PortfolioPage({
   const [discoveryAliases, setDiscoveryAliases] = useState("");
   const [aliasesLoading, setAliasesLoading] = useState(false);
   const [aliasesReady, setAliasesReady] = useState(true);
+  const [defaultStartTime, setDefaultStartTime] = useState("");
+  const [defaultEntryPrice, setDefaultEntryPrice] = useState<number | null>(null);
   const [color, setColor] = useState<string>(PARTY_COLORS[0]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -204,6 +206,7 @@ export default function PortfolioPage({
   }
 
   function resetForm() {
+    setDefaultStartTime(""); setDefaultEntryPrice(null);
     setRecurrenceKind("none");
     setWeekday(5);
     setOccurrence(3);
@@ -252,6 +255,7 @@ export default function PortfolioPage({
 
       if (party) {
         setColor(party.color);
+        setDefaultStartTime(party.defaultStartTime ?? ""); setDefaultEntryPrice(party.defaultEntryPrice ?? null);
         setResidentDjIds([...party.residentDjIds]);
         setOtherDjIds([...party.otherDjIds]);
         setOrganizerIds([...party.organizerIds]);
@@ -370,7 +374,10 @@ export default function PortfolioPage({
     }
 
     if (category === "parties") {
+      if (!editingId && !defaultStartTime) {setError("Bitte eine Standard-Startuhrzeit eingeben."); return;}
       const partyData: Omit<PartySeries, "id"> = {
+        defaultStartTime: defaultStartTime || null,
+        defaultEntryPrice,
         name: cleanName,
         instagram: cleanInstagram,
         residentDjIds: [...residentDjIds],
@@ -609,6 +616,14 @@ export default function PortfolioPage({
 
             {category === "parties" && (
               <>
+                <fieldset className="mt-5 space-y-4 rounded-xl border border-white/10 p-4">
+                  <legend>Standardwerte für neue Kalendertermine</legend>
+                  <label className="block">Standard-Startuhrzeit (24 Stunden)<input type="time" step={60} className={inputStyle} value={defaultStartTime} required={!editingId} onChange={event => setDefaultStartTime(event.target.value)} /></label>
+                  <label className="flex items-center gap-2"><input type="checkbox" checked={defaultEntryPrice === null} onChange={event => setDefaultEntryPrice(event.target.checked ? null : 0)} />Preis noch unbekannt</label>
+                  <label className="block">Standard-Eintrittspreis<input type="range" min={0} max={30} step={1} value={defaultEntryPrice ?? 0} disabled={defaultEntryPrice === null} aria-valuetext={defaultEntryPrice === null ? "Preis unbekannt" : defaultEntryPrice === 0 ? "0 Euro, Eintritt frei" : `${defaultEntryPrice} Euro`} onChange={event => setDefaultEntryPrice(Number(event.target.value))} className="mt-2 w-full" /></label>
+                  <output aria-live="polite">{defaultEntryPrice === null ? "Preis unbekannt" : defaultEntryPrice === 0 ? "0 € · Eintritt frei" : `${defaultEntryPrice} €`}</output>
+                  <p className="text-sm text-neutral-400">Änderungen wirken nur auf neue Termine. Bereits gespeicherte Kalenderdaten bleiben erhalten.</p>
+                </fieldset>
                 <details className="mt-5 rounded-xl border border-white/10 p-4"><summary>Alternative Namen für die Partysuche</summary>
                   <label className="mt-3 block">Explizite Aliase (ein Name pro Zeile)<textarea className={inputStyle} value={discoveryAliases} disabled={aliasesLoading} onChange={e => setDiscoveryAliases(e.target.value)} rows={3} /></label>
                 </details>

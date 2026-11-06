@@ -50,6 +50,7 @@ public class PartySeriesService {
 
     @Transactional
     public PartySeriesResponse createParty(PartySeriesRequest request) {
+        if (request.defaultStartTime() == null) throw badRequest("Neue Partyreihen benötigen eine Standard-Startuhrzeit (HH:mm)");
         validateRequest(request);
         ensureNameAvailable(request.name(), null);
         validateActorReferences(request);
@@ -68,6 +69,7 @@ public class PartySeriesService {
                 request.organizerIds(),
                 request.standardGenres()
         );
+        party.setDefaults(defaultTime(request), request.defaultEntryPrice());
         return toResponse(partySeriesRepository.save(party));
     }
 
@@ -93,6 +95,7 @@ public class PartySeriesService {
                 request.organizerIds(),
                 request.standardGenres()
         );
+        party.setDefaults(defaultTime(request), request.defaultEntryPrice());
         return toResponse(partySeriesRepository.save(party));
     }
 
@@ -123,6 +126,9 @@ public class PartySeriesService {
     }
 
     private void validateRequest(PartySeriesRequest request) {
+        defaultTime(request);
+        var price = request.defaultEntryPrice();
+        if (price != null && (price < 0 || price > 30)) throw badRequest("Standard-Eintrittspreis muss zwischen 0 und 30 € liegen");
         if (request.recurrence() == null) {
             return;
         }
@@ -151,6 +157,13 @@ public class PartySeriesService {
                 throw badRequest("other benötigt eine nichtleere Beschreibung");
             }
         }
+    }
+
+    private java.time.@org.jspecify.annotations.Nullable LocalTime defaultTime(PartySeriesRequest request) {
+        var time = request.defaultStartTime();
+        if (time == null) return null;
+        if (!time.matches("(?:[01][0-9]|2[0-3]):[0-5][0-9]")) throw badRequest("defaultStartTime muss im Format HH:mm vorliegen");
+        return java.time.LocalTime.parse(time);
     }
 
     private void requireWeekday(Integer weekday) {

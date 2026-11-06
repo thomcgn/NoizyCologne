@@ -38,8 +38,19 @@ public record PartySeriesRequest(
         PartyRecurrenceRequest recurrence,
 
         @Size(max = 50)
-        Set<@NotBlank @Size(max = 100) String> standardGenres
+        Set<@NotBlank @Size(max = 100) String> standardGenres,
+        @Pattern(regexp = "(?:[01][0-9]|2[0-3]):[0-5][0-9]", message = "defaultStartTime muss im Format HH:mm vorliegen")
+        @org.jspecify.annotations.Nullable String defaultStartTime,
+        @jakarta.validation.constraints.Min(0) @jakarta.validation.constraints.Max(30)
+        @tools.jackson.databind.annotation.JsonDeserialize(using = WholeEuroDeserializer.class)
+        @org.jspecify.annotations.Nullable Integer defaultEntryPrice
 ) {
+
+    public PartySeriesRequest(String name, String instagram, String color, String djMentionDefault,
+                              Set<String> residentDjIds, Set<String> otherDjIds, Set<String> organizerIds,
+                              PartyRecurrenceRequest recurrence, Set<String> standardGenres) {
+        this(name, instagram, color, djMentionDefault, residentDjIds, otherDjIds, organizerIds, recurrence, standardGenres, null, null);
+    }
 
     public PartySeriesRequest(String name, String instagram, String color, String djMentionDefault,
                               Set<String> residentDjIds, Set<String> otherDjIds, Set<String> organizerIds,

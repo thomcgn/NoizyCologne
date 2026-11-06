@@ -16,8 +16,9 @@ public class SpecialSourceService {
     private final EventCandidateProcessor processor;
     private final EventChangeMonitor monitor;
     private final VenueRepository venues;
-    public SpecialSourceService(DiscoveryStore store,VenueSourceDiscoveryService discovery,EventCandidateProcessor processor,EventChangeMonitor monitor,VenueRepository venues) {
-        this.store=store;this.discovery=discovery;this.processor=processor;this.monitor=monitor;this.venues=venues;
+    private final DiscoveryProgress progress;
+    public SpecialSourceService(DiscoveryStore store,VenueSourceDiscoveryService discovery,EventCandidateProcessor processor,EventChangeMonitor monitor,VenueRepository venues,DiscoveryProgress progress) {
+        this.store=store;this.discovery=discovery;this.processor=processor;this.monitor=monitor;this.venues=venues;this.progress=progress;
     }
     public List<Map<String,Object>> list() {
         return store.jdbc().queryForList("SELECT *,true AS special_source,'' AS venue_name FROM discovery_sources WHERE venue_id IS NULL AND deleted_at IS NULL ORDER BY name,url")
@@ -72,10 +73,12 @@ public class SpecialSourceService {
         if (changed==0) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Sonderquelle nicht gefunden");
     }
     public record ScanResult(int checked,int failed) { }
-    public ScanResult scan(String operation) {
+    public ScanResult scan(String operation,List<Map<String,Object>> sources,boolean trackProgress) {
         int checked=0,failed=0;
-        for (var source:list()) {
-            if (!Boolean.TRUE.equals(source.get("enabled"))) continue;
+        for (var source:sources) {
+            DiscoveryProgress.checkInterrupted();
+            int previousFailures=failed;
+            if (trackProgress) progress.current(operation,"SPECIAL_SOURCES",Objects.toString(source.get("name"),"").isBlank() ? Objects.toString(source.get("url"),"") : Objects.toString(source.get("name"),""));
             checked++;String id=(String)source.get("id"),root=CanonicalSourceUrl.of((String)source.get("url"));
             try {
                 var found=discovery.discoverSpecial(root,new EventExtractor.Profile((String)source.get("item_selector"),(String)source.get("title_selector"),(String)source.get("date_selector")));
@@ -102,11 +105,15 @@ public class SpecialSourceService {
                 store.fetched(id,new VenueSourceDiscoveryService.Found(SafeUrls.parse(root),new EventExtractor.Extraction(List.copyOf(events),status,complete),found.stream().anyMatch(page -> page.fetchMethod().equals("BROWSER")) ? "BROWSER" : "HTTP",diagnostics.stream().distinct().limit(20).toList()));
                 if (!clean || status.equals("PARTIAL_FAILURE")) failed++;
             } catch (java.io.IOException | RuntimeException e) {
+                if (e instanceof java.util.concurrent.CancellationException cancelled) throw cancelled;
+                DiscoveryProgress.checkInterrupted();
                 failed++;
                 org.slf4j.LoggerFactory.getLogger(getClass()).warn("Discovery special source {} failed",id,e);
                 String status=e instanceof EventPageFetcher.FetchFailure f ? f.status : "SCAN_FAILED";
                 store.fetched(id,new VenueSourceDiscoveryService.Found(SafeUrls.parse(root),new EventExtractor.Extraction(List.of(),status),"HTTP",List.of(Objects.requireNonNull(status))));
             }
+            DiscoveryProgress.checkInterrupted();
+            if (trackProgress) progress.complete(operation,failed>previousFailures);
         }
         return new ScanResult(checked,failed);
     }

@@ -14,7 +14,9 @@ public record PartySeriesResponse(
         List<String> standardGenres,
         String djMentionDefault,
         PartyRecurrenceResponse recurrence,
-        PartyFlyerResponse defaultFlyer
+        PartyFlyerResponse defaultFlyer,
+        @org.jspecify.annotations.Nullable String defaultStartTime,
+        @org.jspecify.annotations.Nullable Integer defaultEntryPrice
 ) {
 
     public static PartySeriesResponse from(PartySeries party) {
@@ -37,7 +39,9 @@ public record PartySeriesResponse(
                 party.getStandardGenres().stream().sorted().toList(),
                 party.getDjMentionDefault(),
                 PartyRecurrenceResponse.from(party),
-                null
+                null,
+                party.getDefaultStartTime() == null ? null : java.util.Objects.requireNonNull(party.getDefaultStartTime()).format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")),
+                party.getDefaultEntryPrice()
         );
     }
 
@@ -46,6 +50,6 @@ public record PartySeriesResponse(
         return new PartySeriesResponse(response.id(), response.name(), response.instagram(),
                 response.color(), response.residentDjIds(), response.otherDjIds(),
                 response.organizerIds(), response.standardGenres(), response.djMentionDefault(), response.recurrence(),
-                defaultFlyer);
+                defaultFlyer, response.defaultStartTime(), response.defaultEntryPrice());
     }
 }

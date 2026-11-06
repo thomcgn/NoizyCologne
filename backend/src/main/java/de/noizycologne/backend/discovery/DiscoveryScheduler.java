@@ -26,15 +26,16 @@ public class DiscoveryScheduler {
     private final EventCandidateProcessor processor;
     private final DiscoveryWorkLock workLock;
     private final DiscoveryResetService resets;
+    private final DiscoveryProgress progress;
     private final AtomicBoolean busy = new AtomicBoolean();
     private final ExecutorService worker = Executors.newSingleThreadExecutor(r -> { var t = new Thread(r,"venue-discovery"); t.setDaemon(true); return t; });
     @Value("${noizy.discovery.enabled:true}") private boolean enabled;
     @Value("${noizy.discovery.monitor.enabled:true}") private boolean monitorEnabled;
     public DiscoveryScheduler(DiscoveryStore store, VenueRepository venues, PartySeriesRepository parties,
             DiscoveryGenreFilter genres, VenueSourceDiscoveryService discovery, EventCandidateProcessor processor,
-            DiscoveryWorkLock workLock, DiscoveryResetService resets,EventChangeMonitor monitor,SpecialSourceService specialSources) {
+            DiscoveryWorkLock workLock, DiscoveryResetService resets,EventChangeMonitor monitor,SpecialSourceService specialSources,DiscoveryProgress progress) {
         this.store=store; this.venues=venues; this.parties=parties; this.genres=genres;
-        this.discovery=discovery; this.processor=processor; this.workLock=workLock; this.resets=resets;this.monitor=monitor;this.specialSources=specialSources;
+        this.discovery=discovery; this.processor=processor; this.workLock=workLock; this.resets=resets;this.monitor=monitor;this.specialSources=specialSources;this.progress=progress;
     }
     @jakarta.annotation.PreDestroy void close() { worker.shutdownNow(); }
     @Scheduled(cron="${noizy.discovery.cron:0 0 9 * * TUE}", zone="${noizy.discovery.zone:Europe/Berlin}")
@@ -100,7 +101,7 @@ public class DiscoveryScheduler {
     private void execute(DiscoveryWorkLock.Lease lease,String id,DiscoveryResetService.Request request,boolean changesOnly) {
         boolean scan=request==null || request.mode()==DiscoveryResetService.Mode.RESCAN;
         try (lease) {
-            store.jdbc().update("UPDATE discovery_operations SET status='INTERRUPTED',finished_at=now(),report='Vorheriger Vorgang unterbrochen' WHERE status='RUNNING' AND id<>?",id);
+            store.jdbc().update("UPDATE discovery_operations SET status='INTERRUPTED',finished_at=now(),report='Vorheriger Vorgang unterbrochen',phase=CASE WHEN total_units IS NOT NULL THEN 'INTERRUPTED' ELSE phase END,progress_updated_at=CASE WHEN total_units IS NOT NULL THEN now() ELSE progress_updated_at END WHERE status='RUNNING' AND id<>?",id);
             store.jdbc().update("UPDATE discovery_runs SET status='INTERRUPTED',finished_at=now() WHERE status='RUNNING'");
             try {
                 var initial=request==null ? new DiscoveryResetService.Summary(0,0,0,0,0,0) : resets.apply(request);
@@ -108,18 +109,28 @@ public class DiscoveryScheduler {
                 int checked=0,failed=0,specialChecked=0;
                 if (scan) {
                     store.jdbc().update("INSERT INTO discovery_runs(id,status) VALUES (?,'RUNNING')",id);
-                    var special=specialSources.scan(id);specialChecked=special.checked();failed+=special.failed();
-                    for (var venue:venues.findAll()) {
-                        if (!venue.isDiscoveryEnabled()) continue;
-                        if (changesOnly && !Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM discovery_candidates c LEFT JOIN calendar_entries e ON e.id=c.calendar_entry_id WHERE c.venue_id=? AND COALESCE(e.event_date,c.event_date) BETWEEN (now() AT TIME ZONE 'Europe/Berlin')::date AND (now() AT TIME ZONE 'Europe/Berlin')::date+21 AND (c.calendar_entry_id IS NOT NULL OR c.status NOT IN ('IGNORED','REJECTED','DUPLICATE')))",Boolean.class,venue.getId()))) continue;
+                    // Freeze the actual units before any fetch; pages/events are not separate units.
+                    var plannedSources=specialSources.list().stream().filter(source -> Boolean.TRUE.equals(source.get("enabled"))).toList();
+                    var plannedVenues=venues.findAll().stream().filter(venue -> venue.isDiscoveryEnabled() && relevant(venue,changesOnly)).toList();
+                    if (request==null) progress.begin(id,plannedSources.size()+plannedVenues.size());
+                    var special=specialSources.scan(id,plannedSources,request==null);specialChecked=special.checked();failed+=special.failed();
+                    for (var venue:plannedVenues) {
+                        DiscoveryProgress.checkInterrupted();
+                        if (request==null) progress.current(id,"LOCATIONS",venue.getName());
                         checked++;
-                        try { if (!scanVenue(venue,id,changesOnly)) failed++; }
+                        boolean unitFailed=false;
+                        try { unitFailed=!scanVenue(venue,id,changesOnly); }
                         catch (Exception e) {
-                            failed++;
+                            if (e instanceof CancellationException cancelled) throw cancelled;
+                            DiscoveryProgress.checkInterrupted();
+                            unitFailed=true;
                             String status=e instanceof EventPageFetcher.FetchFailure f ? f.status : "SCAN_FAILED";
                             store.jdbc().update("UPDATE venues SET discovery_status=? WHERE id=?",status,venue.getId());
                             LoggerFactory.getLogger(getClass()).warn("Discovery location {} failed",venue.getId(),e);
                         }
+                        DiscoveryProgress.checkInterrupted();
+                        if (unitFailed) failed++;
+                        if (request==null) progress.complete(id,unitFailed);
                     }
                 }
                 var summary=store.jdbc().queryForMap("""
@@ -133,14 +144,20 @@ public class DiscoveryScheduler {
                 String report="Locations geprüft: "+checked+"; Sonderquellen geprüft: "+specialChecked+(request==null?"":"; Bestandsstandorte geografisch eingestuft: "+initial.geographicallyClassified())+"; fehlgeschlagen: "+failed;
                 store.jdbc().update("UPDATE discovery_operations SET status=?,finished_at=now(),report=?,summary=? WHERE id=?",
                     failed==0 ? "COMPLETED" : "PARTIAL",report,resets.serialize(summary),id);
+                if (request==null) progress.finish(id,failed==0 ? "COMPLETED" : "PARTIAL");
                 if (scan) store.jdbc().update("UPDATE discovery_runs SET status=?,finished_at=now(),report=? WHERE id=?",failed==0 ? "COMPLETED" : "PARTIAL",report,id);
             } catch (Exception e) {
                 String report=e instanceof org.springframework.web.server.ResponseStatusException r ? r.getReason() : "Vorgang abgebrochen; bereits protokollierte Teilentscheidungen bleiben erhalten";
-                store.jdbc().update("UPDATE discovery_operations SET status='FAILED',finished_at=now(),report=? WHERE id=?",report,id);
-                if (scan) store.jdbc().update("UPDATE discovery_runs SET status='FAILED',finished_at=now(),report=? WHERE id=?",report,id);
+                String status=e instanceof CancellationException || Thread.currentThread().isInterrupted() ? "INTERRUPTED" : "FAILED";
+                store.jdbc().update("UPDATE discovery_operations SET status=?,finished_at=now(),report=? WHERE id=?",status,report,id);
+                if (request==null) progress.finish(id,status);
+                if (scan) store.jdbc().update("UPDATE discovery_runs SET status=?,finished_at=now(),report=? WHERE id=?",status,report,id);
                 LoggerFactory.getLogger(getClass()).error("Discovery operation {} failed",id,e);
             }
         } catch (java.sql.SQLException e) { LoggerFactory.getLogger(getClass()).error("Discovery lock release failed",e); }
+    }
+    private boolean relevant(Venue venue,boolean changesOnly) {
+        return !changesOnly || Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM discovery_candidates c LEFT JOIN calendar_entries e ON e.id=c.calendar_entry_id WHERE c.venue_id=? AND COALESCE(e.event_date,c.event_date) BETWEEN (now() AT TIME ZONE 'Europe/Berlin')::date AND (now() AT TIME ZONE 'Europe/Berlin')::date+21 AND (c.calendar_entry_id IS NOT NULL OR c.status NOT IN ('IGNORED','REJECTED','DUPLICATE')))",Boolean.class,venue.getId()));
     }
     private boolean scanVenue(Venue venue,String operation,boolean changesOnly) throws java.io.IOException {
         LinkedHashMap<String,EventExtractor.Profile> roots = new LinkedHashMap<>();
