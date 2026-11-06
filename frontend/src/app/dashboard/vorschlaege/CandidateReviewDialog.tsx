@@ -1,5 +1,7 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
+import { calendarEntryHref } from "../kalender/calendarNavigation";
 import DashboardModal from "../DashboardModal";
 import { useCatalog } from "../CatalogProvider";
 import { SourceEvidence } from "../SourceOverview";
@@ -15,6 +17,7 @@ export default function CandidateReviewDialog({ candidate, currentCandidate, bus
  action: (work: () => Promise<void>) => Promise<void>; onClose: () => void; setNotice: (value: string) => void;
 }) {
  const { parties, venues, reloadEntries, reloadParties, reloadDrafts } = useCatalog();
+ const [importedId,setImportedId] = useState(candidate.calendar_entry_id);
  const [origins,setOrigins] = useState<{url:string;source_kind:string;event_data:string}[]>([]);
  const [portfolioName,setPortfolioName] = useState(candidate.title.slice(0,200));
  const [venueId,setVenueId] = useState(candidate.venue_id ?? "");
@@ -55,8 +58,8 @@ export default function CandidateReviewDialog({ candidate, currentCandidate, bus
           <label className="block mt-3">Rückfragestatus<select className={field} value={inquiry} onChange={e => setInquiry(e.target.value)}>{["NONE","PREPARED","SENT","ANSWERED"].map(s => <option key={s} value={s}>{labels[s]}</option>)}</select></label>
           <p className="text-sm mt-2">Nachrichten werden von dir in Instagram verschickt. Den Status anschließend manuell setzen.</p>
         </details>
-        <div className="flex flex-wrap gap-2"><button disabled={busy} className={button} onClick={() => void action(async () => { await save(); setCandidate(null); setNotice("Bearbeitungsstand gespeichert. Kein Kalenderimport."); })}>Speichern</button><button disabled={busy || !party || !date || (needsVenue && !venueId) || ["REJECTED","DUPLICATE"].includes(status) || (rememberName && !seriesAlias.trim()) || !!currentCandidate?.calendar_entry_id || !!currentCandidate?.assessment?.importBlockers.length} className={`${button} discovery-button-primary`} onClick={() => void action(async () => { const result=await api<{calendarEntryId:string}>(`/candidates/${candidate.id}/confirm`,"POST",{partyId:party,date,inquiryStatus:inquiry,dmText:dm,seriesAlias:rememberName ? seriesAlias.trim() : null,...(needsVenue ? {venueId:venueId || null} : {})}); if (!result?.calendarEntryId) throw new Error("Kalenderimport wurde nicht bestätigt. Bitte den Vorschlag erneut prüfen."); await Promise.all([reloadEntries(),reloadDrafts(),reloadParties()]); setCandidate(null); setNotice("Termin bestätigt und in den Kalender übernommen. Er steht jetzt in der Redaktion bereit."); })}>Bestätigen &amp; übernehmen</button></div>
-        {currentCandidate?.calendar_entry_id && <p>Bereits übernommene Änderungen bitte direkt im Kalender prüfen.</p>}
+        <div className="flex flex-wrap gap-2"><button disabled={busy || !!importedId} className={button} onClick={() => void action(async () => { await save(); setCandidate(null); setNotice("Bearbeitungsstand gespeichert. Kein Kalenderimport."); })}>Speichern</button><button disabled={busy || !!importedId || !party || !date || (needsVenue && !venueId) || ["REJECTED","DUPLICATE"].includes(status) || (rememberName && !seriesAlias.trim()) || !!currentCandidate?.calendar_entry_id || !!currentCandidate?.assessment?.importBlockers.length} className={`${button} discovery-button-primary`} onClick={() => void action(async () => { const result=await api<{calendarEntryId:string}>(`/candidates/${candidate.id}/confirm`,"POST",{partyId:party,date,inquiryStatus:inquiry,dmText:dm,seriesAlias:rememberName ? seriesAlias.trim() : null,...(needsVenue ? {venueId:venueId || null} : {})}); if (!result?.calendarEntryId) throw new Error("Kalenderimport wurde nicht bestätigt. Bitte den Vorschlag erneut prüfen."); await Promise.all([reloadEntries(),reloadDrafts(),reloadParties()]); setImportedId(result.calendarEntryId); setNotice("Termin bestätigt und in den Kalender übernommen. Er steht jetzt in der Redaktion bereit."); })}>Bestätigen &amp; übernehmen</button></div>
+        {importedId && <p><Link className={button} href={calendarEntryHref(importedId)}>Im Kalender anzeigen</Link></p>}
       </div>}
     </DashboardModal>
  );

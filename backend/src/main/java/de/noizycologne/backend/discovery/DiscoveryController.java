@@ -38,7 +38,7 @@ public class DiscoveryController {
         var rules=evaluator.rules();
         return Map.of("candidates",store.candidates(filter).stream().map(row -> evaluator.forApi(row,rules)).toList(),"sources",store.sources(),
                 "counts",store.jdbc().queryForList("SELECT status,count(*) AS count FROM discovery_candidates WHERE (geo_status='INSIDE' OR source_id IN (SELECT id FROM discovery_sources WHERE venue_id IS NOT NULL)) OR calendar_entry_id IS NOT NULL OR status IN ('REJECTED','DUPLICATE','IGNORED') GROUP BY status"),
-                "automaticallyImported",store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates WHERE status='IMPORTED' AND reason='Automatisch übernommen'",Long.class),
+                "automaticallyImported",store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates c JOIN calendar_entries e ON e.id=c.calendar_entry_id WHERE c.status='IMPORTED' AND c.reason='Automatisch übernommen'",Long.class),
                 "metrics",store.jdbc().queryForMap("""
                     SELECT count(*) FILTER (WHERE decision_origin='AUTOMATIC' AND status='IGNORED') AS "automaticallyIgnored",
                     count(*) FILTER (WHERE decision_origin='MANUAL' AND status='REJECTED') AS "manuallyRejected",

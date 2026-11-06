@@ -57,6 +57,37 @@ class DiscoveryIntegrationTests {
         assertThat(store.jdbc().queryForObject("SELECT status FROM discovery_candidates WHERE id=?",String.class,c.get("id"))).isEqualTo("NEEDS_REVIEW");
         assertThat(store.jdbc().queryForObject("SELECT event_date FROM calendar_entries WHERE id=?",LocalDate.class,c.get("calendar_entry_id"))).isEqualTo(LocalDate.of(2027,1,9));
     }
+    @Test void automaticImportsReachCalendarApiAndDeletedEntriesStopCountingWithoutLosingDecisions() throws Exception {
+        Long before=store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates c JOIN calendar_entries e ON e.id=c.calendar_entry_id WHERE c.status='IMPORTED' AND c.reason='Automatisch übernommen'",Long.class);
+        found(event("calendar-one",party.getName(),"2026-11-07T23:00","")); scheduler.scan();
+        var first=store.jdbc().queryForMap("SELECT * FROM discovery_candidates WHERE venue_id=?",venue.getId());
+        String firstEntry=(String)first.get("calendar_entry_id");
+        assertThat(first.get("status")).isEqualTo("IMPORTED");assertThat(firstEntry).isNotBlank();
+        found(event("calendar-two",party.getName(),"2027-02-13T22:00","")); scheduler.scan();
+        String secondEntry=store.jdbc().queryForObject("SELECT calendar_entry_id FROM discovery_candidates WHERE venue_id=? AND event_date='2027-02-13'",String.class,venue.getId());
+        store.jdbc().update("UPDATE discovery_candidates SET decision_origin='MANUAL',dm_text='Geprüfte Teamantwort',inquiry_status='ANSWERED' WHERE calendar_entry_id=?",secondEntry);
+        var mvc=org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup(requireNonNull(context)).build();
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/calendar-entries"))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$[*].id").value(requireNonNull(org.hamcrest.Matchers.hasItems(firstEntry,secondEntry))));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/discovery"))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.automaticallyImported").value(requireNonNull(before)+2));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/v1/calendar-entries/"+firstEntry))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isNoContent());
+        var missing=store.candidate((String)first.get("id"));
+        assertThat(missing.get("status")).isEqualTo("NEEDS_REVIEW");assertThat(missing.get("previous_status")).isEqualTo("IMPORTED");
+        assertThat(missing.get("calendar_entry_id")).isNull();assertThat(missing.get("reason").toString()).contains("Kalendereintrag fehlt","Automatisch übernommen");
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/discovery"))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.automaticallyImported").value(before+1));
+        found(event("calendar-one",party.getName(),"2026-11-07T23:00",""));scheduler.scan();
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE id=?",Integer.class,firstEntry)).isZero();
+        var preserved=store.jdbc().queryForMap("SELECT * FROM discovery_candidates WHERE calendar_entry_id=?",secondEntry);
+        assertThat(preserved.get("status")).isEqualTo("IMPORTED");assertThat(preserved.get("decision_origin")).isEqualTo("MANUAL");
+        assertThat(preserved.get("dm_text")).isEqualTo("Geprüfte Teamantwort");assertThat(preserved.get("inquiry_status")).isEqualTo("ANSWERED");
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates c LEFT JOIN calendar_entries e ON e.id=c.calendar_entry_id WHERE c.status='IMPORTED' AND e.id IS NULL",Integer.class)).isZero();
+        assertThatThrownBy(()->store.jdbc().update("UPDATE discovery_candidates SET status='IMPORTED' WHERE id=?",first.get("id")))
+            .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
     @Test void manualReviewDmAndImportWithoutInventedTime() throws Exception {
         found(event("new","Neue Indie Party",null,"UNCONFIRMED")); scheduler.scan();
         var c=store.jdbc().queryForMap("SELECT * FROM discovery_candidates WHERE venue_id=?",venue.getId()); String id=(String)c.get("id");
