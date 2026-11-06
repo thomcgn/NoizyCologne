@@ -26,6 +26,7 @@ let candidates;
 let sourceRows=[];
 let geoRows=[];
 let operationRows=[];
+let genreRows=[];
 let reloadedEntries;
 let reloadedParties;
 let reloadedDrafts;
@@ -71,7 +72,7 @@ function assessment(overrides = {}) {
 function candidate(overrides = {}) {
   return {
     id: 'candidate', title: 'NEON PARADISE VS. NEON KULT VOL: 2 THE REVENGE', venue_name: 'Blue Shell', instagram: 'blue_shell',
-    source_url: 'https://www.blue-shell.de/events/neon-paradise-vs-neon-kult', event_date: '2026-11-07', party_id: null,
+    venue_id: 'blue-shell', source_url: 'https://www.blue-shell.de/events/neon-paradise-vs-neon-kult', event_date: '2026-11-07', party_id: null,
     status: 'NEEDS_REVIEW', reason: 'Kooperation erfordert manuelle Zuordnung', evidence: 'Blue Shell · 07.11.2026',
     inquiry_status: 'NONE', dm_text: '', calendar_entry_id: null, decision_origin: 'AUTOMATIC', matching_class: 'MATCH',
     automatic_reason: 'Zwei bekannte Reihen erkannt', matcher_version: 'party-rules-3', evaluated_at: null,
@@ -85,11 +86,16 @@ async function settle(work = () => {}) {
   await act(async () => { await work(); await new Promise(resolve => setTimeout(resolve, 20)); });
 }
 async function mount(item, failInitial = false) {
-  candidates = Array.isArray(item) ? item : [item]; sourceRows=[]; geoRows=[]; operationRows=[]; calls.length = 0; reloadedEntries = 0; reloadedParties = 0; reloadedDrafts = 0;
+  candidates = Array.isArray(item) ? item : [item]; sourceRows=[]; geoRows=[]; operationRows=[]; genreRows=[{id:"emo",displayName:"Emo",active:true},{id:"indie",displayName:"Indie",active:true},{id:"metal",displayName:"Metalcore",active:true},{id:"retired",displayName:"Pop",active:false}]; calls.length = 0; reloadedEntries = 0; reloadedParties = 0; reloadedDrafts = 0;
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url, ...options });
+    if (url === '/api/v1/genres') return new Response(JSON.stringify(genreRows));
     if (url.endsWith('/geography') && !failInitial) return new Response(JSON.stringify({items:geoRows}));
     if (failInitial) return new Response(JSON.stringify({message: 'Quelle nicht erreichbar'}), {status: 503});
+    if (url.endsWith('/portfolio') && options.method === 'POST') {
+      candidates=candidates.map(item => ({...item,party_id:'approved',decision_origin:'MANUAL',assessment:assessment({recognition:{status:'SINGLE',parties:[{id:'approved',name:JSON.parse(options.body).name,matchedName:item.title}]}})}));
+      return new Response(JSON.stringify({partyId:'approved'}));
+    }
     if (url.endsWith('/confirm') && options.method === 'POST') {
       const payload=JSON.parse(options.body);
       candidates=candidates.map(item => ({...item,status:'IMPORTED',calendar_entry_id:'imported-entry',party_id:payload.partyId,event_date:payload.date}));
@@ -219,22 +225,40 @@ test('refresh updates lifecycle blockers while retaining saved and unsaved manua
   assert.equal(JSON.parse(review.body).date, '2026-11-09');
 });
 
-test('portfolio approval compares recognized event genres with the active portfolio and requires confirmation',async()=>{
-  await mount(candidate({title:'New Alternative Party',matching_class:'POSSIBLE_MATCH',assessment:assessment({recognition:{status:'NONE',parties:[]}}),genreCoverage:{matched:2,total:4,percent:50,names:['Emo','Indie'],eligible:true}}));
+test('portfolio approval saves chosen standards and keeps the dialog open with the new series assigned',async()=>{
+  await mount(candidate({title:'New Alternative Party',matching_class:'POSSIBLE_MATCH',assessment:assessment({recognition:{status:'NONE',parties:[]}}),genreCoverage:{matched:2,total:4,percent:50,names:['Emo','Indie'],eligible:true,suggestedStandardGenres:['Emo','Pop','Unknown']}}));
   await openReview();assert.match(dialog().textContent,/2 von 4 erkannten Eventgenres.*\(50 %\)/);
   assert.equal(button('Ins Portfolio übernehmen',dialog()).disabled,true);
   change(control('Standard-Startuhrzeit'),'23:00');
   const name=control('Name im Portfolio');change(name,'New Alternative Night');assert.equal(document.activeElement,name);
+  const selector=[...dialog().querySelectorAll('fieldset')].find(item=>item.querySelector('legend')?.textContent==='Standardgenres');
+  const checkbox=name=>[...selector.querySelectorAll('label')].find(label=>label.textContent===name)?.querySelector('input');
+  assert.equal(checkbox('Emo').checked,true);assert.equal(checkbox('Indie').checked,false);
+  assert.equal(checkbox('Pop'),undefined);
+  const search=selector.querySelector('input[type="search"]');change(search,'metal');
+  assert.equal(checkbox('Emo'),undefined);assert.ok(selector.querySelector('[aria-label="Genre Emo entfernen"]'));
+  act(()=>checkbox('Metalcore').click());
+  assert.match(selector.querySelector('[aria-label="Ausgewählte Standardgenres"]').textContent,/Emo.*Metalcore/);
   await settle(()=>button('Ins Portfolio übernehmen',dialog()).click());
   const request=calls.find(call=>call.url.endsWith('/portfolio')&&call.method==='POST');
-  assert.deepEqual(JSON.parse(request.body),{name:'New Alternative Night',defaultStartTime:'23:00',seriesAlias:null});
-  assert.equal(document.querySelector('[role="dialog"]'),null);assert.ok(!calls.some(call=>/instagram|publish|cancellations/.test(call.url)));
-  assert.equal(reloadedEntries, 1); assert.equal(reloadedParties, 1); assert.equal(reloadedDrafts, 1);
+  assert.deepEqual(JSON.parse(request.body),{name:'New Alternative Night',defaultStartTime:'23:00',standardGenres:['Emo','Metalcore'],seriesAlias:null});
+  assert.ok(document.querySelector('[role="dialog"]'));assert.equal(control('Partyreihe zuordnen').value,'approved');assert.ok(!calls.some(call=>/instagram|publish|cancellations/.test(call.url)));
+  assert.equal(reloadedEntries, 0); assert.equal(reloadedParties, 1); assert.equal(reloadedDrafts, 0);
+  assert.equal(button('Bestätigen & übernehmen',dialog()).disabled,false);
+  await settle(()=>button('Bestätigen & übernehmen',dialog()).click());
+  assert.equal(JSON.parse(calls.find(call=>call.url.endsWith('/confirm')&&call.method==='POST').body).partyId,'approved');
+  assert.ok(dialog().querySelector('a[href*="entry=imported-entry"]'));
 });
-test('below fifty percent no new portfolio series is offered even when an individual genre matches',async()=>{
+test('manual portfolio creation stays available below fifty percent without auto-selecting inferred genres',async()=>{
   await mount(candidate({title:'Unknown Emo Party',assessment:assessment({recognition:{status:'NONE',parties:[]}}),genreCoverage:{matched:1,total:4,percent:25,names:['Emo'],eligible:false}}));
   await openReview();assert.match(dialog().textContent,/1 von 4/);
-  assert.ok(![...dialog().querySelectorAll('button')].some(item=>item.textContent==='Ins Portfolio übernehmen'));
+  assert.ok(button('Ins Portfolio übernehmen',dialog()));
+  const selector=[...dialog().querySelectorAll('fieldset')].find(item=>item.querySelector('legend')?.textContent==='Standardgenres');
+  assert.equal(selector.querySelectorAll('input[type="checkbox"]:checked').length,0);
+  change(control('Standard-Startuhrzeit'),'22:00');
+  await settle(()=>button('Ins Portfolio übernehmen',dialog()).click());
+  assert.deepEqual(JSON.parse(calls.find(call=>call.url.endsWith('/portfolio')&&call.method==='POST').body).standardGenres,[]);
+  assert.ok(dialog());assert.equal(control('Partyreihe zuordnen').value,'approved');
 });
 test('Discovery hides location sources and excludes them from source notices and counts',async()=>{
   await mount(candidate());
@@ -286,7 +310,7 @@ test('long review lists reveal another page without mounting the historical arch
   assert.ok(!calls.some(call => call.url.endsWith('?filter=ARCHIVE')));
 });
 
-test('portfolio confirmation prevents duplicate submissions and removes the approved series after refresh', async () => {
+test('portfolio confirmation prevents duplicate submissions and preserves the review after refresh', async () => {
   const fresh = candidate({ title: 'Neue Reihe', assessment: assessment({recognition: {status: 'NONE', parties: []}}), genreCoverage: {matched: 2, total: 4, percent: 50, names: ['Emo', 'Indie'], eligible: true} });
   await mount(fresh);
   await openReview();
@@ -294,7 +318,6 @@ test('portfolio confirmation prevents duplicate submissions and removes the appr
   const previous = globalThis.fetch;
   globalThis.fetch = async (url, options = {}) => {
     if (url.endsWith('/portfolio') && options.method === 'POST') {
-      candidates = [candidate({...fresh, status: 'IMPORTED', calendar_entry_id: 'entry', party_id: 'approved'})];
       await new Promise(resolve => setTimeout(resolve, 5));
     }
     return previous(url, options);
@@ -303,8 +326,8 @@ test('portfolio confirmation prevents duplicate submissions and removes the appr
   const confirm = button('Ins Portfolio übernehmen', dialog());
   await settle(() => { confirm.click(); confirm.click(); });
   assert.equal(calls.filter(call => call.url.endsWith('/portfolio') && call.method === 'POST').length, 1);
-  assert.equal(document.querySelectorAll('[data-record-id]').length, 0);
-  assert.equal(reloadedEntries, 1); assert.equal(reloadedDrafts, 1);
+  assert.ok(dialog());assert.equal(control('Partyreihe zuordnen').value,'approved');
+  assert.equal(reloadedEntries, 0); assert.equal(reloadedDrafts, 0);
 });
 
 test('failed initial requests do not claim that Discovery is empty or up to date', async () => {
@@ -639,4 +662,40 @@ test('failed and interrupted scans keep real progress; empty and reset states st
   operationRows = [{ id: 'legacy', kind: 'SCAN', status: 'COMPLETED' }];
   await settle(() => poll());
   assert.equal(document.querySelector('[role="progressbar"]'), null);
+});
+
+
+test('manual series creation without a date or confirmed venue never imports a calendar entry', async () => {
+  await mount(candidate({title:'Unbestätigte Reihe',venue_id:null,special_source:true,geo_status:'INSIDE',event_date:null,assessment:assessment({recognition:{status:'NONE',parties:[]},verification:{status:'MISSING_DATA',reasons:[],date:null},importBlockers:['Datum oder Location fehlt']}),genreCoverage:{matched:0,total:0,percent:0,names:[],eligible:false}}));
+  await openReview();
+  change(control('Standard-Startuhrzeit'),'22:00');
+  await settle(()=>button('Ins Portfolio übernehmen',dialog()).click());
+  assert.equal(control('Partyreihe zuordnen').value,'approved');
+  assert.equal(button('Bestätigen & übernehmen',dialog()).disabled,true);
+  assert.equal(control('Korrigiertes / bestätigtes Datum').value,'');
+  assert.equal(control('Veranstaltungsort zuordnen').value,'');
+  assert.ok(!calls.some(call=>call.url.endsWith('/confirm')));
+});
+
+test('genre-catalog errors and failed creation preserve the inputs and selected genre chips', async () => {
+  await mount(candidate({title:'Neue Reihe',assessment:assessment({recognition:{status:'NONE',parties:[]}})}));
+  const previous=globalThis.fetch;
+  globalThis.fetch=async (url,options={})=>url==='/api/v1/genres'?new Response('{}',{status:503}):previous(url,options);
+  await openReview();
+  assert.match(dialog().textContent,/Genreverwaltung antwortete mit HTTP 503/);
+  change(control('Standard-Startuhrzeit'),'22:00');
+  assert.equal(button('Ins Portfolio übernehmen',dialog()).disabled,true);
+  await settle(()=>dialog().querySelector('[aria-label="Dialog schließen"]').click());
+  globalThis.fetch=previous;
+  await openReview();
+  change(control('Standard-Startuhrzeit'),'22:30');
+  const emo=[...dialog().querySelectorAll('label')].find(label=>label.textContent==='Emo').querySelector('input');
+  act(()=>emo.click());
+  globalThis.fetch=async(url,options={})=>url.endsWith('/portfolio')?new Response(JSON.stringify({message:'Standardgenre inzwischen inaktiv'}),{status:400}):previous(url,options);
+  await settle(()=>button('Ins Portfolio übernehmen',dialog()).click());
+  assert.match(dialog().textContent,/Standardgenre inzwischen inaktiv/);
+  assert.equal(control('Standard-Startuhrzeit').value,'22:30');
+  assert.ok(dialog().querySelector('[aria-label="Genre Emo entfernen"]'));
+  act(()=>dialog().querySelector('[aria-label="Genre Emo entfernen"]').click());
+  assert.equal(emo.checked,false);
 });

@@ -12,7 +12,7 @@ public final class GenreCoverage {
         public Genre(String id,String displayName,Set<@NonNull String> terms) { this(id,displayName,terms,true); }
     }
     public record Result(int matched,int total,int percent,List<@NonNull String> names,boolean eligible,
-                         List<@NonNull String> sourceNames,List<@NonNull String> standardNames,String basis) { }
+                         List<@NonNull String> sourceNames,List<@NonNull String> standardNames,String basis,List<@NonNull String> suggestedStandardGenres) { }
     private static final JsonMapper JSON=JsonMapper.builder().build();
     private static final Pattern LABEL=Pattern.compile("(?im)(?:^|[\\n;])\\s*(?:genres?|musikrichtung|styles?)\\s*:\\s*([^\\n.;]+)");
     private GenreCoverage() { }
@@ -44,7 +44,18 @@ public final class GenreCoverage {
         for (var genre:basis.values()) if (genre.active()) names.add(Objects.requireNonNull(genre.displayName()));
         int total=basis.size(),matched=names.size();
         return new Result(matched,total,total==0 ? 0 : matched*100/total,List.copyOf(names),total>0 && matched*2>=total,
-            List.copyOf(sourceNames),List.copyOf(standardNames),!source.isEmpty() ? "SOURCE" : !defaults.isEmpty() ? "STANDARD" : "MISSING");
+            List.copyOf(sourceNames),List.copyOf(standardNames),!source.isEmpty() ? "SOURCE" : !defaults.isEmpty() ? "STANDARD" : "MISSING",suggestedStandards(event,genres));
+    }
+    /** Only explicit source declarations suggest defaults; title/text matches remain coverage evidence. */
+    private static List<@NonNull String> suggestedStandards(EventExtractor.Event event,List<@NonNull Genre> genres) {
+        Map<String,Genre> declared=new LinkedHashMap<>();
+        for (String list:declaredGenres(event.evidence())) for (String value:list.split("[,/|;+]|\\s+&\\s+")) {
+            if (value.matches("(?is).*(?:[?]|\\b(?:vermutlich|vielleicht|eventuell|evtl|möglich|unbestätigt|ungeprüft|possibly|unconfirmed|maybe|tbc)\\b).*")) continue;
+            addDeclared(declared,value,genres);
+        }
+        List<@NonNull String> names=new ArrayList<>();
+        for (var genre:declared.values()) if (genre.active()) names.add(Objects.requireNonNull(genre.displayName()));
+        return List.copyOf(names);
     }
     private static void addDeclared(Map<String,Genre> found,String value,List<@NonNull Genre> genres) {
         String text=value.trim();String normalized=EventNormalizer.text(text);

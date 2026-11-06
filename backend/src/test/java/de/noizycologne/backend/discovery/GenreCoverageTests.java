@@ -62,4 +62,14 @@ class GenreCoverageTests {
         assertThat(result.total()).isEqualTo(3);assertThat(result.percent()).isEqualTo(33);
     }
 
+    @Test void suggestionsOnlyUseExplicitActiveCatalogDeclarationsAndNeverGuessedTitleGenres() {
+        var genres=List.of(new GenreCoverage.Genre("emo","Emo",Set.of("Emo","Emocore")),new GenreCoverage.Genre("indie","Indie",Set.of("Indie")),new GenreCoverage.Genre("pop","Pop",Set.of("Pop"),false));
+        var guessed=new EventExtractor.Event("","Emo Party","",List.of(),"Vielleicht Indie","","");
+        assertThat(GenreCoverage.assess(guessed,genres,List.of("Emo")).suggestedStandardGenres()).isEmpty();
+        var explicit=new EventExtractor.Event("","Neue Reihe","",List.of(),"Genres: Emocore, vermutlich Indie, Pop, Unbekannt","","");
+        assertThat(GenreCoverage.assess(explicit,genres).suggestedStandardGenres()).containsExactly("Emo");
+        var structured=new EventExtractor.Event("","Neue Reihe","",List.of(),"{\"genre\":[\"Emocore\",\"Indie\",\"Pop\",\"Emo?\"]}","","");
+        assertThat(GenreCoverage.assess(structured,genres).suggestedStandardGenres()).containsExactly("Emo","Indie");
+    }
+
 }

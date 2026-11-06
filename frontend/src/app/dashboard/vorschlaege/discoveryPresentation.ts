@@ -7,12 +7,11 @@ export function isOpen(candidate: Candidate) {
 export function canApprovePortfolio(candidate: Candidate) {
   const assessment = candidate.assessment;
   return isOpen(candidate) && !candidate.party_id && candidate.title.length <= 200 &&
-    assessment?.recognition.status === "NONE" && assessment.lifecycle === "ACTIVE" &&
-    !assessment.importBlockers.length && !!candidate.genreCoverage?.eligible;
+    assessment?.recognition.status === "NONE" && assessment.lifecycle === "ACTIVE";
 }
 
 export function isNewSeries(candidate: Candidate) {
-  return canApprovePortfolio(candidate) && candidate.decision_origin === "AUTOMATIC" &&
+  return canApprovePortfolio(candidate) && !!candidate.genreCoverage?.eligible && !candidate.assessment?.importBlockers.length && candidate.decision_origin === "AUTOMATIC" &&
     !["PREPARED", "SENT"].includes(candidate.inquiry_status) &&
     candidate.assessment?.verification.status === "VERIFIED" && !!candidate.event_date;
 }
@@ -29,7 +28,7 @@ export function reviewReason(candidate: Candidate) {
   if (!candidate.event_date || assessment?.verification.status === "MISSING_DATA") return "Für die Übernahme fehlen verlässliche Terminangaben.";
   if (candidate.title.length > 200) return "Der Titel ist zu lang für einen eindeutigen Portfolio-Alias. Bitte die Partyreihe im Portfolio prüfen.";
   if (candidate.decision_origin === "MANUAL") return "Eine manuelle Entscheidung bleibt geschützt. Bitte die Zuordnung oder Rückfrage abschließen.";
-  if (!candidate.genreCoverage?.eligible && assessment?.recognition.status === "NONE") return "Die Genre-Übereinstimmung reicht für eine neue Portfolioaufnahme noch nicht aus.";
+  if (!candidate.genreCoverage?.eligible && assessment?.recognition.status === "NONE") return "Die automatische Genre-Übereinstimmung liegt unter 50 %. Eine Partyreihe kann nach Prüfung manuell aufgenommen werden.";
   return "Die Quelle oder die Zuordnung muss vor der Übernahme bestätigt werden.";
 }
 
