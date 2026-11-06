@@ -118,6 +118,13 @@ export default function DashboardModal({
         tabIndex={-1}
         className={`dashboard-modal ${variant === "drawer" ? "cc-drawer" : ""}`}
         onChangeCapture={() => {dirty.current = true;}}
+        onClickCapture={event => {
+          if (event.target instanceof HTMLElement && event.target.closest("[data-modal-dismiss]")) {
+            event.preventDefault();
+            event.stopPropagation();
+            requestClose();
+          }
+        }}
         role="dialog"
         aria-modal="true"
         aria-labelledby="dashboard-modal-title"

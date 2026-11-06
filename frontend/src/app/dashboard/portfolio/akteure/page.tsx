@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import {
   useCatalog,
   type Actor,
@@ -9,6 +9,8 @@ import {
   type ActorRole,
 } from "../../CatalogProvider";
 import DashboardModal from "../../DashboardModal";
+import DataCollection, { type CollectionColumn } from "../../DataCollection";
+import { useWorkspaceAction } from "../../workspaceActions";
 
 const inputStyle =
   "w-full rounded-lg border border-white/15 bg-neutral-900 " +
@@ -43,26 +45,11 @@ export default function ActorsPage() {
   const collectives = actors.filter(
     (actor) => actor.kind === "collective"
   );
-  const filteredActors = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase("de-DE");
-    return actors
-      .filter((actor) => {
-        if (!query) return true;
-        const collectiveNames = actor.collectiveIds
-          .map((id) => collectives.find((collective) => collective.id === id)?.name ?? "")
-          .join(" ");
-        return [
-          actor.name,
-          actor.instagram,
-          actor.kind === "person" ? "person dj act veranstalter" : "kollektiv",
-          collectiveNames,
-        ]
-          .join(" ")
-          .toLocaleLowerCase("de-DE")
-          .includes(query);
-      })
-      .sort((first, second) => first.name.localeCompare(second.name, "de-DE"));
-  }, [actors, collectives, search]);
+  const [kindFilter, setKindFilter] = useState("all");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const filteredActors = actors.filter(actor => (kindFilter === "all" || actor.kind === kindFilter) && (roleFilter === "all" || actor.roles.some(role => role === roleFilter)));
+  const collectiveNames = (actor: Actor) => actor.collectiveIds.map(id => collectives.find(collective => collective.id === id)?.name ?? "").filter(Boolean).join(", ");
+  const roleNames = (actor: Actor) => actor.roles.map(role => role === "dj" ? "DJ / Act" : "Veranstalter").join(", ");
 
   function createNew() {
     setEditingId(null);
@@ -179,6 +166,15 @@ export default function ActorsPage() {
     }
   }
 
+  useWorkspaceAction("Akteur anlegen", createNew, saving);
+  const columns: CollectionColumn<Actor>[] = [
+    {key: "name", label: "Name", sortValue: actor => actor.name, render: actor => <strong>{actor.name}</strong>},
+    {key: "kind", label: "Art", sortValue: actor => actor.kind, render: actor => actor.kind === "collective" ? "Kollektiv" : "Person"},
+    {key: "roles", label: "Rollen", render: actor => roleNames(actor) || "Keine Rolle"},
+    {key: "instagram", label: "Instagram", sortValue: actor => actor.instagram, render: actor => actor.instagram ? `@${actor.instagram}` : "Noch offen"},
+    {key: "collectives", label: "Mitglied bei", render: actor => collectiveNames(actor) || "Keine Zuordnung"},
+  ];
+
   return (
     <main className="app-page min-h-dvh bg-black px-4 py-6 text-white sm:py-8 md:px-10">
       <div className="mx-auto max-w-5xl">
@@ -199,7 +195,7 @@ export default function ActorsPage() {
           <button
             type="button"
             onClick={createNew}
-            className="min-h-11 rounded-lg border border-white/15 px-4 py-2 text-sm hover:bg-white/10"
+            className="cc-button cc-button-primary cc-page-primary"
           >
             + Neu anlegen
           </button>
@@ -211,108 +207,14 @@ export default function ActorsPage() {
           </p>
         )}
 
-        {/* Akteursliste */}
-        <section className="mt-8 rounded-xl border border-white/10 bg-neutral-950 p-5">
-          <div className="flex flex-wrap gap-3">
-            <input
-              aria-label="DJs und Kollektive durchsuchen"
-              className={`${inputStyle} min-w-0 flex-1`}
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Nach DJs, Kollektiven oder Handles suchen ..."
-            />
-          </div>
-
-          <div className="mt-6">
-          {actorsLoading ? (
-            <p className="py-6 text-center text-sm text-neutral-400" role="status">
-              Akteure werden aus PostgreSQL geladen ...
-            </p>
-          ) : actorsError ? (
-            <div className="py-6 text-sm" role="alert">
-              <p className="text-red-400">{actorsError}</p>
-              <button
-                type="button"
-                onClick={() => void reloadActors()}
-                className="mt-3 rounded-lg border border-white/20 px-4 py-2 text-white hover:bg-white/10"
-              >
-                Erneut versuchen
-              </button>
-            </div>
-          ) : filteredActors.length === 0 ? (
-            <p className="py-6 text-center text-sm text-neutral-500">
-              {search.trim()
-                ? "Keine passenden DJs oder Kollektive gefunden."
-                : "Noch keine DJs oder Kollektive erfasst."}
-            </p>
-          ) : (
-            <div className="divide-y divide-white/10">
-              {filteredActors.map((actor) => (
-                <div
-                  key={actor.id}
-                  className="flex flex-col items-stretch gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div>
-                    <p className="font-semibold">{actor.name}</p>
-
-                    <p className="mt-1 text-sm text-neutral-400">
-                      {actor.kind === "collective"
-                        ? "Kollektiv"
-                        : "Person"}
-                      {actor.roles.length > 0 &&
-                        ` · ${actor.roles
-                          .map((role) =>
-                            role === "dj" ? "DJ / Act" : "Veranstalter"
-                          )
-                          .join(", ")}`}
-                    </p>
-
-                    {actor.instagram && (
-                      <p className="mt-1 text-sm text-neutral-500">
-                        @{actor.instagram}
-                      </p>
-                    )}
-
-                    {actor.collectiveIds.length > 0 && (
-                      <p className="mt-1 text-xs text-neutral-500">
-                        Mitglied bei:{" "}
-                        {actor.collectiveIds
-                          .map(
-                            (id) =>
-                              collectives.find((c) => c.id === id)?.name
-                          )
-                          .filter(Boolean)
-                          .join(", ")}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => editActor(actor)}
-                      className="min-h-11 rounded-lg border border-white/15 px-4 py-2 text-sm hover:bg-white/10"
-                    >
-                      Bearbeiten
-                    </button>
-                    <button
-                      type="button"
-                      disabled={deletingId === actor.id}
-                      onClick={() => void removeActor(actor)}
-                      className="min-h-11 rounded-lg border border-red-400/40 px-4 py-2 text-sm text-red-300 hover:bg-red-950/30 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {deletingId === actor.id ? "Löschen ..." : "Löschen"}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          </div>
+        <section className="cc-catalog-list" aria-label="Akteure">
+          {actorsLoading ? <p className="cc-empty" role="status">Akteure werden geladen …</p>
+          : actorsError ? <div className="cc-message" role="alert"><p>{actorsError}</p><button type="button" className="cc-button" onClick={() => void reloadActors()}>Erneut versuchen</button></div>
+          : <DataCollection items={filteredActors} columns={columns} label="Akteure" storageKey="noizy-view-actors" getName={actor => actor.name} onOpen={editActor} openDisabled={saving || deletingId !== null} query={search} onQueryChange={setSearch} searchLabel="DJs und Kollektive durchsuchen" searchText={actor => [actor.name, actor.instagram, actor.kind === "collective" ? "Kollektiv" : "Person", roleNames(actor), collectiveNames(actor)].join(" ")} empty={actors.length ? "Keine passenden DJs oder Kollektive gefunden." : "Noch keine DJs oder Kollektive erfasst."} selectedId={editorOpen ? editingId : null} toolbar={<><label className="cc-inline-filter">Art<select className="cc-input" value={kindFilter} onChange={event => setKindFilter(event.target.value)}><option value="all">Alle</option><option value="person">Personen</option><option value="collective">Kollektive</option></select></label><label className="cc-inline-filter">Rolle<select className="cc-input" value={roleFilter} onChange={event => setRoleFilter(event.target.value)}><option value="all">Alle</option><option value="dj">DJ / Act</option><option value="organizer">Veranstalter</option></select></label></>} actions={actor => <div className="cc-inline-actions"><button type="button" className="cc-button" disabled={saving || deletingId !== null} onClick={() => editActor(actor)}>Bearbeiten</button><button type="button" className="cc-button cc-button-danger" disabled={deletingId !== null} onClick={() => void removeActor(actor)}>{deletingId === actor.id ? "Löschen ..." : "Löschen"}</button></div>} />}
         </section>
 
         {/* Akteur-Editor */}
-        <DashboardModal
+        <DashboardModal variant="drawer" protectChanges
           open={editorOpen}
           onClose={() => setEditorOpen(false)}
           title={editingId ? "Akteur bearbeiten" : "Neuer Akteur"}
@@ -435,7 +337,7 @@ export default function ActorsPage() {
 
               <button
                 type="button"
-                onClick={() => setEditorOpen(false)}
+                data-modal-dismiss
                 className="rounded-lg border border-white/15 px-5 py-3 text-sm"
               >
                 Abbrechen

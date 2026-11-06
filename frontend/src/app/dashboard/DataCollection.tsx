@@ -4,16 +4,16 @@ import { preferenceStore } from "../ThemeProvider";
 
 export type CollectionColumn<T> = {key: string; label: string; render: (item: T) => ReactNode; sortValue?: (item: T) => string | number; className?: string};
 const views = ["table", "cards"] as const;
-export default function DataCollection<T extends {id: string}>({items, columns, label, getName, onOpen, actions, renderCard, storageKey, searchText, searchLabel = "Einträge durchsuchen", query, onQueryChange, toolbar, empty = "Keine Einträge gefunden.", pageSize = 25, selectedId, openDisabled = false}: {
+export default function DataCollection<T extends {id: string}>({items, columns, label, getName, onOpen, actions, renderCard, storageKey, searchText, searchLabel = "Einträge durchsuchen", query, onQueryChange, toolbar, empty = "Keine Einträge gefunden.", pageSize = 25, selectedId, openDisabled = false, initialSortKey}: {
   items: T[]; columns: CollectionColumn<T>[]; label: string; getName: (item: T) => string;
   onOpen?: (item: T) => void; actions?: (item: T) => ReactNode; renderCard?: (item: T) => ReactNode;
   storageKey: string; searchText?: (item: T) => string; searchLabel?: string; query?: string; onQueryChange?: (query: string) => void;
-  toolbar?: ReactNode; empty?: ReactNode; pageSize?: number; selectedId?: string | null; openDisabled?: boolean;
+  toolbar?: ReactNode; empty?: ReactNode; pageSize?: number; selectedId?: string | null; openDisabled?: boolean; initialSortKey?: string;
 }) {
   const viewStore = useMemo(() => preferenceStore(storageKey, views, "table", `${storageKey}-change`), [storageKey]);
   const view = useSyncExternalStore(viewStore.subscribe, viewStore.getSnapshot, viewStore.getServerSnapshot);
   const [localQuery, setLocalQuery] = useState("");
-  const [sort, setSort] = useState({key: columns[0]?.key ?? "", ascending: true});
+  const [sort, setSort] = useState({key: initialSortKey ?? columns[0]?.key ?? "", ascending: true});
   const [page, setPage] = useState(0);
   const search = query ?? localQuery;
   const matching = useMemo(() => {

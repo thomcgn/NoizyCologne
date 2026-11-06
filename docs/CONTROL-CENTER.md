@@ -9,7 +9,7 @@ Bestehende APIs, Authentifizierung, Redaktion und Absageabläufe bleiben erhalte
 
 1. Designsystem und Desktop-Shell – umgesetzt und lokal geprüft.
 2. Discovery als kompakte Arbeitsliste – umgesetzt und lokal geprüft.
-3. Portfolio/Kalender, Tabellen und Detailbereiche – ausstehend.
+3. Portfolio/Kalender, Tabellen und Detailbereiche – umgesetzt und lokal geprüft.
 4. Globale Suche und Command-Palette – ausstehend.
 5. Redaktion und mobile PWA – ausstehend.
 
@@ -83,3 +83,26 @@ unter `.quality/control-center/phase-2/`, Desktopliste und mobiler Light-Drawer
 geöffnet und gesichtet. Ausschließlich synthetische Daten, keine API-Schreibaufrufe.
 Live-IDE-/echte Mobilgeräteprüfung und CI-FULL sind damit nicht nachgewiesen.
 Phasen 3–5 bleiben offen; der Aufgaben-PR bleibt ein Entwurf.
+
+
+## Phase 3
+
+Partyreihen, Locations und Akteure verwenden kompakte, sortierbare Tabellen mit
+Suche und 25 Einträgen je Seite. Beziehungen, Genres, Turnus und Flyerstatus
+bleiben sichtbar. Akteure filtern nach Art/Rolle, Kalendereinträge nach Location
+und Party/Sperre. Kalenderliste startet chronologisch; bestätigte Absagen und
+Sperren bleiben gekennzeichnet. Details und Bearbeitung öffnen seitliche Dialoge
+mit Fokusführung und Abbruchschutz; erfolgreiches Speichern schließt direkt.
+Der Kalendereditor scrollt auf kleinen Displays ohne verkleinerte Schrift.
+
+Prüfungen: TypeScript und vollständiges ESLint erfolgreich; nach Korrektur zweier
+Testannahmen (Rückgabe des Speicher-Mocks und bestehendes Trimmen von Notizen)
+61 Frontendtests erfolgreich. Neun Chrome-Szenarien für alle vier Ansichten bei
+1440/768/390/320 px, drei Themes, beiden Dichten und leeren/fehlerhaften Antworten
+erfolgreich. Suche, Drawer, Fokus-Rückkehr und fehlender Seitenüberlauf geprüft;
+Desktoptabelle und mobiler Light-Kalenderdialog tatsächlich gesichtet. Artefakte:
+`.quality/control-center/phase-3/`. Ein erster Build kollidierte mit dem isolierten
+Vorschauserver im Next-Ausgabeverzeichnis; Wiederholung nach dessen Beenden
+erfolgreich. Regulärer QUICK-Hook als Commitprüfung.
+Kein Zugriff auf echte Daten und keine API-Schreibaufrufe in den Browserszenarien.
+Live-IDE-/Geräteprüfung und CI-FULL bleiben gesonderte Abnahmegrenzen.

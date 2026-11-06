@@ -165,12 +165,9 @@ export default function EntryEditor({
   return (
     <form
       onSubmit={saveEntry}
-      className="mt-6 rounded-xl border border-white/10 bg-neutral-950 p-4 sm:p-6"
+      className="cc-entry-form"
     >
       <div className="mb-6">
-        <h2 className="text-xl font-semibold">
-          {entry ? "Kalendereintrag bearbeiten" : "Neuer Kalendereintrag"}
-        </h2>
         <p className="mt-1 text-sm text-neutral-400">{formattedDate}</p>
       </div>
 
@@ -415,6 +412,7 @@ export default function EntryEditor({
         <button
           type="button"
           onClick={onCancel}
+          data-modal-dismiss
           className="rounded-lg border border-white/15 px-5 py-3 text-sm hover:bg-white/10"
         >
           Abbrechen

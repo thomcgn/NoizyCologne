@@ -13,6 +13,8 @@ import {
   type RecurrenceRule,
 } from "../CatalogProvider";
 import DashboardModal from "../DashboardModal";
+import DataCollection, { type CollectionColumn } from "../DataCollection";
+import { useWorkspaceAction } from "../workspaceActions";
 import SourceOverview, {type DiscoverySource} from "../SourceOverview";
 
 export type Category = "parties" | "locations";
@@ -180,12 +182,6 @@ export default function PortfolioPage({
 
   const items: CatalogItem[] =
     category === "parties" ? parties : venues;
-
-  const filteredItems = items.filter((item) =>
-    item.name
-      .toLocaleLowerCase("de-DE")
-      .includes(search.toLocaleLowerCase("de-DE"))
-  );
 
   const djActors = actors.filter(
     (actor) =>
@@ -460,6 +456,26 @@ export default function PortfolioPage({
     resetForm();
   }
 
+  useWorkspaceAction(category === "parties" ? "Partyreihe anlegen" : "Location anlegen", createNew, saving);
+  const columns: CollectionColumn<CatalogItem>[] = [
+    {key: "name", label: category === "parties" ? "Partyreihe" : "Location", sortValue: item => item.name, render: item => <strong>{item.name}</strong>},
+    {key: "instagram", label: "Instagram", sortValue: item => item.instagram, render: item => item.instagram ? `@${item.instagram}` : "Noch offen"},
+    ...(category === "parties" ? [
+      {key: "genres", label: "Genres", render: (item: CatalogItem) => <div className="cc-tags">{parties.find(party => party.id === item.id)?.standardGenres.map(genre => <span key={genre}>{genre}</span>)}</div>},
+      {key: "recurrence", label: "Turnus", render: (item: CatalogItem) => describeRecurrence(parties.find(party => party.id === item.id)?.recurrence ?? null)},
+      {key: "actors", label: "Beteiligte", render: (item: CatalogItem) => { const party = parties.find(party => party.id === item.id); return party ? <div className="cc-cell-details">{party.residentDjIds.length > 0 && <p>Residents: {getActorNames(party.residentDjIds)}</p>}{party.otherDjIds.length > 0 && <p>Weitere DJs: {getActorNames(party.otherDjIds)}</p>}{party.organizerIds.length > 0 && <p>Veranstalter: {getActorNames(party.organizerIds)}</p>}{party.residentDjIds.length + party.otherDjIds.length + party.organizerIds.length === 0 && "Noch offen"}</div> : "Noch offen"; }},
+      {key: "flyer", label: "Dauerflyer", render: (item: CatalogItem) => parties.find(party => party.id === item.id)?.defaultFlyer ? "Vorhanden" : "Kein Flyer"},
+    ] : [
+      {key: "website", label: "Website", render: (item: CatalogItem) => <span className="cc-cell-details">{item.websiteUrl || "Noch offen"}</span>},
+      {key: "discovery", label: "Discovery", sortValue: (item: CatalogItem) => item.discoveryEnabled ? 1 : 0, render: (item: CatalogItem) => <span className="cc-status">{item.discoveryEnabled ? "Aktiv" : "Inaktiv"}</span>},
+      {key: "source", label: "Quellenstatus", render: (item: CatalogItem) => item.discoveryStatus ? discoveryStatusLabel(item.discoveryStatus) : "Noch nicht geprüft"},
+    ]),
+  ];
+  function searchableItem(item: CatalogItem) {
+    const party = category === "parties" ? parties.find(party => party.id === item.id) : undefined;
+    return [item.name, item.instagram, item.websiteUrl, party?.standardGenres.join(" "), party ? getActorNames([...party.residentDjIds, ...party.otherDjIds, ...party.organizerIds]) : ""].join(" ");
+  }
+
   return (
     <main className="app-page min-h-dvh bg-black px-4 py-6 text-white sm:py-8 md:px-10">
       <div className="mx-auto max-w-6xl">
@@ -482,7 +498,7 @@ export default function PortfolioPage({
           <button
             type="button"
             onClick={createNew}
-            className="min-h-11 rounded-lg border border-white/15 px-4 py-2 text-sm hover:bg-white/10"
+            className="cc-button cc-button-primary cc-page-primary"
           >
             + Neu anlegen
           </button>
@@ -532,128 +548,14 @@ export default function PortfolioPage({
           </p>
         )}
 
-        {/* Suche und Liste */}
-        <section className="mt-6 rounded-xl border border-white/10 bg-neutral-950 p-5">
-          <div className="flex flex-wrap gap-3">
-            <input
-              aria-label="Einträge durchsuchen"
-              className={`${inputStyle} min-w-0 flex-1`}
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Nach Namen suchen ..."
-            />
-
-          </div>
-
-          <div className="mt-6 divide-y divide-white/10">
-            {category === "parties" && partiesLoading ? (
-              <p className="py-6 text-sm text-neutral-400" role="status">
-                Partyreihen werden aus PostgreSQL geladen ...
-              </p>
-            ) : category === "parties" && partiesError ? (
-              <div className="py-6 text-sm" role="alert">
-                <p className="text-red-400">{partiesError}</p>
-                <button
-                  type="button"
-                  onClick={() => void reloadParties()}
-                  className="mt-3 rounded-lg border border-white/20 px-4 py-2 text-white hover:bg-white/10"
-                >
-                  Erneut versuchen
-                </button>
-              </div>
-            ) : category === "locations" && venuesLoading ? (
-              <p className="py-6 text-sm text-neutral-400" role="status">
-                Locations werden aus PostgreSQL geladen ...
-              </p>
-            ) : category === "locations" && venuesError ? (
-              <div className="py-6 text-sm" role="alert">
-                <p className="text-red-400">{venuesError}</p>
-                <button
-                  type="button"
-                  onClick={() => void reloadVenues()}
-                  className="mt-3 rounded-lg border border-white/20 px-4 py-2 text-white hover:bg-white/10"
-                >
-                  Erneut versuchen
-                </button>
-              </div>
-            ) : filteredItems.length === 0 ? (
-              <p className="py-6 text-sm text-neutral-500">
-                Keine Einträge gefunden.
-              </p>
-            ) : (
-              filteredItems.map((item) => {
-                const party =
-                  category === "parties"
-                    ? parties.find((p) => p.id === item.id)
-                    : undefined;
-
-                return (
-                  <div
-                    key={item.id}
-                    className="flex flex-col items-stretch gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-medium">{item.name}</p>
-
-                      <p className="mt-1 text-sm text-neutral-500">
-                        {item.instagram
-                          ? `@${item.instagram}`
-                          : "Instagram unbekannt"}
-                      </p>
-
-                      {party && (
-                        <div className="mt-2 space-y-1 text-xs text-neutral-400">
-                          <p>Turnus: {describeRecurrence(party.recurrence)}</p>
-                          {party.residentDjIds.length > 0 && (
-                            <p>
-                              Residents:{" "}
-                              {getActorNames(party.residentDjIds)}
-                            </p>
-                          )}
-
-                          {party.otherDjIds.length > 0 && (
-                            <p>
-                              Weitere DJs:{" "}
-                              {getActorNames(party.otherDjIds)}
-                            </p>
-                          )}
-
-                          {party.organizerIds.length > 0 && (
-                            <p>
-                              Veranstalter:{" "}
-                              {getActorNames(party.organizerIds)}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => editItem(item)}
-                        className="min-h-11 rounded-lg border border-white/15 px-4 py-2 text-sm hover:bg-white/10"
-                      >
-                        Bearbeiten
-                      </button>
-                      <button
-                        type="button"
-                        disabled={deletingId === item.id}
-                        onClick={() => void deleteItem(item)}
-                        className="min-h-11 rounded-lg border border-red-400/40 px-4 py-2 text-sm text-red-300 hover:bg-red-950/30 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {deletingId === item.id ? "Löschen ..." : "Löschen"}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
+        <section className="cc-catalog-list" aria-label={category === "parties" ? "Partyreihen" : "Locations"}>
+          {(category === "parties" ? partiesLoading : venuesLoading) ? <p className="cc-empty" role="status">Einträge werden geladen …</p>
+          : (category === "parties" ? partiesError : venuesError) ? <div className="cc-message" role="alert"><p>{category === "parties" ? partiesError : venuesError}</p><button type="button" className="cc-button" onClick={() => void (category === "parties" ? reloadParties() : reloadVenues())}>Erneut versuchen</button></div>
+          : <DataCollection key={category} items={items} columns={columns} label={category === "parties" ? "Partyreihen" : "Locations"} storageKey={`noizy-view-${category}`} getName={item => item.name} onOpen={editItem} openDisabled={saving || deletingId !== null} query={search} onQueryChange={setSearch} searchText={searchableItem} selectedId={editorOpen ? editingId : null} actions={item => <div className="cc-inline-actions"><button type="button" className="cc-button" disabled={saving || deletingId !== null} onClick={() => editItem(item)}>Bearbeiten</button><button type="button" className="cc-button cc-button-danger" disabled={deletingId !== null} onClick={() => void deleteItem(item)}>{deletingId === item.id ? "Löschen ..." : "Löschen"}</button></div>} />}
         </section>
 
         {/* Editor */}
-        <DashboardModal
+        <DashboardModal variant="drawer" protectChanges
           open={editorOpen}
           onClose={() => {
             setEditorOpen(false);
@@ -1087,10 +989,7 @@ export default function PortfolioPage({
 
               <button
                 type="button"
-                onClick={() => {
-                  setEditorOpen(false);
-                  resetForm();
-                }}
+                data-modal-dismiss
                 className="rounded-lg border border-white/15 px-5 py-3 text-sm"
               >
                 Abbrechen

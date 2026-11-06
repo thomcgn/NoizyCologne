@@ -198,3 +198,14 @@ html[data-density="compact"] .cc-description { max-width: 75ch; }
   .cc-table .cc-button { min-height: 44px; }
   .cc-input { font-size: 16px; }
 }
+
+.cc-catalog-list { margin-top: var(--ui-section-gap); min-width: 0; }
+.cc-cell-details { max-width: 320px; overflow-wrap: anywhere; font-size: 0.75rem; color: var(--muted-strong); line-height: 1.7; }
+.cc-inline-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.cc-button-danger, .cc-status-danger { color: var(--danger); }
+.cc-list-heading { gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
+.cc-list-heading h2 { font-weight: 600; margin-bottom: 5px; }
+.cc-calendar-name { display: inline-flex; align-items: center; gap: 8px; }
+.cc-color-dot { width: 8px; height: 8px; flex-shrink: 0; border: 1px solid var(--line-strong); border-radius: 50%; }
+.cc-drawer .cc-entry-form { margin: 0; border: 0; padding: 0; }
+.cc-drawer .dashboard-modal-content { min-height: 0; overscroll-behavior: contain; }

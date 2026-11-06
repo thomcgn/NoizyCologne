@@ -54,10 +54,36 @@ try {
     for (const route of ['/dashboard/vorschlaege', '/dashboard/partys', '/dashboard/djs', '/dashboard/locations', '/dashboard/kalender', '/dashboard/redaktion', '/dashboard/settings', '/dashboard/automatisierung']) {
       if (phase === 1 && !['/dashboard/settings', '/dashboard/automatisierung'].includes(route)) continue;
       if (phase === 2 && route !== '/dashboard/vorschlaege') continue;
+      if (phase === 3 && !['/dashboard/partys', '/dashboard/djs', '/dashboard/locations', '/dashboard/kalender'].includes(route)) continue;
       await page.goto(`${origin}${route}`);
       await page.locator('main h1').waitFor();
       await page.waitForTimeout(180);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} ${route}: horizontal overflow`);
+      if (phase === 3) {
+        const collection = page.locator('.cc-collection');
+        if (state === 'populated') {
+          await collection.locator('[data-record-id]').first().waitFor();
+          const count = await collection.locator('[data-record-id]').count();
+          assert.ok(count > 0 && count <= 25);
+          const search = collection.getByRole('searchbox');
+          await search.fill('no-such-fixture-record');
+          assert.equal(await collection.locator('[data-record-id]').count(), 0);
+          await search.fill('');
+          const trigger = collection.locator('[data-record-open]').first();
+          await trigger.click();
+          const drawer = page.getByRole('dialog');
+          await drawer.waitFor();
+          assert.equal(await drawer.evaluate(element => element.contains(document.activeElement)), true);
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+          await page.screenshot({path: `${out}/${name}-${route.split('/').at(-1)}-drawer.png`});
+          await page.keyboard.press('Escape');
+          await drawer.waitFor({state: 'detached'});
+          assert.equal(await trigger.evaluate(element => element === document.activeElement), true);
+        } else if (state === 'empty') {
+          await collection.getByRole('status').filter({hasText: '0 Einträge'}).waitFor();
+        } else await page.getByRole('alert').first().waitFor();
+        await page.screenshot({path: `${out}/${name}-${route.split('/').at(-1)}.png`, fullPage: true});
+      }
       if (phase === 2 && route === '/dashboard/vorschlaege') {
         const fresh = page.getByRole('region', {name: 'Neue Partyreihen', exact: true});
         await fresh.waitFor();
