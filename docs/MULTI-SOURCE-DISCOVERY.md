@@ -41,3 +41,20 @@ aktiviert werden; keine Einstellungen wurden ungefragt verändert.
 Grenze: QUICK ersetzt Integrationstests nicht. Umfangreiche Backendänderungen
 benötigen STANDARD, PR/Integration/Freigabe benötigt FULL für den akzeptierten
 Commit. IDE-Zugriff und erfolgreiche CLI-Diagnosen sind getrennt auszuweisen.
+
+## Phase 2 – einheitliches Quellenmodell
+
+V16 ergänzt die bestehende Quellentabelle um Art (Website, offizieller Veranstalter,
+offizielle Tickets, Plattform, sonstige Quelle), Aktivierung, Priorität, fachliche
+Abrufqualität, Eventzahl und Fallbackkennzeichnung. Bestehende URLs, Profile und
+Freigaben bleiben erhalten. Ungeprüfte Altquellen werden nicht nachträglich als
+erfolgreich ausgegeben. Die Location erhält einen getrennten letzten Versuch und
+Qualität/Zähler. Keine neue Infrastruktur oder konkurrierende Quellenverwaltung.
+
+`SourceQualityTests` prüfen die fünf Qualitätsklassen mit statischer vollständiger
+Liste, bestätigtem Leerbestand, unbekanntem HTML sowie einer MTC-artigen
+unvollständigen Browserantwort. Quellenkonfiguration wird unter demselben
+Transaktionslock wie Import/Prüfentscheidungen gespeichert. Vorhandene API-Aufrufe
+ohne neue Felder bleiben kompatibel. Quellenherkunft ist aus dem bestehenden
+Beobachtungsprotokoll abrufbar; Migration und Persistenz werden mit dem nachfolgenden
+Integrationstest in einer eigenen Testdatenbank geprüft, nicht in QUICK behauptet.

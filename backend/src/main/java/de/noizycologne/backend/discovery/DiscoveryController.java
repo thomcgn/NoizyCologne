@@ -100,17 +100,32 @@ public class DiscoveryController {
         importer.importCandidate(id,r.partyId(),r.date(),true);
     }
     @GetMapping("/candidates/{id}/dm") public Map<String,String> dm(@PathVariable String id) { return Map.of("text",importer.dm(id)); }
+    @GetMapping("/candidates/{id}/sources") public List<Map<String,Object>> origins(@PathVariable String id) {
+        store.candidate(id);return store.origins(id);
+    }
     public record Source(@NotBlank String venueId,@NotBlank @Size(max=2048) String url,boolean approved,
-                         @Size(max=300) String itemSelector,@Size(max=300) String titleSelector,@Size(max=300) String dateSelector) { }
-    @PostMapping("/sources") public Map<String,String> source(@Valid @RequestBody Source r) {
+                         @Size(max=300) String itemSelector,@Size(max=300) String titleSelector,@Size(max=300) String dateSelector,
+                         @jakarta.validation.constraints.Pattern(regexp="WEBSITE|OFFICIAL_ORGANIZER|OFFICIAL_TICKETS|PLATFORM|CUSTOM") String sourceKind,
+                         Boolean enabled,@Min(0) @Max(999) Integer priority) {
+        public Source(String venueId,String url,boolean approved,String item,String title,String date) {
+            this(venueId,url,approved,item,title,date,null,null,null);
+        }
+    }
+    @PostMapping("/sources") @org.springframework.transaction.annotation.Transactional
+    public Map<String,String> source(@Valid @RequestBody Source r) {
         SafeUrls.parse(r.url());
         if (!Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM venues WHERE id=?)",Boolean.class,r.venueId()))) throw new IllegalArgumentException("Location fehlt");
         String website=store.jdbc().queryForObject("SELECT website_url FROM venues WHERE id=?",String.class,r.venueId());
         boolean official=website!=null && !website.isBlank() && SafeUrls.parse(website).getHost().equalsIgnoreCase(SafeUrls.parse(r.url()).getHost());
-        String id=store.source(r.venueId(),r.url(),official ? "OFFICIAL" : "EXTERNAL",r.approved());
         for (String selector : List.of(Objects.toString(r.itemSelector(),""),Objects.toString(r.titleSelector(),""),Objects.toString(r.dateSelector(),"")))
             if (!selector.isBlank()) org.jsoup.Jsoup.parse("").select(selector);
-        store.jdbc().update("UPDATE discovery_sources SET approved=?,is_seed=true,item_selector=?,title_selector=?,date_selector=? WHERE id=?",r.approved(),Objects.toString(r.itemSelector(),""),Objects.toString(r.titleSelector(),""),Objects.toString(r.dateSelector(),""),id);
+        store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
+        String id=store.source(r.venueId(),r.url(),official ? "OFFICIAL" : "EXTERNAL",r.approved());
+        store.jdbc().update("""
+            UPDATE discovery_sources SET approved=?,is_seed=true,item_selector=?,title_selector=?,date_selector=?,
+             source_kind=COALESCE(?,source_kind),enabled=COALESCE(?,enabled),priority=COALESCE(?,priority) WHERE id=?
+            """,r.approved(),Objects.toString(r.itemSelector(),""),Objects.toString(r.titleSelector(),""),Objects.toString(r.dateSelector(),""),
+            r.sourceKind(),r.enabled(),r.priority(),id);
         return Map.of("id",id);
     }
     @GetMapping("/parties/{id}/aliases") public List<String> aliases(@PathVariable String id) {

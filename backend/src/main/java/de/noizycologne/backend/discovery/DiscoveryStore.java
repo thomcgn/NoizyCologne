@@ -52,13 +52,21 @@ public class DiscoveryStore {
         db.update("INSERT INTO discovery_sources(id,venue_id,url,source_type,approved) VALUES (?,?,?,?,?) ON CONFLICT(venue_id,url) DO UPDATE SET source_type=excluded.source_type, approved=CASE WHEN discovery_sources.source_type='OFFICIAL' AND excluded.source_type='EXTERNAL' THEN false ELSE discovery_sources.approved END", id, venue, url, type, approved);
         return db.queryForObject("SELECT id FROM discovery_sources WHERE venue_id=? AND url=?", String.class, venue, url);
     }
+    public List<Map<String,Object>> origins(String candidate) {
+        return db.queryForList("""
+            SELECT DISTINCT ON (o.source_id) s.url,s.source_kind,s.approved,o.event_data,o.observed_at
+            FROM discovery_observations o JOIN discovery_sources s ON s.id=o.source_id
+            WHERE o.candidate_id=? ORDER BY o.source_id,o.observed_at DESC,o.id DESC
+            """,candidate).stream().map(DiscoveryStore::forApi).toList();
+    }
     public void fetched(String id,VenueSourceDiscoveryService.Found found) {
         String diagnostics=String.join("; ",found.diagnostics());
         db.update("""
-            UPDATE discovery_sources SET status=?,last_fetched_at=now(),fetch_method=?,scan_complete=?,fetch_diagnostics=?,
-            last_success_at=CASE WHEN ? IN ('EVENTS_FOUND','NO_EVENTS','EXCLUDED_CONCERTS') THEN now() ELSE last_success_at END WHERE id=?
+            UPDATE discovery_sources SET status=?,last_fetched_at=now(),fetch_method=?,scan_complete=?,fetch_diagnostics=?,quality=?,event_count=?,
+            last_success_at=CASE WHEN ? OR ?='NO_EVENTS_CONFIRMED' THEN now() ELSE last_success_at END WHERE id=?
             """,found.extraction().status(),found.fetchMethod(),found.extraction().complete(),
-            diagnostics.substring(0,Math.min(2000,diagnostics.length())),found.extraction().status(),id);
+            diagnostics.substring(0,Math.min(2000,diagnostics.length())),SourceQuality.assess(found),found.extraction().events().size(),
+            !found.extraction().events().isEmpty(),SourceQuality.assess(found),id);
     }
     public void audit(String id,String oldStatus,String operation) {
         audit(id,oldStatus,operation,Objects.toString(candidate(id).get("matching_class"),null));
