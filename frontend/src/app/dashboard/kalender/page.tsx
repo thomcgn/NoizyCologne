@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import Image from "next/image";
 import { berlinDate } from "./calendarNavigation";
 import {
   toDateKey,
@@ -96,6 +97,7 @@ function CalendarContent() {
   const infoParty = infoEntry?.type === "event"
     ? parties.find((party) => party.id === infoEntry.partyId)
     : undefined;
+  const infoFlyer = infoEntry?.type === "event" ? infoEntry.eventFlyer ?? infoParty?.defaultFlyer : null;
 
   function getEntryName(entry: CalendarEntry) {
     if (entry.type === "closure") return entry.reason;
@@ -456,13 +458,18 @@ function CalendarContent() {
 
         {infoEntry && <DashboardModal variant="drawer" open onClose={() => setInfoEntryId(null)} title={getEntryName(infoEntry)} description={dateFromKey(infoEntry.date).toLocaleDateString("de-DE", {weekday: "long", day: "2-digit", month: "long", year: "numeric"})}>
           <span className={`cc-status ${infoEntry.eventStatus === "CANCELLED" ? "cc-status-danger" : ""}`}>{infoEntry.eventStatus === "CANCELLED" ? "ABGESAGT" : infoEntry.type === "closure" ? "Location-Sperre" : "Veranstaltung"}</span>
+          {infoEntry.type === "event" && <figure className="mt-5 rounded-xl border border-white/10 bg-black/10 p-3">
+            {infoFlyer ? <><a href={infoFlyer.url} target="_blank" rel="noreferrer" aria-label="Flyer größer öffnen">
+              <Image src={infoFlyer.url} width={1200} height={1200} unoptimized alt={`${infoEntry.eventFlyer ? "Event-Flyer" : "Dauerflyer"} ${getEntryName(infoEntry)}`} className="mx-auto object-contain" style={{ width: "auto", height: "auto", maxWidth: "100%", maxHeight: "65vh" }} />
+            </a><figcaption className="mt-2 text-center text-xs text-neutral-500">Flyer zum Vergrößern öffnen</figcaption></> : <p className="py-8 text-center text-sm text-neutral-500">Noch kein Flyer hinterlegt</p>}
+          </figure>}
               <dl className="mt-5 space-y-3 text-sm">
                 <div><dt className="text-neutral-500">Location</dt><dd className="mt-1 text-white">{infoVenue?.name ?? "Unbekannte Location"}</dd></div>
                 {infoEntry.type === "event" && infoEntry.startTime && <div><dt className="text-neutral-500">Beginn</dt><dd className="mt-1 text-white">{infoEntry.startTime} Uhr</dd></div>}
                 {infoParty && <div><dt className="text-neutral-500">Partyreihe</dt><dd className="mt-1 text-white">{infoParty.name}</dd></div>}
                 {infoEntry.type === "event" && infoEntry.entryPrice && <div><dt className="text-neutral-500">Eintritt</dt><dd className="mt-1 text-white">{infoEntry.entryPrice}</dd></div>}
                 {infoEntry.type === "closure" && <div><dt className="text-neutral-500">Grund</dt><dd className="mt-1 text-white">{infoEntry.reason}</dd></div>}
-                {infoEntry.notes && <div><dt className="text-neutral-500">Notizen</dt><dd className="mt-1 whitespace-pre-wrap text-white">{infoEntry.notes}</dd></div>}
+                {infoEntry.type === "closure" && infoEntry.notes && <div><dt className="text-neutral-500">Notizen</dt><dd className="mt-1 whitespace-pre-wrap text-white">{infoEntry.notes}</dd></div>}
               </dl>
           <div className="mt-6 flex justify-end"><button type="button" className="cc-button cc-button-primary" onClick={() => {setInfoEntryId(null); editFromList(infoEntry);}}>Bearbeiten</button></div>
         </DashboardModal>}

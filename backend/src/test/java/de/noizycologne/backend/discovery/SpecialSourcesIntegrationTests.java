@@ -30,6 +30,7 @@ class SpecialSourcesIntegrationTests {
     @Autowired DiscoveryScheduler scheduler;
     @Autowired DiscoveryController controller;
     @Autowired EventImportService importer;
+    @Autowired de.noizycologne.backend.calendar.CalendarEntryService calendar;
     @Autowired VenueRepository venues;
     @Autowired PartySeriesRepository parties;
     @Autowired org.springframework.web.context.WebApplicationContext context;
@@ -61,6 +62,83 @@ class SpecialSourcesIntegrationTests {
         when(discovery.discoverSpecial(eq(root),any())).thenReturn(List.of(new VenueSourceDiscoveryService.Found(URI.create(root),new EventExtractor.Extraction(List.of(event),"EVENTS_FOUND",true))));
     }
     String candidate() {return requireNonNull(store.jdbc().queryForObject("SELECT id FROM discovery_candidates WHERE source_id=?",String.class,source));}
+    void approveSource(boolean approved) throws Exception {
+        mvc.perform(requireNonNull(put("/api/v1/discovery/special-sources/"+source).contentType("application/json")
+            .content("{\"name\":\"QRUSH\",\"url\":\""+root+"\",\"approved\":"+approved+"}"))).andExpect(status().isOk());
+    }
+    @Test void confirmedVenueAndApprovedPortalUseRegularImportWithoutDuplicatesOrEditorialApproval() throws Exception {
+        geography.remember(blue.getId(),event("one",party.getName(),blue.getName(),""),root);
+        approveSource(true);
+        scheduler.scan();scheduler.scan();
+        var row=store.candidate(candidate());
+        assertThat(row).containsEntry("venue_id",blue.getId()).containsEntry("status","IMPORTED").containsEntry("decision_origin","AUTOMATIC");
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,blue.getId())).isEqualTo(1);
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM editorial_post_drafts WHERE calendar_entry_id=?",Integer.class,row.get("calendar_entry_id"))).isZero();
+        assertThat(store.jdbc().queryForObject("SELECT candidate_id FROM discovery_geo_events WHERE source_id=?",String.class,source)).isEqualTo(row.get("id"));
+        String other=sources.add("Andere freigegebene Quelle","https://other.example/events","","","",true);
+        try {
+            processor.processSpecial(other,event("one",party.getName(),blue.getName(),""),null);
+            assertThat(store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates WHERE venue_id=?",Integer.class,blue.getId())).isEqualTo(1);
+            assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,blue.getId())).isEqualTo(1);
+        } finally {store.jdbc().update("DELETE FROM discovery_sources WHERE id=?",other);}
+        mvc.perform(requireNonNull(put("/api/v1/discovery/special-sources/"+source).contentType("application/json").content("{\"name\":\"QRUSH umbenannt\",\"url\":\""+root+"\"}"))).andExpect(status().isOk());
+        assertThat(store.jdbc().queryForObject("SELECT approved FROM discovery_sources WHERE id=?",Boolean.class,source)).isTrue();
+        approveSource(false);
+        var next=new EventExtractor.Event("next",party.getName(),root+"events/next",List.of("2027-01-16"),"Indie Party","",blue.getName(),event("one",party.getName(),blue.getName(),"").place());
+        processor.processSpecial(source,next,null);
+        assertThat(store.jdbc().queryForMap("SELECT * FROM discovery_candidates WHERE source_id=? AND identity_key=?",source,EventChangeMonitor.identity(next)))
+            .containsEntry("venue_id",blue.getId()).containsEntry("status","NEEDS_REVIEW").containsEntry("calendar_entry_id",null);
+    }
+    @Test void aManualVenueBindingIsReusedForLaterEventsButDoesNotReleaseTheReviewedEvent() throws Exception {
+        scheduler.scan();String original=candidate();
+        importer.review(original,party.getId(),LocalDate.of(2027,1,9),"REJECTED","ANSWERED","Nicht übernehmen",blue.getId());
+        approveSource(true);scheduler.scan();
+        var next=new EventExtractor.Event("next",party.getName(),root+"events/next",List.of("2027-01-16"),"Indie Party","",blue.getName(),event("one",party.getName(),blue.getName(),"").place());
+        processor.processSpecial(source,next,null);processor.processSpecial(source,next,null);
+        assertThat(store.candidate(original)).containsEntry("status","REJECTED").containsEntry("dm_text","Nicht übernehmen").containsEntry("calendar_entry_id",null);
+        assertThat(store.jdbc().queryForMap("SELECT * FROM discovery_candidates WHERE source_id=? AND identity_key=?",source,EventChangeMonitor.identity(next)))
+            .containsEntry("venue_id",blue.getId()).containsEntry("status","IMPORTED");
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,blue.getId())).isEqualTo(1);
+    }
+    @Test void aConfirmedVenueAliasAlsoPassesTermVerificationWithoutChangingSourceEvidence() throws Exception {
+        String alias="Bestätigter Clubalias "+UUID.randomUUID();
+        var observation=event("alias",party.getName(),alias,"");
+        geography.remember(blue.getId(),observation,root);approveSource(true);
+        found(observation);scheduler.scan();scheduler.scan();
+        var row=store.candidate(candidate());
+        assertThat(row).containsEntry("venue_id",blue.getId()).containsEntry("status","IMPORTED");
+        assertThat(geography.event(row).location()).isEqualTo(alias);
+        mvc.perform(get("/api/v1/discovery/candidates/"+row.get("id"))).andExpect(status().isOk())
+            .andExpect(jsonPath("$.assessment.verification.status").value("VERIFIED"));
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,blue.getId())).isEqualTo(1);
+    }
+    @Test void approvingAPortalDoesNotInventOrGuessUnknownVenues() throws Exception {
+        long count=venues.count();approveSource(true);
+        found(event("unknown",party.getName(),"Unbekannter Club",""));scheduler.scan();
+        assertThat(store.candidate(candidate())).containsEntry("venue_id",null).containsEntry("calendar_entry_id",null);
+        assertThat(venues.count()).isEqualTo(count);
+    }
+    @Test void newlyConfirmedGeographyReusesAnExistingAutomaticProposal() throws Exception {
+        scheduler.scan();String id=candidate();
+        geography.remember(blue.getId(),event("one",party.getName(),blue.getName(),""),root);
+        approveSource(true);scheduler.scan();
+        assertThat(store.candidate(id)).containsEntry("venue_id",blue.getId()).containsEntry("status","IMPORTED");
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates WHERE source_id=?",Integer.class,source)).isEqualTo(1);
+    }
+    @Test void resolvedPortalEventsStillRespectClosuresLifecycleAndExistingDecisions() throws Exception {
+        geography.remember(blue.getId(),event("one",party.getName(),blue.getName(),""),root);approveSource(true);
+        var closure=calendar.createEntry(new de.noizycologne.backend.calendar.CalendarEntryRequest("2027-01-09",blue.getId(),"closure","",null,null,"Geschlossen",Set.of()));
+        scheduler.scan();String id=candidate();
+        assertThat(store.candidate(id)).containsEntry("status","NEEDS_REVIEW").containsEntry("calendar_entry_id",null);
+        calendar.deleteEntry(closure.id());
+        for(String state:List.of("EventCancelled","EventPostponed","EventRescheduled")) {
+            found(event("one",party.getName(),blue.getName(),state));scheduler.scan();
+            assertThat(store.candidate(id)).containsEntry("calendar_entry_id",null);
+        }
+        importer.reject(id);found(event("one",party.getName(),blue.getName(),""));scheduler.scan();
+        assertThat(store.candidate(id)).containsEntry("status","REJECTED").containsEntry("calendar_entry_id",null);
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,blue.getId())).isZero();
+    }
     @Test void addIsIndependentUniqueAndDeleteIsIdempotentWithoutAPlaceholderLocation() throws Exception {
         assertThat(sources.list()).anySatisfy(row -> assertThat(row).containsEntry("id",source).containsEntry("venue_id",null).containsEntry("special_source",true));
         requireNonNull(assertThatThrownBy(()->sources.add("Duplicate","https://QRUSHAPP.DE","","","")).isInstanceOf(ResponseStatusException.class)).hasMessageContaining("bereits vorhanden");

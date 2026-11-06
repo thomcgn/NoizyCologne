@@ -38,7 +38,7 @@ public class EventImportService {
             if (!"AUTOMATIC".equals(c.get("decision_origin")) || !Boolean.TRUE.equals(c.get("approved")) || !"READY".equals(c.get("status")))
                 throw new ResponseStatusException(HttpStatus.CONFLICT,"Automatische Übernahme nicht freigegeben oder manuelle Entscheidung geschützt");
             var current=evaluator.evaluate(c,evaluator.rules());
-            var verified=EventVerification.assess(evaluator.event(c),(String)c.get("venue_name"));
+            var verified=evaluator.verification(evaluator.event(c),(String)c.get("venue_id"),(String)c.get("venue_name"));
             if (!"READY".equals(current.status()) || !party.equals(current.partyId()) || !date.equals(verified.date()))
                 throw new ResponseStatusException(HttpStatus.CONFLICT,"Automatische Übernahme nach erneuter Prüfung gesperrt: "+current.reason());
         }

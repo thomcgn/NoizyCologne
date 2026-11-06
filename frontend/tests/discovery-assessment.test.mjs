@@ -479,7 +479,7 @@ test('special sources can be added without a location and removed without deleti
   await settle(()=>dialog().querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
   assert.equal(document.querySelector('[role="dialog"]'),null);
   const added=calls.find(call=>call.method==='POST');
-  assert.deepEqual(JSON.parse(added.body),{name:'QRUSH',url:'https://qrushapp.de/',itemSelector:'',titleSelector:'',dateSelector:''});
+  assert.deepEqual(JSON.parse(added.body),{name:'QRUSH',url:'https://qrushapp.de/',approved:false,itemSelector:'',titleSelector:'',dateSelector:''});
   assert.match(document.querySelector('[aria-label="Sonderquellen"]').textContent,/QRUSH/);
   await settle(()=>button('Sonderquelle löschen').click());
   assert.ok(calls.some(call=>call.method==='DELETE'&&call.url==='/api/v1/discovery/special-sources/qrush'));
@@ -506,12 +506,15 @@ test('special-source edit preloads configuration, retains focus and updates the 
   await settle(()=>button('Sonderquelle editieren').click());
   assert.equal(control('Name der Sonderquelle').value,'QRUSH');
   assert.equal(control('Event-Container').value,'.event');
+  const approval=control('Quelle ausdrücklich zur automatischen Übernahme freigeben');
+  assert.equal(approval.checked,false);
+  await settle(()=>approval.click());
   change(control('Name der Sonderquelle'),'QRUSH Köln');
   const url=control('Quell-URL');change(url,'https://qrushapp.de/eventfinder/koeln');assert.equal(document.activeElement,url);
   await settle(()=>dialog().querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
   const edited=calls.find(call=>call.method==='PUT');
   assert.equal(edited.url,'/api/v1/discovery/special-sources/qrush');
-  assert.deepEqual(JSON.parse(edited.body),{name:'QRUSH Köln',url:'https://qrushapp.de/eventfinder/koeln',itemSelector:'.event',titleSelector:'h2',dateSelector:'time'});
+  assert.deepEqual(JSON.parse(edited.body),{name:'QRUSH Köln',url:'https://qrushapp.de/eventfinder/koeln',approved:true,itemSelector:'.event',titleSelector:'h2',dateSelector:'time'});
   assert.equal(calls.some(call=>call.method==='POST'||call.method==='DELETE'),false);
   assert.equal(document.querySelector('[role="dialog"]'),null);
 });
