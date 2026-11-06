@@ -7,7 +7,7 @@ import java.util.*;
 
 @Component
 public class EventMatcher {
-    public static final String VERSION = "party-rules-4";
+    public static final String VERSION = "party-rules-5";
     public record Match(String status, String partyId, String reason, String classification) { }
     public static boolean nameMatches(String title, String name) {
         String t=EventNormalizer.text(title), n=EventNormalizer.text(name);

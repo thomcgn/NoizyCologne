@@ -20,6 +20,10 @@ public class DiscoveryPortfolioService {
     }
     @Transactional
     public String approve(String candidateId,String name) {
+        return approve(candidateId,name,null);
+    }
+    @Transactional
+    public String approve(String candidateId,String name,String seriesAlias) {
         store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
         var candidate=store.candidate(candidateId);var event=evaluation.event(candidate);var rules=evaluation.rules();
         if (List.of("REJECTED","DUPLICATE","IGNORED").contains(candidate.get("status"))) throw conflict("Geschützten Vorschlag zuerst prüfen");
@@ -27,13 +31,12 @@ public class DiscoveryPortfolioService {
         if (recognized.parties().size()==1) return Objects.requireNonNull(recognized.parties().getFirst()).id();
         if (!recognized.parties().isEmpty() || candidate.get("party_id")!=null) throw conflict("Vorhandene Zuordnung zuerst prüfen");
         var coverage=GenreCoverage.assess(event,rules.coverageGenres());
-        if (!coverage.eligible()) throw conflict("Weniger als 50 % aller aktiven Projektgenres belegt");
+        if (!coverage.eligible()) throw conflict("Weniger als 50 % der erkannten Eventgenres passen zum aktiven Portfolio");
         if (!EventLifecycle.signal(event).equals("ACTIVE") || Boolean.TRUE.equals(candidate.get("has_blocking_change"))) throw conflict("Veranstaltungsänderung zuerst klären");
-        if (event.title().length()>200) throw conflict("Titel zu lang für einen eindeutigen Alias; bitte im Portfolio manuell prüfen");
         Set<String> standardGenres=new LinkedHashSet<>();for (String genre:coverage.names()) standardGenres.add(genre);
         var party=parties.createParty(new PartySeriesRequest(name,"","#E11D48","manual",Set.of(),Set.of(),Set.of(),null,standardGenres));
         entities.flush();
-        store.jdbc().update("INSERT INTO party_series_aliases(party_id,alias) VALUES (?,?) ON CONFLICT DO NOTHING",party.id(),event.title());
+        importer.rememberAlias(candidate,party.id(),seriesAlias);
         store.jdbc().update("UPDATE discovery_candidates SET party_id=?,decision_origin='MANUAL',reason='Partyreihe ausdrücklich ins Portfolio aufgenommen',updated_at=now() WHERE id=?",party.id(),candidateId);
         store.audit(candidateId,(String)candidate.get("status"),null);
         var verification=EventVerification.assess(event,(String)candidate.get("venue_name"));

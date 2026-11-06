@@ -85,6 +85,11 @@ async function mount(item, failInitial = false) {
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url, ...options });
     if (failInitial) return new Response(JSON.stringify({message: 'Quelle nicht erreichbar'}), {status: 503});
+    if (url.endsWith('/confirm') && options.method === 'POST') {
+      const payload=JSON.parse(options.body);
+      candidates=candidates.map(item => ({...item,status:'IMPORTED',calendar_entry_id:'imported-entry',party_id:payload.partyId,event_date:payload.date}));
+      return new Response(JSON.stringify({calendarEntryId:'imported-entry'}));
+    }
     if (options.method === 'PUT' || options.method === 'POST') return new Response(null, { status: 204 });
     return new Response(JSON.stringify(overview()), { headers: { 'Content-Type': 'application/json' } });
   };
@@ -127,16 +132,19 @@ test('cooperation shows both known series and requires an explicit single manual
   assert.deepEqual([...card.querySelectorAll('li')].map(item => item.textContent), ['NEON PARADISE', 'NEON KULT']);
   await openReview();
   assert.equal(control('Partyreihe zuordnen').value, '', 'The first detected series must not become a hidden primary party');
-  assert.equal(button('Manuell übernehmen', dialog()).disabled, true);
+  assert.equal(button('Bestätigen & übernehmen', dialog()).disabled, true);
   assert.match(dialog().textContent, /Zuordnung muss manuell geprüft werden/);
   assert.match(dialog().textContent, /Terminprüfung: Termin belegt · 2026-11-07/);
   change(control('Partyreihe zuordnen'), 'kult');
-  assert.equal(button('Manuell übernehmen', dialog()).disabled, false);
-  await settle(() => button('Manuell übernehmen', dialog()).click());
+  assert.equal(button('Bestätigen & übernehmen', dialog()).disabled, false);
+  await settle(() => button('Bestätigen & übernehmen', dialog()).click());
   const review = calls.find(call => call.method === 'PUT');
   const imported = calls.find(call => call.method === 'POST');
-  assert.equal(JSON.parse(review.body).partyId, 'kult');
-  assert.deepEqual(JSON.parse(imported.body), { partyId: 'kult', date: '2026-11-07' });
+  assert.equal(review, undefined, 'Confirmation must not save separately before importing');
+  assert.equal(imported.url, '/api/v1/discovery/candidates/candidate/confirm');
+  assert.deepEqual(JSON.parse(imported.body), { partyId: 'kult', date: '2026-11-07', inquiryStatus:'NONE', dmText:'', seriesAlias:null });
+  assert.equal(reloadedParties, 1); assert.equal(reloadedDrafts, 1);
+  assert.equal(document.querySelectorAll('[data-record-id]').length, 0);
   assert.equal(reloadedEntries, 1);
   assert.equal(document.querySelector('[role="dialog"]'), null);
 });
@@ -155,7 +163,7 @@ test('READY is visible and benign UNCONFIRMED detail metadata does not become an
   assert.match(details.textContent, /Veranstaltungsstatus: Kein Absage- oder Verschiebungshinweis/);
   assert.match(details.textContent, /Automatische Übernahme: Voraussetzungen erfüllt/);
   assert.doesNotMatch(details.textContent, /Absage erkannt|Übernahme gesperrt/);
-  assert.equal(button('Manuell übernehmen', dialog()).disabled, false);
+  assert.equal(button('Bestätigen & übernehmen', dialog()).disabled, false);
 });
 
 for (const [status, label] of [['MISSING_DATA', 'Angaben fehlen'], ['CONFLICTING_DATA', 'Widersprüchliche Angaben'], ['SPECULATIVE', 'Termin nicht ausreichend belegt']]) {
@@ -164,9 +172,9 @@ for (const [status, label] of [['MISSING_DATA', 'Angaben fehlen'], ['CONFLICTING
       assessment: assessment({ verification: { status, reasons: ['Datum bitte anhand der Quelle bestätigen'], date: null } }) }));
     await openReview();
     assert.match(dialog().querySelector('section').textContent, new RegExp(label));
-    assert.equal(button('Manuell übernehmen', dialog()).disabled, true);
+    assert.equal(button('Bestätigen & übernehmen', dialog()).disabled, true);
     change(control('Korrigiertes / bestätigtes Datum'), '2026-11-07');
-    assert.equal(button('Manuell übernehmen', dialog()).disabled, false, 'Automatic ineligibility must not replace manual verification');
+    assert.equal(button('Bestätigen & übernehmen', dialog()).disabled, false, 'Automatic ineligibility must not replace manual verification');
   });
 }
 
@@ -176,7 +184,7 @@ for (const [lifecycle, label] of [['CANCELLED', 'Absage erkannt'], ['POSTPONED',
     await openReview();
     assert.match(dialog().querySelector('section').textContent, new RegExp(label));
     assert.match(dialog().textContent, /Übernahme gesperrt/);
-    const imported = button('Manuell übernehmen', dialog());
+    const imported = button('Bestätigen & übernehmen', dialog());
     assert.equal(imported.disabled, true);
     await settle(() => imported.click());
     assert.ok(!calls.some(call => call.method === 'POST' || call.method === 'PUT'));
@@ -198,20 +206,20 @@ test('refresh updates lifecycle blockers while retaining saved and unsaved manua
   assert.equal(control('Partyreihe zuordnen').value, 'paradise');
   assert.equal(date.value, '2026-11-09');
   assert.equal(document.activeElement, date);
-  assert.equal(button('Manuell übernehmen', dialog()).disabled, true);
+  assert.equal(button('Bestätigen & übernehmen', dialog()).disabled, true);
   await settle(() => button('Speichern', dialog()).click());
   const review = calls.find(call => call.method === 'PUT');
   assert.equal(JSON.parse(review.body).partyId, 'paradise');
   assert.equal(JSON.parse(review.body).date, '2026-11-09');
 });
 
-test('portfolio approval uses the threshold of all active project genres and explicit confirmation',async()=>{
+test('portfolio approval compares recognized event genres with the active portfolio and requires confirmation',async()=>{
   await mount(candidate({title:'New Alternative Party',matching_class:'POSSIBLE_MATCH',assessment:assessment({recognition:{status:'NONE',parties:[]}}),genreCoverage:{matched:2,total:4,percent:50,names:['Emo','Indie'],eligible:true}}));
-  await openReview();assert.match(dialog().textContent,/2 von 4 aktiven Projektgenres \(50 %\)/);
+  await openReview();assert.match(dialog().textContent,/2 von 4 erkannten Eventgenres.*\(50 %\)/);
   const name=control('Name im Portfolio');change(name,'New Alternative Night');assert.equal(document.activeElement,name);
   await settle(()=>button('Ins Portfolio übernehmen',dialog()).click());
   const request=calls.find(call=>call.url.endsWith('/portfolio')&&call.method==='POST');
-  assert.deepEqual(JSON.parse(request.body),{name:'New Alternative Night'});
+  assert.deepEqual(JSON.parse(request.body),{name:'New Alternative Night',seriesAlias:null});
   assert.equal(document.querySelector('[role="dialog"]'),null);assert.ok(!calls.some(call=>/instagram|publish|cancellations/.test(call.url)));
   assert.equal(reloadedEntries, 1); assert.equal(reloadedParties, 1); assert.equal(reloadedDrafts, 1);
 });
@@ -349,4 +357,56 @@ test('Discovery drawer protects unsaved input on Escape and close, then restores
   assert.equal(document.querySelector('[role="dialog"]'), null);
   assert.equal(document.activeElement, trigger);
   assert.equal(calls.filter(call => call.method === 'PUT' || call.method === 'POST').length, 0);
+});
+
+
+test('saving a manual assignment never imports and an import conflict preserves the form without success notice', async () => {
+  await mount(candidate({party_id:'kult'})); await openReview();
+  await settle(() => button('Speichern',dialog()).click());
+  assert.equal(calls.filter(call=>call.method==='PUT').length,1);
+  assert.equal(calls.filter(call=>call.method==='POST').length,0);
+  assert.match(document.body.textContent,/Bearbeitungsstand gespeichert. Kein Kalenderimport/);
+  await openReview(); change(control('Korrigiertes / bestätigtes Datum'),'2026-11-08');
+  const previous=globalThis.fetch;
+  globalThis.fetch=async(url,options={})=>url.endsWith('/confirm') ? new Response(JSON.stringify({message:'Ganztägige Location-Sperre am bestätigten Datum'}),{status:409}) : previous(url,options);
+  await settle(()=>button('Bestätigen & übernehmen',dialog()).click());
+  assert.match(dialog().textContent,/Ganztägige Location-Sperre/);
+  assert.equal(control('Korrigiertes / bestätigtes Datum').value,'2026-11-08');
+  assert.equal(reloadedEntries,0);assert.equal(reloadedDrafts,0);
+  assert.doesNotMatch(document.body.textContent,/Termin bestätigt und in den Kalender übernommen/);
+});
+
+test('confirmation includes only an explicitly checked reusable series alias and rejects missing import evidence', async () => {
+  await mount(candidate({party_id:'kult'}));await openReview();
+  const remember=dialog().querySelector('input[type="checkbox"]');await settle(()=>remember.click());
+  change(control('Wiederverwendbarer Reihenname'),'NEON KULT');
+  let submitted;const previous=globalThis.fetch;
+  globalThis.fetch=async(url,options={})=>{
+    if(url.endsWith('/confirm')) {submitted=JSON.parse(options.body);return new Response(null,{status:204});}
+    return previous(url,options);
+  };
+  await settle(()=>button('Bestätigen & übernehmen',dialog()).click());
+  assert.equal(submitted.seriesAlias,'NEON KULT');
+  assert.match(dialog().textContent,/Kalenderimport wurde nicht bestätigt/);
+  assert.equal(reloadedEntries,0);assert.equal(reloadedDrafts,0);
+});
+
+
+test('known series display source and standard genres separately without a misleading zero-of-portfolio label', async () => {
+  await mount(candidate({party_id:'kult',assessment:assessment({recognition:{status:'SINGLE',parties:recognition.parties.slice(1)}}),genreCoverage:{matched:1,total:1,percent:100,names:['Emo'],eligible:true,sourceNames:[],standardNames:['Emo'],basis:'STANDARD'}}));
+  const row=document.querySelector('[data-record-id]');assert.match(row.textContent,/Standardgenres · 100 %/);
+  await openReview();const details=dialog().querySelector('[aria-label="Genregrundlage"]');
+  assert.match(details.textContent,/Genres aus Veranstaltungsquelle: Keine Eventgenres belegt/);
+  assert.match(details.textContent,/Standardgenres der bekannten Partyreihe: Emo/);
+  assert.doesNotMatch(details.textContent,/0 von|aktiven Projektgenres/);
+});
+
+test('the review shows the standards of the locally selected party instead of a stale API assignment', async () => {
+  const previous=catalogue.parties;
+  catalogue.parties=previous.map(item=>({...item,standardGenres:item.id==='kult'?['Emo']:['Rock']}));
+  try {
+    await mount(candidate({party_id:'kult',genreCoverage:{matched:1,total:1,percent:100,names:['Emo'],eligible:true,sourceNames:[],standardNames:['Emo'],basis:'STANDARD'}}));
+    await openReview();change(control('Partyreihe zuordnen'),'paradise');
+    assert.match(dialog().querySelector('[aria-label="Genregrundlage"]').textContent,/Standardgenres der bekannten Partyreihe: Rock/);
+  } finally {catalogue.parties=previous;}
 });

@@ -50,6 +50,7 @@ final class DiscoveryBatchMerger {
         if (!EventMatcher.nameMatches(a.title(),b.title()) && !EventMatcher.nameMatches(b.title(),a.title())) return false;
         boolean sameIdentity=!a.identity().isBlank() && a.identity().equals(b.identity());
         if (sameIdentity) return true;
+        if (EventNormalizer.distinctTimedOccurrences(a,b)) return false;
         if (!locationMatches(a.location(),venue) || !locationMatches(b.location(),venue)) return false;
         // An external unscoped listing cannot lend genres to a different venue.
         if ((!left.official() && a.location().isBlank()) || (!right.official() && b.location().isBlank())) return false;

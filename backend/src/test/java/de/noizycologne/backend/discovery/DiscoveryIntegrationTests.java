@@ -23,6 +23,8 @@ class DiscoveryIntegrationTests {
     @Autowired VenueRepository venues;
     @Autowired PartySeriesRepository parties;
     @Autowired EventImportService importer;
+    @Autowired de.noizycologne.backend.calendar.CalendarEntryService calendar;
+    final Set<String> extraParties=new HashSet<>();
     @MockitoBean VenueSourceDiscoveryService discovery;
     Venue venue; PartySeries party;
     String root="https://new-club.example/";
@@ -35,6 +37,7 @@ class DiscoveryIntegrationTests {
         store.jdbc().update("DELETE FROM calendar_entries WHERE party_id=?",party.getId());
         store.jdbc().update("DELETE FROM calendar_entries WHERE location_id=?",venue.getId());
         venues.deleteById(venue.getId()); parties.deleteById(party.getId());
+        extraParties.forEach(parties::deleteById); extraParties.clear();
         store.jdbc().update("DELETE FROM discovery_runs");
     }
     EventExtractor.@org.jspecify.annotations.NonNull Event event(String identity,String title,String date,String state) {
@@ -158,4 +161,117 @@ class DiscoveryIntegrationTests {
             finally { stmt.execute("SELECT pg_advisory_unlock(73624601)"); }
         }
     }
+    private String candidateId() {
+        return requireNonNull(store.jdbc().queryForObject("SELECT id FROM discovery_candidates WHERE venue_id=? ORDER BY updated_at DESC LIMIT 1",String.class,venue.getId()));
+    }
+    private void middance() {
+        venue.update("Blue Shell","");venue=venues.saveAndFlush(venue);
+        party.update("Middance Crisis","","#E11D48","manual",null,null,null,null,Set.of(),Set.of(),Set.of("Indie"));
+        party=parties.saveAndFlush(requireNonNull(party));
+    }
+    @Test void middanceCrisisAtBlueShellIsRecognizedWithoutSourceGenres() throws Exception {
+        middance();found(event("middance-jan", "Middance Crisis – Anti-Herbstblues-Special", "2027-01-09", ""));scheduler.scan();
+        var candidate=store.candidate(candidateId());
+        assertThat(candidate).containsEntry("status","IMPORTED").containsEntry("party_id",party.getId());
+        assertThat(calendar.getEntries()).anyMatch(entry -> entry.id().equals(candidate.get("calendar_entry_id")));
+    }
+    @Test void confirmationPersistsReusableAliasAndNextEditionImportsOnceWithoutApprovingOtherParties() throws Exception {
+        middance();found(event("edition-one","MDC Clubnacht", "2027-01-09", ""));scheduler.scan();
+        String id=candidateId();
+        String calendarId=importer.confirm(id,party.getId(),LocalDate.of(2027,1,9),"ANSWERED","Termin bestätigt","MDC Clubnacht");
+        assertThat(store.candidate(id)).containsEntry("status","IMPORTED").containsEntry("party_id",party.getId());
+        assertThat(store.candidates("NEEDS_REVIEW")).noneMatch(row -> id.equals(row.get("id")));
+        assertThat(store.candidates("NEEDS_INQUIRY")).noneMatch(row -> id.equals(row.get("id")));
+        assertThat(calendar.getEntries()).anyMatch(entry -> entry.id().equals(calendarId));
+        assertThat(importer.confirm(id,party.getId(),LocalDate.of(2027,1,9),"ANSWERED","","MDC Clubnacht")).isEqualTo(calendarId);
+        scheduler.scan();
+        found(event("edition-two","MDC Clubnacht – Anti-Herbstblues-Special","2027-01-16",""));scheduler.scan();scheduler.scan();
+        assertThat(store.candidate(candidateId())).containsEntry("status","IMPORTED");
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,venue.getId())).isEqualTo(2);
+        assertThat(store.jdbc().queryForList("SELECT alias FROM party_series_aliases WHERE party_id=?",String.class,party.getId())).containsExactly("MDC Clubnacht");
+        found(event("unrelated","Andere Indie Party","2027-01-23",""));scheduler.scan();
+        assertThat(store.candidate(candidateId()).get("status")).isNotEqualTo("IMPORTED");
+    }
+    @Test void alreadyOpenAutomaticProposalUsesNewAliasEvenWhenItsFingerprintIsUnchanged() throws Exception {
+        middance();found(event("edition-two","MDC Clubnacht","2027-01-16",""));scheduler.scan();String later=candidateId();
+        found(event("edition-one","MDC Clubnacht","2027-01-09",""));scheduler.scan();String first=candidateId();
+        importer.confirm(first,party.getId(),LocalDate.of(2027,1,9),"ANSWERED","","MDC Clubnacht");
+        found(event("edition-two","MDC Clubnacht","2027-01-16",""));scheduler.scan();
+        assertThat(store.candidate(later)).containsEntry("status","IMPORTED");
+    }
+    @Test void closureConflictRollsBackConfirmationAndNeverReportsSuccessfulImport() throws Exception {
+        calendar.createEntry(new de.noizycologne.backend.calendar.CalendarEntryRequest("2027-01-09",venue.getId(),"closure","",null,null,"Geschlossen",Set.of()));
+        found(event("blocked","MDC Clubnacht","2027-01-09",""));scheduler.scan();String id=candidateId();var before=store.candidate(id);
+        var failure=org.junit.jupiter.api.Assertions.assertThrows(org.springframework.web.server.ResponseStatusException.class,
+            () -> importer.confirm(id,party.getId(),LocalDate.of(2027,1,9),"ANSWERED","neu","MDC Clubnacht"));
+        assertThat(failure.getStatusCode().value()).isEqualTo(409);assertThat(failure.getReason()).contains("Location-Sperre");
+        assertThat(store.candidate(id)).containsEntry("status",before.get("status")).containsEntry("party_id",before.get("party_id"))
+            .containsEntry("decision_origin",before.get("decision_origin")).containsEntry("calendar_entry_id",null).containsEntry("dm_text",before.get("dm_text"));
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM party_series_aliases WHERE party_id=?",Integer.class,party.getId())).isZero();
+    }
+    @Test void sameDayConcertAndSeparatelyIdentifiedAftershowRemainDistinctWithoutInventedStart() throws Exception {
+        party.update("Live Konzert","","#E11D48","manual",null,null,null,null,Set.of(),Set.of(),Set.of());party=parties.saveAndFlush(requireNonNull(party));
+        calendar.createEntry(new de.noizycologne.backend.calendar.CalendarEntryRequest("2027-01-09",venue.getId(),"event","",party.getId(),"20:00",null,Set.of()));
+        var aftershow=parties.saveAndFlush(new PartySeries("Indie Aftershowparty","","#E11D48","manual",null,null,null,null,Set.of(),Set.of()));extraParties.add(aftershow.getId());
+        found(new EventExtractor.Event("aftershow-one",aftershow.getName(),root+"aftershow",List.of("2027-01-09"),"Emo DJs; Beginn nach dem Konzert","",venue.getName()));
+        scheduler.scan();scheduler.scan();
+        assertThat(store.candidate(candidateId())).containsEntry("status","IMPORTED");
+        assertThat(calendar.getEntries().stream().filter(e -> e.locationId().equals(venue.getId())).toList()).hasSize(2);
+        var imported=store.jdbc().queryForMap("SELECT start_time,notes FROM calendar_entries WHERE location_id=? AND party_id=?",venue.getId(),aftershow.getId());
+        assertThat(imported).containsEntry("start_time",null);assertThat(requireNonNull(imported.get("notes")).toString()).contains("nach dem Konzert");
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM event_changes WHERE venue_id=?",Integer.class,venue.getId())).isZero();
+    }
+    @Test void knownSpecialDoesNotCreateAliasAndInvalidSpecialAliasRollsBack() throws Exception {
+        middance();found(event("one","MDC Clubnacht Anti-Herbstblues-Special","2027-01-09",""));scheduler.scan();String id=candidateId();
+        assertThatThrownBy(() -> importer.confirm(id,party.getId(),LocalDate.of(2027,1,9),"NONE","","MDC Clubnacht Anti-Herbstblues-Special"))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        assertThat(store.candidate(id)).containsEntry("calendar_entry_id",null);
+        importer.confirm(id,party.getId(),LocalDate.of(2027,1,9),"NONE","","MDC Clubnacht");
+        found(event("two","Middance Crisis Anti-Herbstblues-Special","2027-01-16",""));scheduler.scan();
+        assertThat(store.jdbc().queryForList("SELECT alias FROM party_series_aliases WHERE party_id=?",String.class,party.getId())).containsExactly("MDC Clubnacht");
+    }
+    @Test void confirmationCannotBypassRejectedCancelledOrMovedEvents() throws Exception {
+        for (String state:List.of("EventCancelled","EventPostponed","EventRescheduled")) {
+            found(event(state,"Neue Indie Party", "2027-01-09",state));scheduler.scan();String id=candidateId();
+            assertThatThrownBy(() -> importer.confirm(id,party.getId(),LocalDate.of(2027,1,9),"ANSWERED","",""))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+            assertThat(store.candidate(id)).containsEntry("calendar_entry_id",null);
+        }
+        found(event("rejected","Abgelehnte Indie Party","2027-01-10",""));scheduler.scan();String id=candidateId();
+        importer.review(id,null,LocalDate.of(2027,1,10),"REJECTED","NONE","");
+        assertThatThrownBy(() -> importer.confirm(id,party.getId(),LocalDate.of(2027,1,10),"ANSWERED","",""))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        scheduler.scan();assertThat(store.candidate(id)).containsEntry("status","REJECTED");
+    }
+
+    @Test void independentStableIdentitiesAndDifferentTimesInOneSeriesStaySeparateAcrossScans() throws Exception {
+        var early=event("early",party.getName(),"2027-01-09T20:00","");
+        var late=event("late",party.getName(),"2027-01-09T23:00","");
+        when(discovery.discover(eq(root),any())).thenReturn(List.of(new VenueSourceDiscoveryService.Found(URI.create(root),new EventExtractor.Extraction(List.of(early,late),"EVENTS_FOUND"))));
+        scheduler.scan();scheduler.scan();
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,venue.getId())).isEqualTo(2);
+        assertThat(store.jdbc().queryForList("SELECT status FROM discovery_candidates WHERE venue_id=?",String.class,venue.getId())).containsExactlyInAnyOrder("IMPORTED","IMPORTED");
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM event_changes WHERE venue_id=?",Integer.class,venue.getId())).isZero();
+    }
+    @Test void manualConfirmationNeverApprovesAnExternalSourceForFutureAutomaticImports() throws Exception {
+        venue.configureDiscovery("",root,true);venues.saveAndFlush(requireNonNull(venue));
+        found(event("one","MDC Clubnacht","2027-01-09",""));scheduler.scan();
+        importer.confirm(candidateId(),party.getId(),LocalDate.of(2027,1,9),"ANSWERED","","MDC Clubnacht");
+        found(event("two","MDC Clubnacht","2027-01-16",""));scheduler.scan();
+        assertThat(store.candidate(candidateId())).containsEntry("status","NEEDS_REVIEW");
+        assertThat(store.jdbc().queryForObject("SELECT approved FROM discovery_sources WHERE venue_id=?",Boolean.class,venue.getId())).isFalse();
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,venue.getId())).isEqualTo(1);
+    }
+    @Test void confirmationEndpointReportsActualClosureCauseAndRollsBackChoice() throws Exception {
+        calendar.createEntry(new de.noizycologne.backend.calendar.CalendarEntryRequest("2027-01-09",venue.getId(),"closure","",null,null,"Geschlossen",Set.of()));
+        found(event("blocked-api","MDC Clubnacht","2027-01-09",""));scheduler.scan();String id=candidateId();
+        var mvc=org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup(requireNonNull(context)).build();
+        mvc.perform(requireNonNull(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/v1/discovery/candidates/"+id+"/confirm")
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .content("{\"partyId\":\""+party.getId()+"\",\"date\":\"2027-01-09\",\"inquiryStatus\":\"ANSWERED\",\"dmText\":\"bestätigt\"}")))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isConflict())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.message").value("Ganztägige Location-Sperre am bestätigten Datum"));
+        assertThat(store.candidate(id)).containsEntry("calendar_entry_id",null).containsEntry("party_id",null);
+    }
+
 }

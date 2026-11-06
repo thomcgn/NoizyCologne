@@ -51,7 +51,8 @@ public class EventCandidateProcessor {
         // The same event can be exposed as JSON-LD, a text list and a detail URL.
         if (previous.isEmpty() && date!=null && !EventVerification.assess(event,venue.getName()).conflicting()) {
             var sameOccurrence=store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE venue_id=? AND event_date=?",venue.getId(),date)
-                .stream().filter(c -> (EventMatcher.nameMatches(event.title(),(String)c.get("title")) || EventMatcher.nameMatches((String)c.get("title"),event.title()))).toList();
+                .stream().filter(c -> !EventNormalizer.distinctTimedOccurrences(evaluator.event(c),event)
+                    && (EventMatcher.nameMatches(event.title(),(String)c.get("title")) || EventMatcher.nameMatches((String)c.get("title"),event.title()))).toList();
             if (!sameOccurrence.isEmpty()) previous=List.of(sameOccurrence.stream().min(
                 Comparator.<Map<String,Object>,Integer>comparing(c -> "AUTOMATIC".equals(c.get("decision_origin")) ? 1 : 0)
                     .thenComparing(c -> (String)c.get("id"))).orElseThrow());
@@ -89,11 +90,12 @@ public class EventCandidateProcessor {
             return;
         }
         if (PartyOnlyPolicy.concert(event) && old==null) return;
-        if (old!=null && fingerprint.equals(old.get("fingerprint")) &&
-            (old.get("calendar_entry_id")!=null || (old.get("raw_event")!=null && EventMatcher.VERSION.equals(old.get("matcher_version"))
-                && !Objects.toString(old.get("reason"),"").contains("Quelle nicht")
-                && !Objects.toString(old.get("reason"),"").contains("Neuer Abruf vor")))) return;
+        if (old!=null && fingerprint.equals(old.get("fingerprint")) && old.get("calendar_entry_id")!=null) return;
         var match=evaluator.evaluate(event,venue.getId(),venue.getName(),approved,new DiscoveryEvaluationService.Rules(known,aliases,genres));
+        // Alias/source/calendar changes can alter the result without changing the event bytes.
+        if (old!=null && fingerprint.equals(old.get("fingerprint")) && EventMatcher.VERSION.equals(old.get("matcher_version"))
+                && match.status().equals(old.get("status")) && Objects.equals(match.partyId(),old.get("party_id"))
+                && match.reason().equals(old.get("reason"))) return;
         var times=event.starts().stream().map(EventNormalizer::time).distinct().toList();
         LocalTime time=times.size()==1 ? times.getFirst() : null;
         String status=match.status(), reason=match.reason();
@@ -115,9 +117,9 @@ public class EventCandidateProcessor {
         store.jdbc().update("INSERT INTO discovery_candidate_identities(venue_id,identity_key,candidate_id) VALUES (?,?,?) ON CONFLICT DO NOTHING",venue.getId(),identity,id);
         store.audit(id,old==null ? null : (String)old.get("status"),operation,old==null ? null : (String)old.get("matching_class"));
         if (match.partyId()!=null && date!=null && !status.equals("IGNORED")) {
-            var calendar=store.jdbc().queryForList("SELECT id FROM calendar_entries WHERE location_id=? AND event_date=? AND party_id=? AND entry_type='event'",venue.getId(),date,match.partyId());
-            if(calendar.size()==1) {
-                int linked=store.jdbc().update("UPDATE discovery_candidates SET calendar_entry_id=?,status=?,reason=? WHERE id=? AND calendar_entry_id IS NULL",calendar.getFirst().get("id"),status.equals("DUPLICATE") ? "IMPORTED" : "NEEDS_REVIEW",status.equals("DUPLICATE") ? "Mit bestehendem Kalendereintrag verknüpft" : "Quellenänderung zu bestehendem Kalendereintrag prüfen",id);
+            var conflict=evaluator.calendarConflict(event,venue.getId(),match.partyId(),date,id);
+            if(conflict!=null && conflict.entryId()!=null) {
+                int linked=store.jdbc().update("UPDATE discovery_candidates SET calendar_entry_id=?,status=?,reason=? WHERE id=? AND calendar_entry_id IS NULL",conflict.entryId(),status.equals("DUPLICATE") ? "IMPORTED" : "NEEDS_REVIEW",status.equals("DUPLICATE") ? "Mit bestehendem Kalendereintrag verknüpft" : "Quellenänderung zu bestehendem Kalendereintrag prüfen",id);
                 if(linked>0) store.audit(id,status,operation);
             }
         }

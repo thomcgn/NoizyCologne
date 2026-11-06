@@ -34,6 +34,14 @@ public final class EventNormalizer {
             return LocalTime.parse(value);
         } catch (DateTimeException ignored) { return null; }
     }
+    static boolean distinctTimedOccurrences(EventExtractor.Event first,EventExtractor.Event second) {
+        if (first.identity().isBlank() || second.identity().isBlank() || first.identity().equals(second.identity())) return false;
+        var firstDays=first.starts().stream().map(EventNormalizer::date).filter(Objects::nonNull).distinct().toList();
+        var secondDays=second.starts().stream().map(EventNormalizer::date).filter(Objects::nonNull).distinct().toList();
+        var firstTimes=first.starts().stream().map(EventNormalizer::time).filter(Objects::nonNull).distinct().toList();
+        var secondTimes=second.starts().stream().map(EventNormalizer::time).filter(Objects::nonNull).distinct().toList();
+        return firstDays.size()==1 && firstDays.equals(secondDays) && firstTimes.size()==1 && secondTimes.size()==1 && !firstTimes.equals(secondTimes);
+    }
     public static String hash(String value) {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }
         catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
