@@ -3,8 +3,10 @@
 ## Umfang und Ausgangsstand
 
 Auftrag vom 06.11.2026 auf `fix/discovery-location-flyer`, aufbauend auf
-`89ec2c5` aus dem noch offenen PR #13. Eigener Folge-PR gegen dessen Feature-Branch;
-keine Änderung an main, kein neuer Worktree, Merge oder Deployment.
+`89ec2c5` aus dem zu Beginn noch offenen PR #13. Zunächst war ein Folge-PR
+gegen dessen Feature-Branch vorgesehen. Nach erfolgreicher Prüfung und Push wurde
+PR #13 außerhalb dieses Agentenlaufs gemergt; der neue PR zielt deshalb direkt
+auf main. Kein lokaler Merge/Rebase, neuer Worktree oder Deployment.
 
 Die bestehende Geografie speichert bestätigte Locations und Namen/Aliasse mit
 Ortsreferenzen/Adressen bereits in V18. Die Sonderquellen-Pipeline bewertete
@@ -81,7 +83,12 @@ Datenbanktests bestanden (27 Sonderquellen einschließlich neuer Alias-Regressio
 sowie drei bestehende Prüfungen für Quellenfreigabe und Location-Sperren).
 Keine Fehler oder Skips; isolierter Testcontainer entfernt; mindestens 8733 MiB
 RAM verfügbar. Der abschließende Backend-/Dokumentationscommit läuft erneut
-regulär durch QUICK. Unveränderte Frontendchecks werden nicht manuell wiederholt.
+regulär durch QUICK: erfolgreich, 108 Backendtests (107 erfolgreich, der
+optionale private Offline-Test übersprungen), javac/ECJ ohne Diagnosen und
+Diff-/Repositoryprüfungen erfolgreich. Unveränderte Frontendchecks wurden nicht
+manuell wiederholt. Nach der externen Integration von #13 wurde ausschließlich
+der dokumentierte PR-Zielbranch korrigiert; dieser Dokumentationscommit läuft
+über den regulären dokumentationsbezogenen QUICK-Hook.
 
 Datenbanktests verwenden ausschließlich einen neuen isolierten PostgreSQL-
 Container ohne bestehende Volumes. Keine Produktionsbuilds oder echten Browser.
