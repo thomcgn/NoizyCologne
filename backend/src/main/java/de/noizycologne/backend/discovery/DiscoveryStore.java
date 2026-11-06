@@ -49,7 +49,7 @@ public class DiscoveryStore {
     }
     public String source(String venue, String url, String type, boolean approved) {
         String id = UUID.randomUUID().toString();
-        db.update("INSERT INTO discovery_sources(id,venue_id,url,source_type,approved) VALUES (?,?,?,?,?) ON CONFLICT(venue_id,url) DO UPDATE SET source_type=excluded.source_type, approved=CASE WHEN discovery_sources.source_type='OFFICIAL' AND excluded.source_type='EXTERNAL' THEN false ELSE discovery_sources.approved END", id, venue, url, type, approved);
+        db.update("INSERT INTO discovery_sources(id,venue_id,url,source_type,approved,source_kind) VALUES (?,?,?,?,?,?) ON CONFLICT(venue_id,url) DO UPDATE SET source_type=excluded.source_type, approved=CASE WHEN discovery_sources.source_type='OFFICIAL' AND excluded.source_type='EXTERNAL' THEN false ELSE discovery_sources.approved END", id, venue, url, type, approved,type.equals("OFFICIAL") ? "WEBSITE" : "CUSTOM");
         return db.queryForObject("SELECT id FROM discovery_sources WHERE venue_id=? AND url=?", String.class, venue, url);
     }
     public List<Map<String,Object>> origins(String candidate) {

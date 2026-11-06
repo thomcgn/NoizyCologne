@@ -15,11 +15,18 @@ public class DiscoveryEvaluationService {
     private final DiscoveryGenreFilter genres;
     private final EventMatcher matcher;
     private final JsonMapper json=JsonMapper.builder().build();
-    public record Rules(List<@NonNull PartySeries> parties, Map<String,List<String>> aliases, Collection<String> genres) { }
+    public record Rules(List<@NonNull PartySeries> parties, Map<String,List<String>> aliases, Collection<String> genres,List<GenreCoverage.@NonNull Genre> coverageGenres) {
+        public Rules(List<@NonNull PartySeries> parties,Map<String,List<String>> aliases,Collection<String> genres) {
+            this(parties,aliases,genres,List.of());
+        }
+    }
     public DiscoveryEvaluationService(DiscoveryStore store,PartySeriesRepository parties,DiscoveryGenreFilter genres,EventMatcher matcher) {
         this.store=store;this.parties=parties;this.genres=genres;this.matcher=matcher;
     }
-    public Rules rules() { return new Rules(parties.findAll(),store.aliases(),genres.terms()); }
+    public Rules rules() { var coverage=genres.coverageGenres();
+        Set<String> terms=new LinkedHashSet<>();
+        for (var genre:coverage) for (String term:genre.terms()) terms.add(term);
+        return new Rules(parties.findAll(),store.aliases(),terms,coverage); }
     public record Assessment(PartySeriesRecognition.Recognition recognition,EventVerification.Result verification,
                              String lifecycle,boolean automaticImportEligible,List<@NonNull String> importBlockers) { }
     /** Additive API diagnostics; persisted editorial decisions remain authoritative and unchanged. */
@@ -37,6 +44,7 @@ public class DiscoveryEvaluationService {
             && "AUTOMATIC".equals(row.get("decision_origin")) && "READY".equals(row.get("status"))
             && evaluate(event,(String)row.get("venue_id"),(String)row.get("venue_name"),Boolean.TRUE.equals(row.get("approved")),rules).status().equals("READY");
         var result=DiscoveryStore.forApi(row);
+        result.put("genreCoverage",GenreCoverage.assess(event,rules.coverageGenres()));
         result.put("assessment",new Assessment(recognition,verification,lifecycle,eligible,List.copyOf(blockers)));
         return result;
     }

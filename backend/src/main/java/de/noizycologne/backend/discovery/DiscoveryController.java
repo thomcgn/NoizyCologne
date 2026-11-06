@@ -20,8 +20,9 @@ public class DiscoveryController {
     private final EventChangeService changes;
     private final DiscoveryEvaluationService evaluator;
     private final DiscoveryOnboardingService onboarding;
-    public DiscoveryController(DiscoveryStore store,DiscoveryScheduler scheduler,VenueSourceDiscoveryService discovery,EventImportService importer,DiscoveryResetService resets,EventChangeService changes,DiscoveryEvaluationService evaluator,DiscoveryOnboardingService onboarding) {
-        this.store=store; this.scheduler=scheduler; this.discovery=discovery; this.importer=importer; this.resets=resets; this.changes=changes;this.evaluator=evaluator;this.onboarding=onboarding;
+    private final DiscoveryPortfolioService portfolio;
+    public DiscoveryController(DiscoveryStore store,DiscoveryScheduler scheduler,VenueSourceDiscoveryService discovery,EventImportService importer,DiscoveryResetService resets,EventChangeService changes,DiscoveryEvaluationService evaluator,DiscoveryOnboardingService onboarding,DiscoveryPortfolioService portfolio) {
+        this.store=store; this.scheduler=scheduler; this.discovery=discovery; this.importer=importer; this.resets=resets; this.changes=changes;this.evaluator=evaluator;this.onboarding=onboarding;this.portfolio=portfolio;
     }
     @GetMapping("/changes") public List<Map<String,Object>> changes() { return changes.list(); }
     @GetMapping("/changes/{id}/replacements") public List<Map<String,Object>> replacements(@PathVariable String id) { return changes.replacements(id); }
@@ -100,6 +101,13 @@ public class DiscoveryController {
         importer.importCandidate(id,r.partyId(),r.date(),true);
     }
     @GetMapping("/candidates/{id}/dm") public Map<String,String> dm(@PathVariable String id) { return Map.of("text",importer.dm(id)); }
+    public record PortfolioApproval(@NotBlank @Size(max=200) String name) { }
+    @PostMapping("/candidates/{id}/portfolio") public Map<String,String> portfolio(@PathVariable String id,@Valid @RequestBody PortfolioApproval request) {
+        return Map.of("partyId",portfolio.approve(id,request.name()));
+    }
+    @GetMapping("/sources") public List<Map<String,Object>> sources(@RequestParam String venueId) {
+        return store.jdbc().queryForList("SELECT s.*,v.name AS venue_name FROM discovery_sources s JOIN venues v ON v.id=s.venue_id WHERE venue_id=? ORDER BY priority,url",venueId).stream().map(DiscoveryStore::forApi).toList();
+    }
     @GetMapping("/candidates/{id}/sources") public List<Map<String,Object>> origins(@PathVariable String id) {
         store.candidate(id);return store.origins(id);
     }

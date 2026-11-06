@@ -85,3 +85,33 @@ Cancellation-Prozess bleiben erhalten. Unit-Fixtures prüfen Zusammenführung,
 abweichende Location, ungebundene Plattform, Datum-/Zeitkonflikte, Wiederholungen
 und Herkunft. Die nachfolgende Datenbankintegration prüft Persistenz und idempotente
 Wiederholung; QUICK behauptet diese Prüfung nicht.
+
+## Phase 4 – fachliche Integration
+
+Gemäß nachgereichter Festlegung ist der Nenner der 50-%-Schwelle **die gesamte
+Anzahl aktiver Projektgenres**, nicht die Anzahl im Event genannter Genres.
+Jedes aktive Genre zählt einmal; kanonischer Name, Anzeigename und Aliasse
+identifizieren dasselbe Genre. Quellen-URLs allein zählen nicht als Genrebeleg.
+Ohne aktive Genres gibt es keine Portfolioempfehlung. Bekannte Reihen behalten
+die vorhandenen Importregeln; die Schwelle betrifft neue Portfolioaufnahmen.
+
+Die ausdrückliche Portfoliofreigabe verwendet PartySeriesService und bestehende
+lesbare Standardgenres. Der belegte Eventtitel wird als Alias gespeichert; eine
+Wiederholung derselben Freigabe erzeugt keine zweite Reihe. Geschützte Ablehnungen,
+Zuordnungen, Absagen und offene Änderungen blockieren die Aktion. Nur ein vorher
+unverändert automatisch geprüfter Kandidat mit belegtem Datum aus freigegebener
+Quelle kann im selben bestätigten Schritt in den Kalender gelangen. Sonstige
+Terminkorrekturen bleiben manuell. Der normale Kalender-/Redaktionsweg bleibt
+erhalten; es werden keine gespeicherten Entwürfe verändert oder Instagram-Aktionen
+aufgerufen.
+
+Eine ausdrücklich angegebene relative Beginnzeit „nach dem Konzert“ bleibt als
+Text in den Kalendernotizen; start_time bleibt NULL. Es wird keine Uhrzeit aus
+Konzertdaten erfunden. Das Konzert selbst bleibt ausgeschlossen; eigenständige
+Aftershow-Partys werden separat bewertet.
+
+Regressionen: echte isolierte PostgreSQL-Datenbank mit MTC-artigem Teilrender und
+zwei konfigurierten Ersatzquellen, ergänzte Genres/Uhrzeit und Originalherkunft,
+wiederholte Scans ohne zweite Kalenderzeile oder falsche Änderung, Datumskonflikt,
+geschützte Ablehnung, deaktivierte Quelle, einmalige Portfoliofreigabe,
+offizielle Ticketabsage im bestehenden Workflow und relativer Aftershow-Beginn.
