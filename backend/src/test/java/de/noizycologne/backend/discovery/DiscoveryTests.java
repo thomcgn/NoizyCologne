@@ -60,7 +60,7 @@ class DiscoveryTests {
         when(fetcher.fetch(root)).thenReturn(new EventPageFetcher.Page(root,fixture("live-music-hall.html"),"text/html"));
         assertThat(new VenueSourceDiscoveryService(fetcher,extractor,genres()).discover(root.toString(),EventExtractor.Profile.defaults())).hasSize(1);
         when(fetcher.fetch(root)).thenThrow(new EventPageFetcher.FetchFailure("BLOCKED"));
-        assertThatThrownBy(() -> new VenueSourceDiscoveryService(fetcher,extractor,genres()).discover(root.toString(),EventExtractor.Profile.defaults())).isInstanceOf(EventPageFetcher.FetchFailure.class);
+        assertThat(requireNonNull(new VenueSourceDiscoveryService(fetcher,extractor,genres()).discover(root.toString(),EventExtractor.Profile.defaults()).getFirst()).extraction().status()).isEqualTo("BLOCKED");
     }
     private @org.jspecify.annotations.NonNull PartySeries party() { var p=mock(PartySeries.class); when(p.getId()).thenReturn("party"); when(p.getName()).thenReturn("Indie Party"); return p; }
     private EventExtractor.Event event(String title,List<@NonNull String> dates,String state) { return new EventExtractor.Event("id",title,"https://new.example/event",dates,title,state,""); }
@@ -109,7 +109,9 @@ class DiscoveryTests {
         assertThat(service.discover("https://new.example/",EventExtractor.Profile.defaults())).hasSize(8);
         verify(fetcher,times(8)).fetch(any());
         reset(fetcher); when(fetcher.robotsAllowed(any(),any())).thenReturn(false);
-        assertThatThrownBy(() -> service.discover("https://new.example/",EventExtractor.Profile.defaults())).isInstanceOf(EventPageFetcher.FetchFailure.class);
+        var blocked=requireNonNull(service.discover("https://new.example/",EventExtractor.Profile.defaults()).getFirst());
+        assertThat(blocked.extraction().status()).isEqualTo("ROBOTS_BLOCKED");
+        assertThat(blocked.diagnostics()).anyMatch(message -> message.contains("robots.txt"));
         verify(fetcher,never()).fetch(any());
         assertThatThrownBy(() -> SafeUrls.resolve("localhost")).isInstanceOf(UnknownHostException.class);
     }

@@ -104,18 +104,30 @@ public class EventExtractor {
     private void genericCards(org.jsoup.nodes.Document doc,String page,List<@NonNull Event> events) {
         doc=doc.clone();
         doc.select("footer, nav, script, style, [hidden], [aria-hidden=true]").remove();
-        for (var heading:doc.select("h2, h3, h4").stream().limit(200).toList()) {
+        for (var heading:doc.select("h1, h2, h3, h4").stream().limit(200).toList()) {
             Element container=heading.parent();
             for (int depth=0;container!=null && depth<3;depth++,container=container.parent()) {
-                if (container.select("h2, h3").size()>1) break;
+                if (container.select("h1, h2, h3, h4").size()>1) break;
                 List<@NonNull String> starts=new ArrayList<>();
                 for (var date:container.select("time[datetime], [itemprop=startDate][content]"))
                     starts.add(date.hasAttr("datetime") ? date.attr("datetime") : date.attr("content"));
                 if (starts.isEmpty()) starts.addAll(GermanProgramText.starts(container.text()).stream()
                     .filter(start -> EventNormalizer.date(start)!=null).toList());
+                // Some server-rendered programme cards use a separate date label without a year.
+                // Retain that evidence for review instead of inventing a year or clock time.
+                if (starts.isEmpty()) {
+                    var label=container.selectFirst(".date");
+                    if (label!=null && !label.text().isBlank()) starts.addAll(GermanProgramText.starts(label.text()));
+                }
                 if (starts.isEmpty() || heading.text().isBlank()) continue;
-                var link=container.selectFirst("a[href]");
-                String url=link==null ? page : link.absUrl("href");
+                String url=page;
+                for (var link:container.select("a[href]")) {
+                    try {
+                        var target=SafeUrls.parse(link.absUrl("href"));
+                        if (!target.getHost().equalsIgnoreCase(java.net.URI.create(page).getHost())) continue;
+                        url=target.toString(); break;
+                    } catch(IllegalArgumentException ignored) { /* No external social links as event identities. */ }
+                }
                 events.add(new Event(url.equals(page) ? "" : url,clip(heading.text(),500),url,
                     starts.stream().distinct().toList(),clip(container.text(),8000),riskyState(container.text()),"",htmlPlace(container)));
                 break;

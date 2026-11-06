@@ -34,7 +34,7 @@ class BrowserDiscoveryTests {
     @Test void blockedRobotsNeverTriggerBrowserBypass() throws Exception {
         var service=service("<div id='root'></div><script src='/bundle.js'></script>");
         when(http.robotsAllowed(any(),any())).thenReturn(false);
-        assertThatThrownBy(() -> service.discover(root.toString(),EventExtractor.Profile.defaults())).isInstanceOf(EventPageFetcher.FetchFailure.class);
+        assertThat(requireNonNull(service.discover(root.toString(),EventExtractor.Profile.defaults()).getFirst()).extraction().status()).isEqualTo("ROBOTS_BLOCKED");
         verifyNoInteractions(browser);verify(http,never()).fetch(any());
     }
     @Test void renderedArbitraryCardsUseTheSameExtractorAndNeverProveCalendarCompleteness() throws Exception {
