@@ -9,6 +9,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import java.net.URI;
 import java.util.*;
 import static java.util.Objects.requireNonNull;
@@ -19,9 +21,11 @@ import static org.mockito.Mockito.*;
 @ActiveProfiles("local")
 class MultiSourceDiscoveryIntegrationTests {
     @Autowired DiscoveryStore store;
+    @Autowired org.springframework.web.context.WebApplicationContext context;
     @Autowired DiscoveryScheduler scheduler;
     @Autowired DiscoveryController controller;
     @Autowired DiscoveryPortfolioService portfolio;
+    @Autowired DiscoveryEvaluationService evaluation;
     @Autowired GenreRepository genres;
     @Autowired VenueRepository venues;
     @Autowired PartySeriesRepository parties;
@@ -92,17 +96,58 @@ class MultiSourceDiscoveryIntegrationTests {
         verify(discovery,never()).discover(eq(platform),any());
         assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,venue.getId())).isEqualTo(1);
     }
-    @Test void portfolioApprovalUsesActiveGenreDenominatorAndIsIdempotent() throws Exception {
+    @Test void manualPortfolioApprovalSavesSelectedStandardsAndWaitsForCalendarConfirmation() throws Exception {
         String evidence=String.join(", ",genres.findAllByActiveTrueOrderByCanonicalNameAsc().stream().map(g -> g.getDisplayName()).toList());
         var event=event("unknown1","New Alternative Party",ticket,"2026-11-07",evidence,"");
         source(ticket,event);configure(platform,"PLATFORM",false,2);scheduler.scan();
         var c=store.jdbc().queryForMap("SELECT * FROM discovery_candidates WHERE venue_id=?",venue.getId());
         assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,venue.getId())).isZero();
-        String id=portfolio.approve((String)c.get("id"),"New Alternative Party",null,"23:00");createdParties.add(id);
+        String id=portfolio.approve((String)c.get("id"),"New Alternative Party",null,"23:00",Set.of(requireNonNull(genres.findAllByActiveTrueOrderByCanonicalNameAsc().getFirst()).getDisplayName()));createdParties.add(id);
         assertThat(portfolio.approve((String)c.get("id"),"New Alternative Party")).isEqualTo(id);
         scheduler.scan();
-        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,venue.getId())).isEqualTo(1);
-        assertThat(requireNonNull(parties.findById(id).orElseThrow()).getStandardGenres()).isNotEmpty();
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,venue.getId())).isZero();
+        assertThat(requireNonNull(parties.findById(id).orElseThrow()).getStandardGenres()).containsExactly(requireNonNull(genres.findAllByActiveTrueOrderByCanonicalNameAsc().getFirst()).getDisplayName());
+        assertThat(store.candidate((String)c.get("id"))).containsEntry("party_id",id).containsEntry("decision_origin","MANUAL");
+    }
+    private @NonNull MockHttpServletRequestBuilder postJson(String path,Map<String,?> body) {
+        var json=tools.jackson.databind.json.JsonMapper.builder().build();
+        return requireNonNull(MockMvcRequestBuilders.post(requireNonNull(path)).contentType("application/json").content(requireNonNull(json.writeValueAsString(body))));
+    }
+    @Test void manualPortfolioApiAllowsLowCoverageAndUndatedEventsButCannotImportWithoutDateOrLocation() throws Exception {
+        configure(platform,"PLATFORM",false,2);
+        var active=requireNonNull(genres.findAllByActiveTrueOrderByCanonicalNameAsc().getFirst()).getDisplayName();
+        var unknown=new EventExtractor.Event("manual-genres","Neue manuelle Reihe",ticket,List.of(),"Genres: "+active+", Unbekannt A, Unbekannt B","","MTC Cologne");
+        source(ticket,unknown);scheduler.scan();
+        var candidate=store.jdbc().queryForMap("SELECT * FROM discovery_candidates WHERE venue_id=?",venue.getId());
+        String candidateId=Objects.toString(candidate.get("id"));
+        assertThat(GenreCoverage.assess(unknown,evaluation.rules().coverageGenres()).percent()).isEqualTo(33);
+        var mvc=org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup(requireNonNull(context)).build();
+        var body=Map.of("name","Neue manuelle Reihe","defaultStartTime","22:30","standardGenres",Set.of(active));
+        var json=tools.jackson.databind.json.JsonMapper.builder().build();
+        String response=mvc.perform(postJson("/api/v1/discovery/candidates/"+candidateId+"/portfolio",body))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk()).andReturn().getResponse().getContentAsString();
+        String id=requireNonNull(json.readTree(response).path("partyId").asString());createdParties.add(id);
+        assertThat(requireNonNull(parties.findById(id).orElseThrow()).getStandardGenres()).containsExactly(active);
+        assertThat(store.candidate(candidateId)).containsEntry("party_id",id).containsEntry("calendar_entry_id",null).containsEntry("event_date",null);
+        mvc.perform(postJson("/api/v1/discovery/candidates/"+candidateId+"/confirm",Map.of("partyId",id,"inquiryStatus","NONE")))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isBadRequest());
+        store.jdbc().update("DELETE FROM discovery_candidate_identities WHERE candidate_id=?",candidateId);
+        store.jdbc().update("UPDATE discovery_candidates SET venue_id=NULL,geo_status='INSIDE' WHERE id=?",candidateId);
+        try {
+            mvc.perform(postJson("/api/v1/discovery/candidates/"+candidateId+"/confirm",Map.of("partyId",id,"date","2026-11-07","inquiryStatus","NONE")))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isConflict());
+            assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE party_id=?",Integer.class,id)).isZero();
+        } finally {store.jdbc().update("UPDATE discovery_candidates SET venue_id=? WHERE id=?",venue.getId(),candidateId);}
+    }
+    @Test void manualPortfolioRejectsUnknownGenresWithoutCreatingOrAssigningASeries() throws Exception {
+        configure(platform,"PLATFORM",false,2);
+        source(ticket,event("invalid-genres","Manuelle Genreprüfung",ticket,"2026-11-07","Emo",""));scheduler.scan();
+        var candidate=store.jdbc().queryForMap("SELECT * FROM discovery_candidates WHERE venue_id=?",venue.getId());
+        var failure=requireNonNull(assertThatThrownBy(()->portfolio.approve((String)candidate.get("id"),"Manuelle Genreprüfung",null,"22:00",Set.of("Nicht im Katalog"))));
+        failure.isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        failure.hasMessageContaining("inaktives Standardgenre");
+        assertThat(store.candidate((String)candidate.get("id"))).containsEntry("party_id",null);
+        assertThat(parties.findAll().stream().filter(party->party.getName().equals("Manuelle Genreprüfung"))).isEmpty();
     }
     @Test void confirmedOfficialTicketCancellationUsesExistingChangeWorkflow() throws Exception {
         known();configure(platform,"PLATFORM",false,2);

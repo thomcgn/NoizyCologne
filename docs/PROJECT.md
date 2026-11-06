@@ -4001,3 +4001,21 @@ keine regulären Suchlauf-Prozente. Seitenwechsel und erneutes Laden lesen den
 persistierten Vorgang über das bestehende Polling. Eine beschriftete Progressbar
 zeigt Prozent, Einheiten, aktuelle Quelle/Location und letzte Aktualisierung.
 Anforderungen und phasenweise Prüfbelege stehen in [PARTY-DEFAULTS-DISCOVERY-PROGRESS.md](PARTY-DEFAULTS-DISCOVERY-PROGRESS.md).
+
+
+# 35. Standardgenres bei manueller Discovery-Portfolioaufnahme (06.11.2026)
+
+Der Anlegedialog für eine neue Reihe verwendet dieselbe Genreauswahl wie der
+Portfolio-Editor: aktiver Genre-Katalog, durchsuchbare Checkbox-Mehrfachauswahl
+und entfernbare Chips. Nur ausdrücklich belegte aktive Quellengenres werden als
+Vorschläge vorausgewählt; bloße Titel-/Texttreffer und unsichere Angaben nicht.
+Weitere aktive Genres lassen sich manuell ergänzen. Die gewählten Anzeigenamen
+werden als `standardGenres` über den bestehenden PartySeriesService gespeichert.
+
+Die manuelle Aufnahme ist unabhängig von der automatischen 50-%-Genre-Regel.
+Sie legt nur die Reihe an und ordnet sie dem Vorschlag zu. Der Prüfdialog bleibt
+geöffnet und zeigt die neue Zuordnung unmittelbar. Ein Kalenderimport erfolgt
+erst durch die eigene Bestätigung mit gültigem Datum und bestätigter Location;
+die bestehenden Import- und Standortsperren bleiben wirksam. Keine Migration
+oder zusätzliche Infrastruktur. Prüfungen und Grenzen:
+[DISCOVERY-PARTY-GENRES.md](DISCOVERY-PARTY-GENRES.md).

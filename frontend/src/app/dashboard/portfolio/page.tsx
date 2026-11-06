@@ -13,6 +13,7 @@ import {
   type RecurrenceRule,
 } from "../CatalogProvider";
 import DashboardModal from "../DashboardModal";
+import StandardGenreSelector, { useActiveGenres } from "../StandardGenreSelector";
 import DataCollection, { type CollectionColumn } from "../DataCollection";
 import { useWorkspaceAction } from "../workspaceActions";
 import SourceOverview, {type DiscoverySource} from "../SourceOverview";
@@ -21,7 +22,6 @@ export type Category = "parties" | "locations";
 type DjAssignment = "none" | "resident" | "other";
 type RecurrenceChoice = "none" | "weekly" | "monthly_weekday" | "other";
 type WebsiteReport = { previewToken: string; websiteUrl: string; suggestedName: string; checkedAt: string; eventCount: number; partyCount: number; knownSeriesCount: number; incomplete: boolean; problems: string[]; sources: { url: string; fetchMethod: string; diagnostics: string[]; extraction: { status: string; events: unknown[]; complete: boolean } }[] };
-type ActiveGenre = { id: string; displayName: string; active: boolean };
 
 const weekdayNames = [
   "Sonntag",
@@ -129,9 +129,7 @@ export default function PortfolioPage({
   const [otherDjIds, setOtherDjIds] = useState<string[]>([]);
   const [organizerIds, setOrganizerIds] = useState<string[]>([]);
   const [standardGenres, setStandardGenres] = useState<string[]>([]);
-  const [availableGenres, setAvailableGenres] = useState<ActiveGenre[]>([]);
-  const [genresLoading, setGenresLoading] = useState(true);
-  const [genresError, setGenresError] = useState("");
+  const { genres: availableGenres, loading: genresLoading, error: genresError } = useActiveGenres();
 
   const [djMentionDefault, setDjMentionDefault] =
     useState<DjMentionDefault>("manual");
@@ -143,33 +141,6 @@ export default function PortfolioPage({
   const [weekday, setWeekday] = useState(5);
   const [occurrence, setOccurrence] = useState(3);
   const [recurrenceNote, setRecurrenceNote] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    async function loadGenres() {
-      setGenresLoading(true);
-      setGenresError("");
-      try {
-        const response = await fetch("/api/v1/genres", { credentials: "same-origin", cache: "no-store" });
-        if (!response.ok) throw new Error(`Die Genreverwaltung antwortete mit HTTP ${response.status}.`);
-        const body: unknown = await response.json();
-        if (!Array.isArray(body)) throw new Error("Die Genreverwaltung lieferte kein gültiges Listenformat.");
-        const genres = body.filter((item): item is ActiveGenre => {
-          if (typeof item !== "object" || item === null) return false;
-          const value = item as Record<string, unknown>;
-          return typeof value.id === "string" && typeof value.displayName === "string" && value.active === true;
-        }).sort((a, b) => a.displayName.localeCompare(b.displayName, "de-DE"));
-        if (!cancelled) setAvailableGenres(genres);
-      } catch (cause) {
-        if (!cancelled) setGenresError(cause instanceof Error ? cause.message : "Genres konnten nicht geladen werden.");
-      } finally {
-        if (!cancelled) setGenresLoading(false);
-      }
-    }
-    void loadGenres();
-    return () => { cancelled = true; };
-  }, []);
-
 
   useEffect(() => {
     if (category !== "parties" || !editingId) return;
@@ -717,29 +688,7 @@ export default function PortfolioPage({
                 </label>
 
                 {/* Optionaler Turnus */}
-                <fieldset className="mt-6 rounded-xl border border-white/10 p-5">
-                  <legend className="px-2 text-lg font-semibold">Standardgenres</legend>
-                  <p className="mt-1 text-sm text-neutral-400">
-                    Diese Genres werden bei neuen Redaktionsentwürfen vorausgewählt. Special-Event-Zusätze bleiben eventbezogen.
-                  </p>
-                  {genresLoading && <p className="mt-4 text-sm text-neutral-500" role="status">Genres werden geladen ...</p>}
-                  {genresError && <p className="mt-4 text-sm text-red-300" role="alert">{genresError}</p>}
-                  {!genresLoading && !genresError && availableGenres.length === 0 && <p className="mt-4 text-sm text-neutral-500">Keine aktiven Genres in den Einstellungen vorhanden.</p>}
-                  <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {availableGenres.map((genre) => (
-                      <label key={genre.id} className="flex min-h-11 items-center gap-2 rounded-lg bg-neutral-900 px-3 py-2 text-sm">
-                        <input type="checkbox" className="size-4 accent-white" checked={standardGenres.includes(genre.displayName)} onChange={() => setStandardGenres((current) => current.includes(genre.displayName) ? current.filter((item) => item !== genre.displayName) : [...current, genre.displayName])} disabled={saving || aliasesLoading || (category === "parties" && !aliasesReady)} />
-                        <span>{genre.displayName}</span>
-                      </label>
-                    ))}
-                    {!genresLoading && !genresError && standardGenres.filter(name => !availableGenres.some(genre => genre.displayName === name)).map(name => (
-                      <label key={`unavailable-${name}`} className="flex min-h-11 items-center gap-2 rounded-lg bg-neutral-900 px-3 py-2 text-sm">
-                        <input type="checkbox" className="size-4 accent-white" checked onChange={() => setStandardGenres(current => current.filter(item => item !== name))} disabled={saving || aliasesLoading || !aliasesReady} />
-                        <span>{name} <span className="text-neutral-400">(nicht mehr aktiv oder verfügbar; zum Entfernen abwählen)</span></span>
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
+                <StandardGenreSelector genres={availableGenres} loading={genresLoading} error={genresError} value={standardGenres} onChange={setStandardGenres} disabled={saving || aliasesLoading || !aliasesReady} />
 
                 {/* Optionaler Turnus */}
                 <div className="mt-6 rounded-xl border border-white/10 p-5">
