@@ -159,7 +159,7 @@ public class DiscoveryScheduler {
         record Pending(String sourceId, EventExtractor.@org.jspecify.annotations.NonNull Event event, boolean approved,boolean official) { }
         List<@NonNull Pending> pending=new ArrayList<>();
         Set<String> fetchedRoots=new HashSet<>();boolean fallbackRequired=false;
-        List<String> statuses=new ArrayList<>(); int count=0;
+        List<String> statuses=new ArrayList<>();List<String> qualities=new ArrayList<>(); int count=0;
         record Checked(String sourceId,List<EventExtractor.@NonNull Event> events,boolean complete) { }
         List<Checked> checks=new ArrayList<>();
         for (var root : roots.entrySet().stream().limit(changesOnly ? 28 : 8).toList()) {
@@ -175,9 +175,10 @@ public class DiscoveryScheduler {
                     store.fetched(sourceId,found);
                     store.jdbc().update("UPDATE discovery_sources SET fallback_used=? WHERE id=?",fallbackRequired,sourceId);
                     statuses.add(found.extraction().status());
-                    if (official(venue,found.url().toString())) checks.add(new Checked(sourceId,found.extraction().events(),found.extraction().complete()));
+                    if (!found.extraction().status().equals("SOURCE_LINKS_FOUND")) qualities.add(SourceQuality.assess(found));
                     boolean approved=Boolean.TRUE.equals(source.get("approved"));
                     boolean trusted=official(venue,found.url().toString()) || approved && List.of("OFFICIAL_ORGANIZER","OFFICIAL_TICKETS").contains(source.get("source_kind"));
+                    if (trusted) checks.add(new Checked(sourceId,found.extraction().events(),found.extraction().complete()));
                     for (var event : found.extraction().events()) {
                         if(changesOnly && !targetKeys.contains(EventChangeMonitor.identity(event)) && targets.stream().noneMatch(target -> EventMatcher.nameMatches(event.title(),(String)target.get("title")) || EventMatcher.nameMatches((String)target.get("title"),event.title()) || Objects.equals(EventChangeMonitor.date(event),target.get("event_date") instanceof java.sql.Date day ? day.toLocalDate() : target.get("event_date")))) continue;
                         if (++count>300) break; pending.add(new Pending(sourceId,event,approved,trusted)); }
@@ -185,7 +186,7 @@ public class DiscoveryScheduler {
                 }
             } catch (java.io.IOException e) {
                 String status=e instanceof EventPageFetcher.FetchFailure f ? f.status : "SCAN_FAILED";
-                statuses.add(status);fallbackRequired=true;
+                statuses.add(status);qualities.add(status.contains("BLOCKED") ? "BLOCKED" : "FAILED");fallbackRequired=true;
                 store.fetched(rootId,new VenueSourceDiscoveryService.Found(SafeUrls.parse(root.getKey()),new EventExtractor.Extraction(List.of(),status),"HTTP",List.of(Objects.requireNonNull(status))));
             }
         }
@@ -208,9 +209,12 @@ public class DiscoveryScheduler {
         else if (!statuses.contains("EVENTS_FOUND") && status.equals("SOURCE_LINKS_FOUND")) status="UNINTERPRETABLE";
         if (statuses.stream().anyMatch(s -> s.equals("SCAN_FAILED") || s.contains("BLOCKED"))) status="PARTIAL_FAILURE";
         store.jdbc().update("UPDATE venues SET discovery_status=?,last_discovery_at=CASE WHEN ? IN ('EVENTS_FOUND','NO_EVENTS','EXCLUDED_CONCERTS') THEN now() ELSE last_discovery_at END WHERE id=?",status,status,venue.getId());
-        String quality=outcomes.isEmpty() ? "PARTIAL" : outcomes.stream().allMatch(q -> q.equals("NO_EVENTS")) ? "NO_EVENTS_CONFIRMED"
-            : pending.isEmpty() ? outcomes.stream().allMatch(q -> q.contains("BLOCKED")) ? "BLOCKED" : "FAILED"
-            : count>300 || roots.size()>(changesOnly ? 28 : 8) || fallbackRequired || statuses.stream().anyMatch(q -> !List.of("EVENTS_FOUND","NO_EVENTS","SOURCE_LINKS_FOUND").contains(q)) ? "PARTIAL" : "SUCCESS";
+        String quality=qualities.isEmpty() ? "PARTIAL"
+            : count>300 || roots.size()>(changesOnly ? 28 : 8) ? "PARTIAL"
+            : qualities.stream().allMatch(q -> q.equals("NO_EVENTS_CONFIRMED")) ? "NO_EVENTS_CONFIRMED"
+            : qualities.stream().allMatch(q -> q.equals("SUCCESS") || q.equals("NO_EVENTS_CONFIRMED")) ? "SUCCESS"
+            : !pending.isEmpty() || qualities.contains("PARTIAL") || qualities.contains("NO_EVENTS_CONFIRMED") ? "PARTIAL"
+            : qualities.stream().allMatch(q -> q.equals("BLOCKED")) ? "BLOCKED" : "FAILED";
         store.jdbc().update("UPDATE venues SET last_discovery_attempt_at=now(),discovery_quality=?,discovery_event_count=? WHERE id=?",quality,combined.size(),venue.getId());
         return List.of("EVENTS_FOUND","NO_EVENTS","EXCLUDED_CONCERTS").contains(status);
     }

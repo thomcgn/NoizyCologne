@@ -3761,3 +3761,23 @@ manuellen Lauf ergänzt. STANDARD-Backend kompiliert ohne unnötiges clean;
 FULL und Löschungs-/Konfigurationsfälle bleiben sauber. Die tatsächliche main-
 Absicherung war bei der lesenden Prüfung noch deaktiviert; notwendige Schritte
 bleiben in QUALITY.md dokumentiert.
+
+Kapitel 28 erweitert Quellen additiv durch **V16**: Art, Aktivierung, Priorität,
+`SUCCESS`/`PARTIAL`/`BLOCKED`/`FAILED`/`NO_EVENTS_CONFIRMED`, Eventzahl und
+Fallbacknutzung. Alte Quellenentscheidungen bleiben erhalten. Es werden nur die
+primären und ausdrücklich konfigurierten Quellen geprüft; Fehler stoppen andere
+Quellen nicht. Höchstens acht reguläre Startquellen, bestehende Seiten-/Eventbudgets.
+Originalbelege bleiben im vorhandenen Beobachtungsprotokoll, zusammengeführte
+Kandidaten verwenden die bestehende Kalender-/Cancellation-Pipeline. Eine
+Teilauswertung ist kein bestätigter Leerbestand. Zusätzliche passende Angaben
+und unveränderte Beobachtungen erzeugen keine fingierten Änderungsmeldungen.
+
+Die 50-%-Schwelle für neue Portfolioaufnahmen verwendet gemäß ausdrücklicher
+Festlegung **alle aktiven Projektgenres** als Nenner, jedes Genre einmal,
+einschließlich seiner Aliasse als gleichwertige Namen. Sie ist kein Anteil der
+im Event genannten Genres. Die einmalige ausdrückliche Freigabe verwendet
+PartySeriesService, lesbare Standardgenres und einen belegten Titelalias.
+Bestätigte bekannte Reihen behalten die bisherigen Importregeln. Relative
+Beginnzeiten bleiben Text in Notizen und neuen Captionvorlagen; bestehende
+Entwürfe werden nicht verändert. Die Quellenübersicht und der Prüfdialog zeigen
+Herkunft und Qualität; technische Diagnosen sind einklappbar.

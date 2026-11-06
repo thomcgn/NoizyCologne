@@ -59,10 +59,22 @@ class MultiSourceDiscoveryIntegrationTests {
         var candidate=store.jdbc().queryForMap("SELECT * FROM discovery_candidates WHERE venue_id=?",venue.getId());
         assertThat(requireNonNull(candidate.get("evidence")).toString()).contains("Emo","Indie");assertThat(candidate).containsEntry("status","IMPORTED");
         assertThat(store.origins((String)candidate.get("id"))).hasSize(2);
+        assertThat(candidate.get("last_confirmed_at")).isNotNull();
         assertThat(store.jdbc().queryForObject("SELECT count(*) FROM event_changes WHERE venue_id=?",Integer.class,venue.getId())).isZero();
         assertThat(store.jdbc().queryForObject("SELECT quality FROM discovery_sources WHERE venue_id=? AND url=?",String.class,venue.getId(),root)).isEqualTo("PARTIAL");
         assertThat(store.jdbc().queryForObject("SELECT fallback_used FROM discovery_sources WHERE venue_id=? AND url=?",Boolean.class,venue.getId(),ticket)).isTrue();
         assertThat(store.jdbc().queryForObject("SELECT discovery_quality FROM venues WHERE id=?",String.class,venue.getId())).isEqualTo("PARTIAL");
+    }
+    @Test void laterPrimaryFailureKeepsAnImportedOccurrenceWhenFallbackFactsAreUnchanged() throws Exception {
+        known();source(root,event("main1","NEON PARADISE",root,"2026-11-07","Primary announcement",""));
+        source(ticket,event("t1","NEON PARADISE",ticket,"2026-11-07","Party",""));
+        source(platform,event("p1","NEON PARADISE",platform,"2026-11-07T23:00","Emo, Indie DJs",""));scheduler.scan();
+        when(discovery.discover(eq(root),any())).thenReturn(List.of(new VenueSourceDiscoveryService.Found(URI.create(root),
+            new EventExtractor.Extraction(List.of(),"BROWSER_PARTIAL",false),"BROWSER",List.of("ROBOTS_BLOCKED"))));
+        scheduler.scan();scheduler.scan();
+        assertThat(store.jdbc().queryForMap("SELECT status FROM discovery_candidates WHERE venue_id=?",venue.getId())).containsEntry("status","IMPORTED");
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,venue.getId())).isEqualTo(1);
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM event_changes WHERE venue_id=?",Integer.class,venue.getId())).isZero();
     }
     @Test void conflictingFallbackDatesAreNotSilentlyOverwrittenAndManualRejectionIsPreserved() throws Exception {
         source(ticket,event("shared","New Indie Party",ticket,"2026-11-07","Indie",""));

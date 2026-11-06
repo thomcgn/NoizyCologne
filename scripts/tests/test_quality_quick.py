@@ -60,6 +60,17 @@ class ScopeTests(unittest.TestCase):
         self.assertTrue(result['frontend'])
         self.assertEqual(result['frontend_lint'], ['src/space in name.ts'])
 
+    def test_analysis_regressions_only_follow_changed_rules_and_full_is_independent(self):
+        source = self.plan(['backend/src/main/java/fixture/Probe.java'])
+        self.assertFalse(source['java_analysis_changed'])
+        compiler = self.plan(['config/java-quality.prefs'])
+        self.assertTrue(compiler['java_analysis_changed'])
+        frontend = self.plan(['frontend/tsconfig.json'])
+        self.assertTrue(frontend['frontend_analysis_changed'])
+        unknown = self.plan(['unknown-build-file'])
+        self.assertTrue(unknown['java_analysis_changed'])
+        self.assertTrue(unknown['frontend_analysis_changed'])
+
     def test_docs_only_does_not_select_application_checks(self):
         self.write('README.md', 'Changed documentation\n')
         self.write('docs/new guide.md', 'More documentation\n')
@@ -249,6 +260,8 @@ class QuickWorkflowTests(WorkflowFixture, unittest.TestCase):
         self.assertNotIn(' clean ', self.calls())
         self.assertIn(' verify ', self.calls())
         self.assertIn('docker run', self.calls())
+        self.assertNotIn('[quality] gate-tests', result.stdout)
+        self.assertNotIn('[quality] java-negative-tests', result.stdout)
 
     def test_database_cleanup_failure_cannot_report_a_successful_gate(self):
         path = self.root / 'backend/src/test/java/fixture/ProbeIntegrationTests.java'

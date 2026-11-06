@@ -23,6 +23,16 @@ public class EventCandidateProcessor {
             Map<String,List<String>> aliases,List<String> genres,boolean approved) {
         process(venue,sourceId,event,known,aliases,genres,approved,null);
     }
+    private static boolean compatibleFallback(EventExtractor.Event before,EventExtractor.Event current,String venue) {
+        if (!EventNormalizer.text(before.title()).equals(EventNormalizer.text(current.title()))
+                || EventChangeMonitor.date(before)==null || !Objects.equals(EventChangeMonitor.date(before),EventChangeMonitor.date(current))
+                || !EventLifecycle.signal(before).equals("ACTIVE") || !EventLifecycle.signal(current).equals("ACTIVE")
+                || !EventVerification.assess(current,venue).sufficient()) return false;
+        if (!before.location().isBlank() && !current.location().isBlank()
+                && !EventNormalizer.text(before.location()).equals(EventNormalizer.text(current.location()))) return false;
+        return java.util.stream.Stream.concat(before.starts().stream(),current.starts().stream())
+            .map(EventNormalizer::time).filter(Objects::nonNull).distinct().count()<=1;
+    }
     public void process(Venue venue,String sourceId,EventExtractor.Event sourceEvent,List<@NonNull PartySeries> known,
             Map<String,List<String>> aliases,List<String> genres,boolean approved,String operation) {
         var event=EventPrivacy.safe(sourceEvent);
@@ -71,7 +81,9 @@ public class EventCandidateProcessor {
             return;
         }
         if (old!=null && old.get("calendar_entry_id")!=null
-                && EventChangeMonitor.classify(evaluator.event(old),event,false)==null) {
+                && (EventChangeMonitor.classify(evaluator.event(old),event,false)==null
+                    || !sourceId.equals(old.get("source_id")) && compatibleFallback(evaluator.event(old),event,venue.getName())
+                    && !Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM event_changes WHERE candidate_id=? AND blocks_publication)",Boolean.class,old.get("id"))))) {
             store.jdbc().update("UPDATE discovery_candidates SET raw_event=?,fingerprint=?,evidence=?,source_url=?,updated_at=now() WHERE id=?",
                 evaluator.raw(event),fingerprint,event.evidence(),url,old.get("id"));
             return;

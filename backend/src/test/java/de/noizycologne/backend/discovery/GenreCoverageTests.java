@@ -15,6 +15,11 @@ class GenreCoverageTests {
         assertThat(GenreCoverage.assess(new EventExtractor.Event("","Emo Party","",List.of(),"Emocore","",""),genres).eligible()).isFalse();
         assertThat(GenreCoverage.assess(event,List.of()).eligible()).isFalse();
     }
+    @Test void mixedConcertPageKeepsItsSeparatelyTitledDatedAftershow() {
+        var page=new EventPageFetcher.Page(java.net.URI.create("https://source.example/concerts/"),
+            "<title>Konzerte</title><h1>Konzerte</h1><article><h2>Live Konzert</h2><time datetime='2026-11-07T20:00'></time></article><article><h2>Indie Aftershowparty</h2><time datetime='2026-11-07'></time><p>Emo; Beginn nach dem Konzert</p></article>","text/html");
+        assertThat(new EventExtractor().extract(page,EventExtractor.Profile.defaults()).events()).extracting(EventExtractor.Event::title).containsExactly("Indie Aftershowparty");
+    }
     @Test void aftershowKeepsRelativeStartAndConcertRemainsExcluded() {
         var event=new EventExtractor.Event("","Indie Aftershowparty","",List.of("2026-11-07"),"Emo; Beginn nach dem Konzert","","");
         assertThat(PartyOnlyPolicy.concert(event)).isFalse();assertThat(EventTiming.relativeStart(event)).isEqualTo("nach dem Konzert");

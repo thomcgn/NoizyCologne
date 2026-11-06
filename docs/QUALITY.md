@@ -31,16 +31,16 @@ Fehlende benötigte Werkzeuge/Dependencies führen zum Fehler, nicht zum Übersp
 | Prüfung | QUICK | STANDARD / FULL |
 | --- | --- | --- |
 | Diff, Index, Secrets, Konflikte, Shell-Syntax | immer | immer |
-| Gate-/Hook-/Deploy-Selbsttests | bei Werkzeug-/Workflowänderungen | immer |
+| Gate-/Hook-/Deploy-Selbsttests | bei Werkzeug-/Workflowänderungen | bei Werkzeugänderungen; FULL immer |
 | Backend javac | inkrementelles `test-compile`, bei Löschungen/Konfigurationsänderungen mit `clean` | STANDARD inkrementell; FULL `clean test-compile` |
 | Backend ECJ einschließlich Tests und XML-Auswertung | bei Backend-Betroffenheit vollständig | vollständig |
-| Echte negative Java-Fixtures | bei Backend plus Werkzeugänderung | bei Backend immer |
+| Echte negative Java-Fixtures | bei geänderten Java-Analyseregeln/-Werkzeugen | bei geänderten Regeln; FULL immer |
 | Backend-Tests | betroffene Unit-Klassen/Pakete über Surefire; Datenbanktests ausdrücklich zurückgestellt | gesamtes `verify` mit Paketierung |
 | PostgreSQL | entfällt; Integrationstests STANDARD/FULL | bei Backend immer |
 | Next-Typegen und TypeScript | bei Frontend-Betroffenheit vollständig | bei Frontend vollständig |
 | ESLint mit null Warnungen | geänderte JS-/TS-Dateien, bei gemeinsamem Setup vollständig | bei Frontend vollständig |
 | Frontend-Regressionstests | bei Frontend-Betroffenheit aktuelle gemeinsame Suite | bei Frontend vollständig |
-| Echte negative TypeScript-/ESLint-Fixtures | bei Frontend plus Werkzeugänderung | bei Frontend immer |
+| Echte negative TypeScript-/ESLint-Fixtures | bei geändertem Frontend-Analysesetup | bei geändertem Setup; FULL immer |
 | Frontend-Produktionsbuild | entfällt | bei Frontend immer |
 
 STANDARD bezeichnet die bestehenden Modulschalter, keinen neuen `--standard`-
@@ -350,3 +350,10 @@ verwendet aber ohne Löschungen/Compiler-Konfigurationsänderungen inkrementelle
 javac; ECJ prüft aktuelle Quellen jedes Mal vollständig. FULL bleibt sauber und
 vollständig. Der normale Hook genügt als Commitprüfung; keine zweite manuelle
 QUICK-/FULL-Wiederholung unmittelbar vor demselben Hook.
+
+STANDARD wiederholt unveränderte Gate-Selbsttests und negative Analyse-Fixtures
+nicht. Gate-Selbsttests folgen Werkzeug-/Workflowänderungen; negative Java-Fixtures
+folgen Java-Prüfer, Compilerregeln/POM oder deren Tests, negative Frontend-Fixtures
+folgen gemeinsamem Frontend-/Analysesetup. FULL führt alle immer aus. Diese
+Eingrenzung betrifft Tests des Prüfwerkzeugs, niemals die eigentlichen aktuellen
+javac-/ECJ-/TypeScript-/ESLint-Analysen. Compilerregeln bleiben strikt.

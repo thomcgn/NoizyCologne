@@ -136,6 +136,7 @@ public class EventChangeMonitor {
     @Transactional
     public void rememberOrigin(String candidate,String source,EventExtractor.Event event,String operation) {
         observation(candidate,source,EventPrivacy.safe(event),operation);
+        store.jdbc().update("UPDATE discovery_candidates SET last_confirmed_at=now() WHERE id=? AND EXISTS(SELECT 1 FROM discovery_sources WHERE id=? AND (source_type='OFFICIAL' OR approved AND source_kind IN ('OFFICIAL_ORGANIZER','OFFICIAL_TICKETS')))",candidate,source);
         store.jdbc().update("INSERT INTO discovery_source_checks(candidate_id,source_id,consecutive_missing,last_operation) VALUES (?,?,0,?) ON CONFLICT(candidate_id,source_id) DO UPDATE SET consecutive_missing=0,last_operation=excluded.last_operation",candidate,source,operation);
     }
     private boolean inHorizon(Map<String,Object> row,LocalDate today) {
@@ -177,7 +178,7 @@ public class EventChangeMonitor {
     @Transactional
     public void record(String candidate,String source,EventExtractor.Event event,String operation) {
         observation(candidate,source,event,operation);
-        if(!Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM discovery_sources WHERE id=? AND source_type='OFFICIAL')",Boolean.class,source))) return;
+        if(!Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM discovery_sources WHERE id=? AND (source_type='OFFICIAL' OR approved AND source_kind IN ('OFFICIAL_ORGANIZER','OFFICIAL_TICKETS')))",Boolean.class,source))) return;
         store.jdbc().update("UPDATE discovery_candidates SET last_confirmed_at=now(),last_changed_at=CASE WHEN monitor_fingerprint IS DISTINCT FROM ? THEN now() ELSE last_changed_at END,monitored_event=?,monitor_fingerprint=? WHERE id=?",fingerprint(event),evaluator.raw(event),fingerprint(event),candidate);
         store.jdbc().update("INSERT INTO discovery_source_checks(candidate_id,source_id,consecutive_missing,last_operation) VALUES (?,?,0,?) ON CONFLICT(candidate_id,source_id) DO UPDATE SET consecutive_missing=0,last_operation=excluded.last_operation",candidate,source,operation);
     }

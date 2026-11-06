@@ -115,3 +115,79 @@ zwei konfigurierten Ersatzquellen, ergänzte Genres/Uhrzeit und Originalherkunft
 wiederholte Scans ohne zweite Kalenderzeile oder falsche Änderung, Datumskonflikt,
 geschützte Ablehnung, deaktivierte Quelle, einmalige Portfoliofreigabe,
 offizielle Ticketabsage im bestehenden Workflow und relativer Aftershow-Beginn.
+
+## Phase 5 – Oberfläche und Abschluss der Workflow-Eingrenzung
+
+Location-Bearbeitung zeigt auf Anforderung denselben verständlichen Quellenstatus
+wie „Vorgeschlagene“. Pro Quelle: Qualität, gezählte Funde, letzter Versuch/Erfolg,
+Freigabe und Fallbacknutzung. Technische HTTP-/Browser-/Vollständigkeitsdiagnosen
+bleiben unter „Technische Details“. Eine Teilauswertung mit null Funden heißt
+nicht „leerer Kalender“. Quellenart, Aktivierung und Priorität werden im
+bestehenden Quellenmodal verwaltet; keine zweite Verwaltung und keine gestapelten
+Modals. Im Kandidatenmodal können Originaltitel, Datum, Location und Quellenbeleg
+verglichen werden. Neue Reihen ab 50 % aller aktiven Projektgenres benötigen die
+sichtbare einmalige Portfoliofreigabe. Ein relativer Beginn erscheint nur bei
+neu vorbereiteten Captions; gespeicherte Captiontexte bleiben unverändert.
+
+DOM-Regressionen bedienen die echten Komponenten: 50-%-Freigabe gegenüber
+25-%-Nichtfreigabe, expliziter Portfolioaufruf ohne Publishing, MTC-Teilauswertung,
+Quellenart/Priorität/Fokus und lesbarer Quellenvergleich. Compiler-/ECJ-Analysen
+bleiben strikt; alle durch die Änderung aufgefallenen Null-/Conversion-Diagnosen
+werden korrigiert. STANDARD wiederholt Tests der Analysewerkzeuge nur bei deren
+Änderung; FULL enthält weiterhin sämtliche negativen Compiler-/Frontend-Fixtures
+und Gate-/Deployment-Regressionen. Es entstehen keine zusätzlichen Testwerkzeuge.
+
+### Aktuelle Prüfung und Grenzen
+
+STANDARD-Backend lief erfolgreich: **175 Tests, 174 bestanden, ein optionaler
+historischer Offline-Test ohne Export übersprungen**, dazu striktes javac, ECJ
+mit null Problemen einschließlich INFO, Java-Negativfixtures und Backend-Paket.
+Die sechs neuen PostgreSQL-Integrationsfälle bestanden. Die aktuellen 13
+Discovery-DOM-Tests einschließlich der vier neuen Multi-Source-/Portfoliofälle
+bestanden. IDE-Diagnosen sind nicht aus diesen CLI-Ergebnissen abgeleitet.
+
+Gemessene QUICK-Läufe: reine Werkzeugänderung **46,12 s**, Quellenmodell
+**35,79 s**, Quellenkombination **34,86 s**, Backend plus UI-Zwischenstand
+**51,41 s**. Der vorherige FULL-Lauf auf Basis `b985e68` dauerte **254,21 s**.
+Dies sind bewusst unterschiedliche Prüfumfänge und keine behauptete Beschleunigung
+desselben FULL. Ein STANDARD-Backendlauf vor der zusätzlichen Eingrenzung
+unveränderter Werkzeugtests benötigte **189,77 s**; die 11 echten Java-
+Negativfixtures und Gate-Selbsttests waren darin noch enthalten. Keine künstliche
+Abbruchzeit und keine Freigabe aus alten Ergebnissen.
+
+Es wurde kein neuer Live-Abruf als Regression verwendet. Die MTC-artige Fixture
+bildet den zuvor separat diagnostizierten unvollständigen Browserabruf nach;
+konfigurierte, kontrollierte Zusatzquellen beweisen den Fallback. Dies behauptet
+keinen aktuellen Live-Erfolg für MTC. Reale geeignete Zusatzquellen müssen vom
+Team konfiguriert/freigegeben werden. Genrekataloggröße beeinflusst bewusst die
+50-%-Schwelle. Titel-/Datums-/Locationvergleich bleibt konservativ; ungebundene
+Plattformfunde und widersprüchliche Angaben erfordern Prüfung. Usernamespace-/
+Browserlimits und Produktionsvoraussetzungen aus BROWSER-CRAWLER.md bleiben
+unverändert. Visuelle Mobil-/Theme-Abnahme, GitHub-main-Schutz und die spätere
+CI-Freigabe des integrierten Commits stehen weiterhin aus.
+
+
+Abschließende betroffene Prüfungen: **39 Frontend-DOM-Tests** im regulären QUICK-
+Hook, TypeScript und ESLint mit null Warnungen; Frontend-Produktionsbuild erfolgreich.
+Nach der Ergänzung offizieller Veranstalter-/Ticketbestätigungen wurden gezielt
+**19 Monitoring-/Multi-Source-Integrationstests** in einer neuen eigenen
+Testdatenbank wiederholt, einschließlich Backend-Paketierung; alle erfolgreich.
+Eine zusätzliche Budgetregression schützt ergänzende Genres davor, durch einen
+langen Primärtext aus dem begrenzten kombinierten Beleg verdrängt zu werden;
+Originalbelege bleiben vollständig innerhalb der vorhandenen Event-Beleggrenzen
+im Beobachtungsprotokoll erhalten. FULL wurde auf diesem Feature-Branch nicht
+unnötig wiederholt; vor Merge muss CI den tatsächlich integrierten Commit vollständig
+freigeben. Der letzte gemischte QUICK-Lauf einschließlich geänderter Werkzeugtests
+und UI benötigte **94,81 s**; die kleineren Phasenschritte blieben bei 35–51 s.
+
+Ein gezielter zusätzlicher Failover-Fall prüft eine erst später ausgefallene
+Primärquelle: Bei unveränderten belegten Eventfakten und ohne offenen
+Änderungsbefund bleibt der importierte Termin erhalten. Bloß unterschiedliche
+Quellenbelegtexte führen dabei nicht erneut zu einem Prüfstatus. Datum-, Uhrzeit-,
+Location-, Lifecycle-Konflikte und geschützte manuelle Entscheidungen bleiben
+von dieser engen Ausnahme ausgeschlossen.
+
+Diese abschließende Auswahl bestand: **sieben Multi-Source-Integrationstests**
+(einschließlich späterem Primärquellenausfall) und **fünf Merger-Tests**
+(einschließlich langem Primärbeleg). Das Backend wurde danach erfolgreich neu
+paketiert; die eigene Testdatenbank wurde entfernt. Keine erneute Gesamtsuite.

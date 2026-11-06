@@ -22,11 +22,13 @@ window.clearInterval = globalThis.clearInterval;
 let root;
 const calls = [];
 let candidates;
+let sourceRows=[];
 let reloadedEntries;
 const catalogue = {
   parties: [{ id: 'paradise', name: 'NEON PARADISE' }, { id: 'kult', name: 'NEON KULT' }],
   venues: [{ id: 'blue-shell', name: 'Blue Shell' }],
   reloadEntries: async () => { reloadedEntries++; },
+  reloadParties: async () => {},
 };
 const modules = new Map();
 function loadSource(url) {
@@ -69,13 +71,13 @@ function candidate(overrides = {}) {
   };
 }
 function overview() {
-  return { candidates, sources: [], counts: candidates.map(item => ({ status: item.status, count: 1 })), runs: [], automaticallyImported: 0, operations: [], diagnoses: [] };
+  return { candidates, sources: sourceRows, counts: candidates.map(item => ({ status: item.status, count: 1 })), runs: [], automaticallyImported: 0, operations: [], diagnoses: [] };
 }
 async function settle(work = () => {}) {
   await act(async () => { await work(); await new Promise(resolve => setTimeout(resolve, 20)); });
 }
 async function mount(item) {
-  candidates = [item]; calls.length = 0; reloadedEntries = 0;
+  candidates = [item]; sourceRows=[]; calls.length = 0; reloadedEntries = 0;
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url, ...options });
     if (options.method === 'PUT' || options.method === 'POST') return new Response(null, { status: 204 });
@@ -195,4 +197,37 @@ test('refresh updates lifecycle blockers while retaining saved and unsaved manua
   const review = calls.find(call => call.method === 'PUT');
   assert.equal(JSON.parse(review.body).partyId, 'paradise');
   assert.equal(JSON.parse(review.body).date, '2026-11-09');
+});
+
+test('portfolio approval uses the threshold of all active project genres and explicit confirmation',async()=>{
+  await mount(candidate({title:'New Alternative Party',matching_class:'POSSIBLE_MATCH',assessment:assessment({recognition:{status:'NONE',parties:[]}}),genreCoverage:{matched:2,total:4,percent:50,names:['Emo','Indie'],eligible:true}}));
+  await openReview();assert.match(dialog().textContent,/2 von 4 aktiven Projektgenres \(50 %\)/);
+  const name=control('Name im Portfolio');change(name,'New Alternative Night');assert.equal(document.activeElement,name);
+  await settle(()=>button('Ins Portfolio aufnehmen',dialog()).click());
+  const request=calls.find(call=>call.url.endsWith('/portfolio')&&call.method==='POST');
+  assert.deepEqual(JSON.parse(request.body),{name:'New Alternative Night'});
+  assert.equal(document.querySelector('[role="dialog"]'),null);assert.ok(!calls.some(call=>/instagram|publish|cancellations/.test(call.url)));
+});
+test('below fifty percent no new portfolio series is offered even when an individual genre matches',async()=>{
+  await mount(candidate({title:'Unknown Emo Party',assessment:assessment({recognition:{status:'NONE',parties:[]}}),genreCoverage:{matched:1,total:4,percent:25,names:['Emo'],eligible:false}}));
+  await openReview();assert.match(dialog().textContent,/1 von 4/);
+  assert.ok(![...dialog().querySelectorAll('button')].some(item=>item.textContent==='Ins Portfolio aufnehmen'));
+});
+test('partial MTC source is not an empty calendar and new source options retain focus',async()=>{
+  await mount(candidate());
+  sourceRows=[{id:'mtc-source',venue_id:'blue-shell',venue_name:'MTC Cologne',url:'https://www.mtc-cologne.de/about',source_type:'OFFICIAL',source_kind:'WEBSITE',approved:true,status:'BROWSER_PARTIAL',quality:'PARTIAL',event_count:0,enabled:true,priority:5,fallback_used:false,fetch_method:'BROWSER',item_selector:'',title_selector:'',date_selector:'',fetch_diagnostics:'ROBOTS_BLOCKED; JAVASCRIPT_ERROR',last_fetched_at:'2026-11-06T09:00:00Z',last_success_at:null}];
+  await settle(()=>poll());assert.match(document.body.textContent,/Nur teilweise ausgewertet/);assert.ok(!document.body.textContent.includes('Ausdrücklich keine Veranstaltungen gemeldet'));
+  const technical=[...document.querySelectorAll('details')].find(item=>item.querySelector('summary')?.textContent==='Technische Details');assert.equal(technical.open,false);
+  await settle(()=>button('Quelle / Profil bearbeiten').click());
+  change(control('Quellenart'),'OFFICIAL_TICKETS');change(control('Reihenfolge'),'7');
+  const url=control('Quell-URL');change(url,'https://tickets.example/mtc');assert.equal(document.activeElement,url);
+  await settle(()=>button('Speichern',dialog()).click());
+  const body=JSON.parse(calls.find(call=>call.url.endsWith('/sources')&&call.method==='POST').body);
+  assert.equal(body.sourceKind,'OFFICIAL_TICKETS');assert.equal(body.priority,7);assert.equal(body.enabled,true);assert.equal(body.approved,true);
+});
+test('source comparison displays title, date and location without raw JSON',async()=>{
+  await mount(candidate());await openReview();const previous=globalThis.fetch;
+  globalThis.fetch=async(url,options={})=>url.endsWith('/sources')?new Response(JSON.stringify([{url:'https://tickets.example/event',source_kind:'OFFICIAL_TICKETS',event_data:JSON.stringify({title:'NEON PARADISE',starts:['2026-11-07T23:00'],location:'Blue Shell',evidence:'Emo and Indie DJs'})}]),{headers:{'Content-Type':'application/json'}}):previous(url,options);
+  await settle(()=>button('Quellenbelege laden',dialog()).click());
+  assert.match(dialog().textContent,/Offizielle Ticketseite/);assert.match(dialog().textContent,/2026-11-07T23:00/);assert.ok(!dialog().textContent.includes('"starts":'));
 });

@@ -33,7 +33,10 @@ final class DiscoveryBatchMerger {
                 String state=origin.event().state();
                 if (!origin.official() && EventLifecycle.signal(origin.event()).equals("CANCELLED")) state="CANCELLATION_HINT UNCONFIRMED";
                 states.append(state).append(' ');
-                evidence.append("Quelle: ").append(origin.event().url()).append('\n').append(origin.event().evidence()).append('\n');
+                // Reserve room for every source instead of letting a long primary text
+                // consume the entire merged evidence budget. Full originals stay in observations.
+                String details=origin.event().evidence();int budget=Math.max(1,7000/ordered.size());
+                evidence.append("Quelle: ").append(origin.event().url()).append('\n').append(details,0,Math.min(budget,details.length())).append('\n');
             }
             if (conflict) states.append(" SOURCE_CONFLICT");
             String location=event.location().isBlank() ? ordered.stream().map(i -> i.event().location()).filter(l -> !l.isBlank()).findFirst().orElse("") : event.location();

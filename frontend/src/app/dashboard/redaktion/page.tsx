@@ -96,6 +96,7 @@ function buildCaption(
     formatCaptionDate(entry.date),
     genres.length > 0 ? genres.join(", ") : null,
     entryPrice.trim() ? `Eintritt: ${entryPrice.trim()}` : null,
+    !entry.startTime && entry.notes.includes("Beginn: nach dem Konzert") ? "Beginn nach dem Konzert" : null,
     djHandles.length > 0 ? `mit ${djHandles.join(" & ")}` : null,
     locationHandle ? `im ${locationHandle}` : null,
   ]

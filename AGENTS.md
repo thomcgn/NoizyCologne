@@ -51,3 +51,5 @@ compiler versions does not establish live IDE warning freedom. Existing frontend
 - STANDARD (`--backend`/`--frontend`) covers its module, using safe incremental compilation. FULL performs clean Java compilation. Deletions/shared compiler inputs invalidate stale outputs in every mode.
 - QUICK explicitly reports deferred database tests. It is not a complete integration certificate. Never invent success for a check that did not run.
 - Record phase changes, checks and remaining limits in the task document. Timing targets guide scope, never abort required checks or justify unfinished work.
+
+Tooling/negative compiler-fixture regressions run for changed tooling/rules and in FULL. Routine STANDARD module checks do not repeat unchanged gate fixtures. Strict compilation, fresh ECJ reports, module tests and STANDARD builds still run.

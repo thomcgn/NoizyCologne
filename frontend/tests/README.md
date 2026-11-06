@@ -49,3 +49,9 @@ bearbeitbar, Quellen werden erst beim Speichern übernommen, veraltete Antworten
 Versuch keine doppelte Location. Ein Abruffehler wird nicht als zuverlässige Null-
 Eventzahl ausgegeben. Das sind DOM-/API-Fixtures, keine Live-Websiteprüfung;
 echte Chromium-Renderingtests liegen separat unter `browser-worker/tests/browser`.
+
+Multi-Source-Regressionen prüfen zusätzlich das sichtbare 50-%-Portfolioangebot
+bezogen auf alle aktiven Projektgenres, den expliziten Freigabeaufruf,
+Nichtfreigabe unterhalb der Schwelle, MTC-artige Teilauswertung statt falschem
+Leerbestand, Quellenart/Priorität und erhaltenen Fokus sowie einen lesbaren
+Vergleich der ursprünglichen Quellenangaben. Keine Live-Quellen als Testvoraussetzung.

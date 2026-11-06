@@ -5,6 +5,7 @@ import { discoveryStatusLabel } from "../discoveryLabels";
 import DashboardModal from "../DashboardModal";
 import { useCatalog } from "../CatalogProvider";
 import EventChangesPanel from "./EventChangesPanel";
+import SourceOverview, {SourceEvidence,sourceKinds,type DiscoverySource} from "../SourceOverview";
 import DiscoveryResetDialog, { type ResetMode } from "./DiscoveryResetDialog";
 
 type DiscoveryAssessment = {
@@ -14,8 +15,8 @@ type DiscoveryAssessment = {
   automaticImportEligible: boolean;
   importBlockers: string[];
 };
-type Candidate = {id: string; title: string; venue_name: string; instagram: string; source_url: string; event_date: string | null; party_id: string | null; status: string; reason: string; evidence: string; inquiry_status: string; dm_text: string; calendar_entry_id: string | null; decision_origin: string; matching_class: string; automatic_reason: string; matcher_version: string; evaluated_at: string | null; previous_status: string | null; last_evaluation_id: string | null; assessment?: DiscoveryAssessment};
-type Source = {id: string; venue_id: string; venue_name: string; url: string; source_type: string; approved: boolean; status: string; item_selector: string; title_selector: string; date_selector: string; fetch_method?: string; scan_complete?: boolean; fetch_diagnostics?: string; last_fetched_at?: string | null; last_success_at?: string | null};
+type Candidate = {id: string; title: string; venue_name: string; instagram: string; source_url: string; event_date: string | null; party_id: string | null; status: string; reason: string; evidence: string; inquiry_status: string; dm_text: string; calendar_entry_id: string | null; decision_origin: string; matching_class: string; automatic_reason: string; matcher_version: string; evaluated_at: string | null; previous_status: string | null; last_evaluation_id: string | null; assessment?: DiscoveryAssessment; genreCoverage?: { matched:number; total:number; percent:number; names:string[]; eligible:boolean }};
+type Source = DiscoverySource;
 type Operation = { id: string; kind: string; status: string; report: string; summary: string };
 type Summary = { evaluated: number; newPossibleMatches: number; stillIgnored: number; preservedManual: number; reclassified: number; failed: number };
 type Diagnosis = { id: number; title: string; venue_name: string; old_status: string | null; new_status: string; reason: string; origin: string };
@@ -52,13 +53,15 @@ async function api(path: string, method = "GET", body?: unknown) {
 function sourceLink(url: string) { try { const u = new URL(url); return u.protocol === "https:" && !u.username && !u.password ? u.href : undefined; } catch { return undefined; } }
 
 export default function SuggestionsPage() {
-  const {parties, venues, reloadEntries} = useCatalog();
+  const {parties, venues, reloadEntries, reloadParties} = useCatalog();
   const [data,setData] = useState<Overview | null>(null);
   const [error,setError] = useState("");
   const [busy,setBusy] = useState(false);
   const [filter,setFilter] = useState("NEEDS_REVIEW");
   const [candidate,setCandidate] = useState<Candidate | null>(null);
   const [source,setSource] = useState<Source | null>(null);
+  const [origins,setOrigins] = useState<{url:string;source_kind:string;event_data:string}[]>([]);
+  const [portfolioName,setPortfolioName] = useState("");
   const [party,setParty] = useState(""); const [date,setDate] = useState("");
   const [status,setStatus] = useState("NEEDS_REVIEW"); const [inquiry,setInquiry] = useState("NONE"); const [dm,setDm] = useState("");
   const [showChanges,setShowChanges] = useState(false);
@@ -68,7 +71,7 @@ export default function SuggestionsPage() {
   const reload = useCallback(async () => { try { setData(await api(`?filter=${encodeURIComponent(filter)}`)); } catch(e) { setError(e instanceof Error ? e.message : "Laden fehlgeschlagen"); } }, [filter]);
   useEffect(() => { const timer = window.setTimeout(() => void reload(),0); const poll = window.setInterval(() => void reload(),10000); return () => { clearTimeout(timer); clearInterval(poll); }; },[reload]);
   async function action(work: () => Promise<void>) { setBusy(true); setError(""); setNotice(""); try { await work(); await reload(); } catch(e) { setError(e instanceof Error ? e.message : "Aktion fehlgeschlagen"); } finally { setBusy(false); } }
-  function edit(c: Candidate) { setCandidate(c); setParty(c.party_id ?? ""); setDate(c.event_date ?? ""); setStatus(["NEEDS_REVIEW","NEEDS_INQUIRY","REJECTED","DUPLICATE"].includes(c.status) ? c.status : "NEEDS_REVIEW"); setInquiry(c.inquiry_status); setDm(c.dm_text); setError(""); }
+  function edit(c: Candidate) { setCandidate(c); setOrigins([]); setPortfolioName(c.title.slice(0,200)); setParty(c.party_id ?? ""); setDate(c.event_date ?? ""); setStatus(["NEEDS_REVIEW","NEEDS_INQUIRY","REJECTED","DUPLICATE"].includes(c.status) ? c.status : "NEEDS_REVIEW"); setInquiry(c.inquiry_status); setDm(c.dm_text); setError(""); }
   const operation = operationId ? data?.operations?.find(item => item.id === operationId) : data?.operations?.[0];
   const summary = summaryOf(operation);
   const running = busy || data?.operations?.some(item => item.status === "RUNNING");
@@ -105,8 +108,8 @@ export default function SuggestionsPage() {
     <p className="text-sm">Letzter Suchlauf: {data?.runs[0] ? `${new Date(data.runs[0].started_at).toLocaleString("de-DE",{timeZone:"Europe/Berlin"})} · ${discoveryStatusLabel(data.runs[0].status)} · ${data.runs[0].report}` : "Noch kein Suchlauf"}</p>
     <div className="space-y-3">{data?.candidates.filter(visible).map(c => <article key={c.id} className="rounded-xl border border-white/10 p-4"><div className="flex flex-wrap justify-between gap-3"><div><h2 className="font-semibold">{c.title}</h2><p>{c.venue_name} · {c.event_date ?? "Datum unklar"}</p><p className="text-sm text-neutral-400">{c.reason}</p>{c.assessment && <CandidateAssessment assessment={c.assessment} />}<p className="text-xs text-neutral-500">{c.decision_origin} · {c.matching_class} · {c.matcher_version}</p></div><button className={button} onClick={() => edit(c)}>Veranstaltung prüfen</button></div></article>)}</div>
     <details className="rounded-xl border border-white/10 p-4"><summary>Location-Quellen · {data?.sources.filter(s => !["EVENTS_FOUND","NO_EVENTS","NOT_CHECKED","SOURCE_LINKS_FOUND","EXCLUDED_CONCERTS"].includes(s.status)).length ?? 0} mit Diagnosebedarf</summary>
-      <button className={`${button} mt-3`} onClick={() => setSource({id:"",venue_id:venues[0]?.id ?? "",venue_name:"",url:"",source_type:"EXTERNAL",approved:false,status:"NOT_CHECKED",item_selector:"",title_selector:"",date_selector:""})}>Quelle hinzufügen</button>
-      {data?.sources.map(s => <div key={s.id} className="mt-3 break-words border-t border-white/10 pt-3"><p>{s.venue_name} · {s.source_type === "OFFICIAL" ? "Offizielle Website" : "Externe Quelle"} · {discoveryStatusLabel(s.status)} · {s.approved ? "Automatik freigegeben" : "Prüfung erforderlich"}</p><p className="mt-1 text-sm">Abruf: {s.fetch_method === "BROWSER" ? "Browser" : "HTTP"} · Letzter Versuch: {s.last_fetched_at ? new Date(s.last_fetched_at).toLocaleString("de-DE") : "Noch nicht geprüft"} · Letzter erfolgreicher Abruf: {s.last_success_at ? new Date(s.last_success_at).toLocaleString("de-DE") : "Noch nicht nachgewiesen"}</p><p className="text-sm">{s.scan_complete ? "Vollständige Liste bestätigt" : "Vollständigkeit nicht bestätigt"}{s.fetch_diagnostics ? ` · ${s.fetch_diagnostics.split("; ").map(discoveryStatusLabel).join("; ")}` : ""}</p><a href={sourceLink(s.url)} target="_blank" rel="noreferrer" className="underline">{s.url}</a> <button className={button} onClick={() => setSource({...s})}>Quelle / Profil bearbeiten</button></div>)}
+      <button className={`${button} mt-3`} onClick={() => setSource({id:"",venue_id:venues[0]?.id ?? "",venue_name:"",url:"",source_type:"EXTERNAL",approved:false,status:"NOT_CHECKED",item_selector:"",title_selector:"",date_selector:"",source_kind:"CUSTOM",enabled:true,priority:100})}>Quelle hinzufügen</button>
+      <SourceOverview sources={data?.sources ?? []} onEdit={s => setSource({...s})} />
     </details>
     {resetMode && <DiscoveryResetDialog initialMode={resetMode} onClose={() => setResetMode(null)} onStarted={id => { setOperationId(id); setResetMode(null); setNotice("Neubewertung angefordert. Der Vorgang wird mit Ergebnis und Fehlern protokolliert."); void reload(); }} />}
     <DashboardModal open={!!candidate} onClose={() => setCandidate(null)} title={candidate?.title ?? "Vorschlag prüfen"}>
@@ -116,6 +119,9 @@ export default function SuggestionsPage() {
         <p className="text-sm">Entscheidungsursprung: {candidate.decision_origin} · {candidate.matching_class}<br />Regelversion: {candidate.matcher_version} · Bewertet: {candidate.evaluated_at ?? "Noch nicht versioniert"}</p>
         {candidate.automatic_reason && <p className="text-sm">Technische Entscheidung: {candidate.automatic_reason}</p>}
         {currentCandidate?.assessment && <CandidateAssessment assessment={currentCandidate.assessment} detailed />}
+        {candidate.genreCoverage && <p>Genreübereinstimmung: {candidate.genreCoverage.matched} von {candidate.genreCoverage.total} aktiven Projektgenres ({candidate.genreCoverage.percent} %).</p>}
+        {!candidate.party_id && candidate.assessment?.recognition.status === "NONE" && candidate.genreCoverage?.eligible && !candidate.assessment.importBlockers.length && <fieldset className="space-y-2 rounded-lg border p-3"><legend>Neue Partyreihe einmalig freigeben</legend><label className="block">Name im Portfolio<input className={field} value={portfolioName} maxLength={200} onChange={e=>setPortfolioName(e.target.value)} /></label><p>Ab 50 % aller aktiven Projektgenres. Bei belegtem Datum aus freigegebener Quelle wird der Termin mit übernommen. Geprüfte Angaben bleiben erhalten.</p><button type="button" className={button} disabled={busy || !portfolioName.trim()} onClick={()=>void action(async()=>{await api(`/candidates/${candidate.id}/portfolio`,"POST",{name:portfolioName});await reloadEntries();await reloadParties();setCandidate(null);setNotice("Partyreihe im Portfolio freigegeben.");})}>Ins Portfolio aufnehmen</button></fieldset>}
+        <details><summary>Quellen und Angaben vergleichen</summary><button type="button" className={button} disabled={busy} onClick={()=>void action(async()=>{const rows=await api(`/candidates/${candidate.id}/sources`);setOrigins(Array.isArray(rows)?rows:[]);})}>Quellenbelege laden</button><SourceEvidence origins={origins} /></details>
         <a href={sourceLink(candidate.source_url)} target="_blank" rel="noreferrer" className="underline">Quellseite öffnen</a>
         <label className="block">Partyreihe zuordnen<select className={field} value={party} onChange={e => setParty(e.target.value)}><option value="">Bitte wählen</option>{parties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
         <label className="block">Korrigiertes / bestätigtes Datum<input className={field} type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
@@ -134,10 +140,13 @@ export default function SuggestionsPage() {
       </div>}
     </DashboardModal>
     <DashboardModal open={!!source} onClose={() => setSource(null)} title="Quelle & Extraktionsprofil">
-      {source && <form className="space-y-4" onSubmit={e => {e.preventDefault(); void action(async () => { await api("/sources","POST",{venueId:source.venue_id,url:source.url,approved:source.approved,itemSelector:source.item_selector,titleSelector:source.title_selector,dateSelector:source.date_selector}); setSource(null); });}}>
+      {source && <form className="space-y-4" onSubmit={e => {e.preventDefault(); void action(async () => { await api("/sources","POST",{venueId:source.venue_id,url:source.url,approved:source.approved,itemSelector:source.item_selector,titleSelector:source.title_selector,dateSelector:source.date_selector,sourceKind:source.source_kind ?? (source.source_type==="OFFICIAL"?"WEBSITE":"CUSTOM"),enabled:source.enabled ?? true,priority:source.priority ?? 100}); setSource(null); });}}>
         {error && <p role="alert" className="text-red-400">{error}</p>}
         <label className="block">Location<select className={field} value={source.venue_id} onChange={e => setSource({...source,venue_id:e.target.value})} required>{venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}</select></label>
         <label className="block">Quell-URL<input className={field} type="url" required maxLength={2048} value={source.url} onChange={e => setSource({...source,url:e.target.value})} /></label>
+        <label className="block">Quellenart<select className={field} value={source.source_kind ?? (source.source_type==="OFFICIAL"?"WEBSITE":"CUSTOM")} onChange={e=>setSource({...source,source_kind:e.target.value})}>{Object.entries(sourceKinds).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+        <label className="flex gap-2"><input type="checkbox" checked={source.enabled ?? true} onChange={e=>setSource({...source,enabled:e.target.checked})} />Quelle für Discovery verwenden</label>
+        <label className="block">Reihenfolge der Zusatzquellen (kleine Zahl zuerst)<input type="number" min={0} max={999} className={field} value={source.priority ?? 100} onChange={e=>setSource({...source,priority:Number(e.target.value)})} /></label>
         <label className="flex gap-2"><input type="checkbox" checked={source.approved} onChange={e => setSource({...source,approved:e.target.checked})} />Quelle ausdrücklich zur automatischen Übernahme freigeben</label>
         <p className="text-sm">Externe Portale bleiben als externe Quellen gekennzeichnet. Freigabe erst nach Prüfung der Verlässlichkeit.</p>
         <details><summary>Optionales HTML-Profil (CSS-Selektoren)</summary>{(["item_selector","title_selector","date_selector"] as const).map((key,i) => <label key={key} className="mt-3 block">{["Event-Container","Titel innerhalb des Containers","Startdatum (datetime/content oder ISO-Text)"][i]}<input className={field} maxLength={300} value={source[key]} onChange={e => setSource({...source,[key]:e.target.value})} /></label>)}</details>

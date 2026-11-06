@@ -19,6 +19,13 @@ class DiscoveryBatchMergerTests {
         assertThat(merged.event().evidence()).contains("Indie","Emo","https://venue.example/event","https://ticket.example/event");
         assertThat(merged.event().starts()).containsExactly("2026-11-07T23:00");
     }
+    @Test void longPrimaryDescriptionDoesNotConsumeTheSupplementGenreEvidence() {
+        var first=input("venue","id-a","2026-11-07","a".repeat(8000),"MTC",true);
+        var second=input("ticket","id-b","2026-11-07","Emo, Indie DJs","MTC",false);
+        var merged=requireNonNull(DiscoveryBatchMerger.merge(List.of(first,second),"MTC").getFirst());
+        assertThat(merged.event().evidence()).contains("Emo, Indie DJs");
+        assertThat(requireNonNull(merged.origins().getFirst()).event().evidence()).hasSize(8000);
+    }
     @Test void mismatchedVenueOrUnscopedExternalListingCannotLendGenres() {
         var first=input("venue","id-a","2026-11-07","Party","MTC",true);
         assertThat(DiscoveryBatchMerger.merge(List.of(first,input("ticket","id-b","2026-11-07","Emo","Other Club",false)),"MTC")).hasSize(2);

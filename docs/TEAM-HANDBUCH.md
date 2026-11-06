@@ -258,3 +258,29 @@ Für eine Fehlermeldung ans Team genügen Bereich, Party, Datum, genauer Meldung
 | **Cancellation-Workflow** | Gemeinsamer Ablauf für eine bestätigte Veranstaltungsabsage und ihren eigenen Absageentwurf |
 
 Technischen Hintergrund und den weiteren Projektplan findest du in [PROJECT.md](PROJECT.md). Für die tägliche Teamarbeit ist dieses Handbuch der Einstieg.
+
+## Wenn die Hauptwebsite nicht lesbar ist
+
+Unter **Vorgeschlagene → Location-Quellen → Quelle hinzufügen** kannst du weitere
+zulässige öffentliche Quellen derselben Location hinterlegen, etwa deren offiziellen
+Veranstalter oder Ticketseite. Wähle die Quellenart bewusst. Die Freigabe zur
+automatischen Übernahme ist eine eigene Entscheidung. Deaktivierte Quellen werden
+nicht verwertet; eine kleinere Reihenfolge-Zahl wird früher geprüft. Keine
+Zugangssperren umgehen oder private Kalender hinterlegen.
+
+Bei **Nur teilweise ausgewertet**, **Abruf gesperrt** oder **Auswertung fehlgeschlagen**
+können weitere konfigurierte Quellen helfen. Null erkannte Veranstaltungen bei
+einer Teilauswertung bedeutet nicht, dass keine Partys stattfinden. Nur
+**Ausdrücklich keine Veranstaltungen gemeldet** bezeichnet einen belegten
+Leerbefund dieser Quelle. Unter **Technische Details** stehen die konkreten Probleme.
+In der Location-Bearbeitung lädt **Quellenstatus aktualisieren** dieselbe Übersicht.
+
+Im Prüfdialog zeigt **Quellen und Angaben vergleichen → Quellenbelege laden**, wo
+Titel, Datum, Location und zusätzliche Angaben herkommen. Widersprüche bleiben zur
+Prüfung erhalten. Neue Partyreihen werden erst über **Ins Portfolio aufnehmen**
+bestätigt. Die angezeigte Genreübereinstimmung bezieht sich auf **alle aktiven
+Projektgenres**: Bei vier aktiven Genres müssen mindestens zwei belegt sein.
+Aliasse erhöhen die Zahl nicht. Bei belegtem Datum und freigegebener Quelle kann
+der Termin mit dieser ausdrücklichen Freigabe übernommen werden; andere Fälle
+bleiben zur Prüfung offen. Ein relativer Beginn wie „nach dem Konzert“ bleibt
+Text, keine geratene Uhrzeit. Instagram wird dadurch nicht bedient.

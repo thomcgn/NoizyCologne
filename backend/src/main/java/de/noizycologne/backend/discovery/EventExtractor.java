@@ -30,7 +30,7 @@ public class EventExtractor {
         boolean malformed = false;
         if (page.body().contains("BEGIN:VCALENDAR")) return ics(page);
         var doc = Jsoup.parse(page.body(), Objects.requireNonNull(page.url().toString()));
-        if (PartyOnlyPolicy.concertPage(doc) || PartyOnlyPolicy.concertLink("",page.url())) return new Extraction(List.of(), "EXCLUDED_CONCERTS");
+        if (!PartyOnlyPolicy.separateAftershow(doc) && (PartyOnlyPolicy.concertPage(doc) || PartyOnlyPolicy.concertLink("",page.url()))) return new Extraction(List.of(), "EXCLUDED_CONCERTS");
         for (Element script : doc.select("script[type=application/ld+json]")) {
             try { collect(json.readTree(script.data()), events, page.url().toString(), 0); }
             catch (RuntimeException e) { malformed = true; }

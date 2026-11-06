@@ -33,7 +33,7 @@ def changed_paths(root):
 
 def classify_paths(paths):
     result = {'backend': False, 'frontend': False, 'tooling': False, 'browser': False,
-              'frontend_lint': [], 'frontend_lint_all': False}
+              'frontend_lint': [], 'frontend_lint_all': False, 'java_analysis_changed': False, 'frontend_analysis_changed': False}
     lint = set()
     for name in paths:
         path = Path(name)
@@ -61,7 +61,9 @@ def classify_paths(paths):
             result['tooling'] = True
         else:
             # Unknown build/configuration inputs must not silently receive a docs-only pass.
-            result.update(backend=True, frontend=True, browser=True, tooling=True, frontend_lint_all=True)
+            result.update(backend=True, frontend=True, browser=True, tooling=True, frontend_lint_all=True, java_analysis_changed=True, frontend_analysis_changed=True)
+    result['java_analysis_changed'] = result['java_analysis_changed'] or any(name in ('scripts/check-java.py', 'scripts/tests/test_java_analysis.py', 'config/java-quality.prefs', 'backend/pom.xml') for name in paths)
+    result['frontend_analysis_changed'] = result['frontend_lint_all'] or 'scripts/tests/test_frontend_analysis.py' in paths
     result['frontend_lint'] = sorted(lint)
     return result
 
@@ -140,7 +142,7 @@ def plan(root, paths=None):
     result = classify_paths(paths)
     result.update(paths=paths, base_fallback=fallback)
     if fallback:
-        result.update(backend=True, frontend=True, browser=True, tooling=True, frontend_lint_all=True)
+        result.update(backend=True, frontend=True, browser=True, tooling=True, frontend_lint_all=True, java_analysis_changed=True, frontend_analysis_changed=True)
     deleted_lint = [name for name in result['frontend_lint'] if not (root / 'frontend' / name).is_file()]
     if deleted_lint:
         result['frontend_lint_all'] = True

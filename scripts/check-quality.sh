@@ -90,7 +90,7 @@ if (( ${#overlap[@]} )); then
   exit 1
 fi
 
-if [[ "$mode" != --quick || $(scope_value tooling) == true ]]; then
+if [[ "$mode" == --full || $(scope_value tooling) == true ]]; then
   run gate-tests python3 -m unittest discover -s scripts/tests -p 'test_quality_*.py' -v
 fi
 run bash-syntax bash -n scripts/check-quality.sh
@@ -130,7 +130,7 @@ if [[ "$backend" == true ]]; then
     -Dmdep.outputFile=target/quality-classpath.txt -DincludeScope=test \
     -Dartifact=org.eclipse.jdt:ecj:3.46.100 -DoutputDirectory=target/quality-tools
   run java-analysis python3 scripts/check-java.py
-  if [[ "$mode" != --quick || $(scope_value tooling) == true ]]; then
+  if [[ "$mode" == --full || $(scope_value java_analysis_changed) == true ]]; then
     run java-negative-tests python3 -m unittest discover -s scripts/tests -p test_java_analysis.py -v
   fi
 
@@ -200,7 +200,7 @@ if [[ "$frontend" == true ]]; then
   # The current frontend suite is one shared regression file; all its tests apply.
   run frontend-tests npm test
   cd "$root"
-  if [[ "$mode" != --quick || $(scope_value tooling) == true ]]; then
+  if [[ "$mode" == --full || $(scope_value frontend_analysis_changed) == true ]]; then
     run frontend-negative-tests python3 -m unittest discover -s scripts/tests -p test_frontend_analysis.py -v
   fi
   if [[ "$mode" != --quick ]]; then
