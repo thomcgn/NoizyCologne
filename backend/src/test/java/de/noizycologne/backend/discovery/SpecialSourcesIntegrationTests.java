@@ -169,4 +169,32 @@ class SpecialSourcesIntegrationTests {
         assertThat(store.candidate(id)).containsEntry("venue_id",null).containsEntry("calendar_entry_id",null);
     }
 
+    @Test void editKeepsSourceIdentityAndDecisionsWhileResettingChangedExtractionStatus() throws Exception {
+        scheduler.scan();String id=candidate();importer.reject(id);
+        mvc.perform(requireNonNull(put("/api/v1/discovery/special-sources/"+source).contentType("application/json")
+            .content("{\"name\":\"QRUSH Köln\",\"url\":\"https://qrushapp.de/eventfinder/koeln\",\"itemSelector\":\".event\",\"titleSelector\":\"h2\",\"dateSelector\":\"time\"}"))).andExpect(status().isOk());
+        assertThat(sources.list()).anySatisfy(row->assertThat(row).containsEntry("id",source).containsEntry("name","QRUSH Köln").containsEntry("url",root+"eventfinder/koeln").containsEntry("venue_id",null).containsEntry("status","NOT_CHECKED").containsEntry("event_count",null).containsEntry("item_selector",".event"));
+        assertThat(store.candidate(id)).containsEntry("source_id",source).containsEntry("status","REJECTED").containsEntry("decision_origin","MANUAL");
+    }
+    @Test void editsValidateDuplicatesAndNeverModifyDeletedOrVenueSources() throws Exception {
+        scheduler.scan();sources.update(source,"Neuer Name",root,"","","");
+        assertThat(sources.list()).anySatisfy(row->assertThat(row).containsEntry("status","EVENTS_FOUND"));
+        String other=sources.add("Andere Quelle","https://other.example/","","","");
+        try {
+            mvc.perform(requireNonNull(put("/api/v1/discovery/special-sources/"+source).contentType("application/json")
+                .content("{\"name\":\"Dublette\",\"url\":\"https://other.example/\"}"))).andExpect(status().isConflict());
+            mvc.perform(requireNonNull(put("/api/v1/discovery/special-sources/"+source).contentType("application/json")
+                .content("{\"name\":\"\",\"url\":\"https://qrushapp.de/\"}"))).andExpect(status().isBadRequest());
+            mvc.perform(requireNonNull(put("/api/v1/discovery/special-sources/"+source).contentType("application/json")
+                .content("{\"name\":\"Unsicher\",\"url\":\"https://127.0.0.1/\"}"))).andExpect(status().isBadRequest());
+            String venueSource=store.source(mtc.getId(),"https://mtc.example/","OFFICIAL",true);
+            mvc.perform(requireNonNull(put("/api/v1/discovery/special-sources/"+venueSource).contentType("application/json")
+                .content("{\"name\":\"Location\",\"url\":\"https://qrushapp.de/\"}"))).andExpect(status().isNotFound());
+            assertThat(sources.list()).anySatisfy(row->assertThat(row).containsEntry("id",source).containsEntry("name","Neuer Name").containsEntry("url",root));
+            sources.delete(source);
+            mvc.perform(requireNonNull(put("/api/v1/discovery/special-sources/"+source).contentType("application/json")
+                .content("{\"name\":\"Gelöscht\",\"url\":\"https://qrushapp.de/\"}"))).andExpect(status().isNotFound());
+        } finally {store.jdbc().update("DELETE FROM discovery_sources WHERE id=?",other);}
+    }
+
 }

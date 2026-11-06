@@ -20,16 +20,21 @@ try {
     await context.addInitScript(theme=>localStorage.setItem('noizy-theme',theme),theme);
     const data=controlCenterFixture();data.venues[0].name='Blue Shell';
     const proposal={...candidate('portal','Karnevalsnacht – bereits am Titel erkennbar unpassend'),special_source:true,venue_id:null,venue_name:'Veranstaltungsort offen',reported_location:'Blue Shell',source_name:'QRUSH',party_id:'party-0',status:'NEEDS_REVIEW',assessment:{recognition:{status:'SINGLE',parties:[]},verification:{status:'VERIFIED',date:'2027-01-09',reasons:[]},lifecycle:'ACTIVE',automaticImportEligible:false,importBlockers:[]}};
-    data.discovery.candidates=[proposal];data.discovery.sources=[];
+    data.discovery.candidates=[proposal];data.discovery.sources=[{id:'location-source',venue_id:'venue-0',venue_name:'Versteckte Location-Quelle',url:'https://hidden.example/',source_type:'OFFICIAL',status:'FAILED',quality:'FAILED'}];
     const calls=[];await mockControlCenterApi(context,data,{onRequest:request=>calls.push(request)});
     await context.route('**/api/v1/discovery/special-sources',async route=>{
       const body=route.request().postDataJSON();assert.equal(body.name,'QRUSH');assert.equal(body.url,'https://qrushapp.de/');assert.equal(body.venueId,undefined);
       calls.push({path:'/api/v1/discovery/special-sources',method:'POST'});
-      data.discovery.sources=[{id:'qrush',name:'QRUSH',special_source:true,venue_id:null,venue_name:'',url:body.url,source_type:'EXTERNAL',source_kind:'PLATFORM',approved:false,status:'NOT_CHECKED'}];
+      data.discovery.sources=[{id:'qrush',name:'QRUSH',special_source:true,venue_id:null,venue_name:'',url:body.url,source_type:'EXTERNAL',source_kind:'PLATFORM',approved:false,status:'NOT_CHECKED',item_selector:'',title_selector:'',date_selector:''}];
       await route.fulfill({json:{id:'qrush'}});
     });
     await context.route('**/api/v1/discovery/special-sources/qrush',async route=>{
-      assert.equal(route.request().method(),'DELETE');calls.push({path:'/api/v1/discovery/special-sources/qrush',method:'DELETE'});data.discovery.sources=[];await route.fulfill({status:204});
+      const request=route.request();calls.push({path:'/api/v1/discovery/special-sources/qrush',method:request.method()});
+      if(request.method()==='PUT') {
+        const body=request.postDataJSON();assert.equal(body.name,'QRUSH Köln');assert.equal(body.url,'https://qrushapp.de/eventfinder/koeln');
+        Object.assign(data.discovery.sources[0],{name:body.name,url:body.url});
+      }else{assert.equal(request.method(),'DELETE');data.discovery.sources=[];}
+      await route.fulfill({status:204});
     });
     let rejectionAttempts=0;
     await context.route('**/api/v1/discovery/candidates/portal/reject',async route=>{
@@ -39,6 +44,8 @@ try {
     });
     const page=await context.newPage();page.setDefaultTimeout(15000);const errors=[];page.on('pageerror',error=>errors.push(error.message));
     await page.goto(`${origin}/dashboard/vorschlaege`);
+    assert.equal(await page.getByText('Versteckte Location-Quelle',{exact:false}).count(),0);
+    assert.equal(await page.getByRole('heading',{name:'Location-Quellen',exact:true}).count(),0);
     await page.getByRole('button',{name:'Veranstaltung prüfen',exact:true}).click();
     let dialog=page.getByRole('dialog');const venue=dialog.getByLabel('Veranstaltungsort zuordnen',{exact:false});
     assert.equal(await venue.inputValue(),'');assert.equal(await dialog.getByRole('button',{name:'Bestätigen & übernehmen',exact:true}).isDisabled(),true);
@@ -53,6 +60,13 @@ try {
     await dialog.getByRole('button',{name:'Speichern',exact:true}).click();await dialog.waitFor({state:'detached'});
     await page.getByRole('button',{name:'Sonderquelle löschen',exact:true}).waitFor();
     await page.screenshot({path:`${out}/${theme}-${width}-configured.png`});
+    await page.getByRole('button',{name:'Sonderquelle editieren',exact:true}).click();dialog=page.getByRole('dialog');
+    assert.equal(await dialog.getByLabel('Name der Sonderquelle',{exact:true}).inputValue(),'QRUSH');
+    await dialog.getByLabel('Name der Sonderquelle',{exact:true}).fill('QRUSH Köln');
+    await dialog.getByLabel('Quell-URL',{exact:true}).fill('https://qrushapp.de/eventfinder/koeln');
+    await page.screenshot({path:`${out}/${theme}-${width}-edit.png`});
+    await dialog.getByRole('button',{name:'Speichern',exact:true}).click();await dialog.waitFor({state:'detached'});
+    await page.locator('[aria-label="Sonderquellen"]').getByText('QRUSH Köln',{exact:false}).waitFor();
     await page.getByRole('button',{name:'Sonderquelle löschen',exact:true}).click();await page.getByText('Noch keine Sonderquellen hinterlegt.',{exact:true}).waitFor();
     assert.equal(await page.locator('[data-record-id="portal"]').count(),1);
     const reject=page.getByRole('button',{name:'Sofort ablehnen',exact:true});
@@ -70,4 +84,4 @@ try {
   }
 }finally{await browser.close();}
 await writeFile(`${out}/results.json`,JSON.stringify(results,null,2)+'\n');
-console.log(`${results.length} synthetic special-source add/delete, explicit venue and instant-rejection scenarios passed`);
+console.log(`${results.length} synthetic special-source add/edit/delete, hidden location sources, explicit venue and instant-rejection scenarios passed`);

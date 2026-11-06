@@ -302,7 +302,7 @@ test('suggestion review and source/profile dialogs preserve edits and focus', as
   catalogue = { parties: [party], venues: [venue] };
   const overview = { automaticallyImported: 0, counts: [], runs: [],
     candidates: [{ id: 'candidate', title: 'Party', status: 'NEEDS_REVIEW', inquiry_status: 'PREPARED', dm_text: '', venue_name: 'Venue', evidence: '' }],
-    sources: [{ id: 'source', venue_id: 'venue', venue_name: 'Venue', url: 'https://example.org', approved: false, status: 'NOT_CHECKED', item_selector: '', title_selector: '', date_selector: '' }] };
+    sources: [{ id: 'source', special_source: true, name: 'QRUSH', venue_id: null, venue_name: '', url: 'https://example.org', approved: false, status: 'NOT_CHECKED', item_selector: '', title_selector: '', date_selector: '' }] };
   globalThis.fetch = async () => new Response(JSON.stringify(overview), { headers: { 'Content-Type': 'application/json' } });
   const Page = loadSource(new URL('../src/app/dashboard/vorschlaege/page.tsx', import.meta.url)).default;
   await act(async () => {
@@ -311,7 +311,7 @@ test('suggestion review and source/profile dialogs preserve edits and focus', as
   await act(async () => {
     await new Promise(resolve => setTimeout(resolve, 20));
   });
-  for (const [opener, selector] of [['Veranstaltung prüfen', 'textarea'], ['Quelle / Profil bearbeiten', 'input[type="url"]']]) {
+  for (const [opener, selector] of [['Veranstaltung prüfen', 'textarea'], ['Sonderquelle editieren', 'input[type="url"]']]) {
     // The sources section is intentionally collapsible.
     for (const details of document.querySelectorAll('details')) details.open = true;
     const trigger = button(opener);

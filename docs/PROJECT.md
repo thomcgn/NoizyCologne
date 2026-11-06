@@ -3561,8 +3561,12 @@ auch für QRUSH-Funde.
 **Implementierung (06.11.2026):** Gemeint ist `https://qrushapp.de/`.
 Unter **Discovery → Quellen & Konfiguration → Sonderquellen** kann das Team
 beliebige öffentliche HTTPS-Sonderquellen mit Namen und optionalem HTML-Profil
-hinzufügen und löschen. Die API `/api/v1/discovery/special-sources` bietet GET,
-POST und DELETE `/{id}`. Migration V17 erlaubt Quellen und noch ungeklärte Funde
+hinzufügen, editieren und löschen. Location-Quellen sind ausschließlich im
+Quellenstatus der Location sichtbar; Discovery zeigt nur Sonderquellen. Die API
+`/api/v1/discovery/special-sources` bietet GET, POST sowie PUT und DELETE `/{id}`.
+Beim Editieren bleibt die Quellenidentität erhalten; nach geänderter URL oder
+geändertem Extraktionsprofil muss der Abrufstatus neu ermittelt werden.
+Migration V17 erlaubt Quellen und noch ungeklärte Funde
 ohne `venue_id`; es wird keine Platzhalter-Location angelegt.
 
 Aktive Sonderquellen nehmen an Suchläufen teil und verwenden die vorhandenen

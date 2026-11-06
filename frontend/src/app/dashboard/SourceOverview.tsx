@@ -20,8 +20,10 @@ export default function SourceOverview({sources,onEdit,onDelete,busy=false}:{sou
     <p>{source.approved ? "Automatische Übernahme freigegeben" : "Manuelle Prüfung erforderlich"}{source.fallback_used ? " · Als Fallback verwendet" : ""}</p>
     <a href={link(source.url)} target="_blank" rel="noreferrer" className="underline">Quelle öffnen</a>
     <details className="mt-2"><summary>Technische Details</summary><p className="break-all">{source.url}</p><p>Abruf: {source.fetch_method==="BROWSER" ? "Browser" : "HTTP"} · {discoveryStatusLabel(source.status)}</p><p>{source.scan_complete ? "Vollständige Liste bestätigt" : "Vollständigkeit nicht bestätigt"}</p>{source.fetch_diagnostics && <p>{source.fetch_diagnostics.split("; ").map(discoveryStatusLabel).join("; ")}</p>}</details>
-    {onDelete && <button type="button" disabled={busy} className="cc-button cc-button-danger mt-2" onClick={()=>onDelete(source)}>Sonderquelle löschen</button>}
-    {onEdit && <button type="button" className="mt-2 rounded-lg border px-3 py-2" onClick={()=>onEdit(source)}>Quelle / Profil bearbeiten</button>}
+    {(onDelete || onEdit) && <div className="mt-2 flex flex-wrap gap-2">
+      {onEdit && <button type="button" disabled={busy} className="cc-button" onClick={()=>onEdit(source)}>{source.special_source ? "Sonderquelle editieren" : "Quelle / Profil bearbeiten"}</button>}
+      {onDelete && <button type="button" disabled={busy} className="cc-button cc-button-danger" onClick={()=>onDelete(source)}>Sonderquelle löschen</button>}
+    </div>}
   </article>)}</div>;
 }
 

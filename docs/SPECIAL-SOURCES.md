@@ -54,3 +54,32 @@ kurzlebigen PostgreSQL-Datenbank. Der reguläre QUICK-Hook bleibt das lokale Com
 STANDARD/FULL; STANDARD wurde hierfür separat ausgeführt.
 CLI-Prüfungen und synthetischer Chromium ersetzen keine Live-IDE-/Geräteabnahme.
 FULL in CI bleibt vor Merge für den exakt akzeptierten Commit erforderlich.
+
+
+## Nachtrag: Quellenansicht und Editieren
+
+Auftrag: Location-Quellen in Discovery ausblenden und neben dem Löschen eine
+Sonderquelle editieren können. PR #8 wurde bereits zusammengeführt; diese
+Änderung entsteht auf `feat/discovery-special-source-edit` mit eigenem Abnahme-PR.
+
+Umsetzung: Discovery zeigt nur Sonderquellen samt Quellenzähler und Hinweisen.
+Der Quellenstatus einer Location bleibt in deren Bearbeitung zugänglich; der
+veraltete Link zur bisherigen Discovery-Konfiguration entfällt. Der vorhandene
+Quellendialog unterstützt Editieren über PUT `/special-sources/{id}`. Quellen-ID,
+Funde und Teamentscheidungen bleiben erhalten. Geänderte URL/Extraktionsprofile
+setzen ausschließlich die Abrufdiagnostik zurück. Konflikte mit vorhandenen URLs
+werden als 409 gemeldet; gelöschte und Location-Quellen sind nicht editierbar.
+
+Prüfungen des Nachtrags: Backend-STANDARD bestanden (208 Tests: 207 erfolgreich,
+ein optionaler privater Snapshot-Replay ohne Export ausgelassen), javac/ECJ und
+Maven-Paket ohne Compilerdiagnosen. Frontend-STANDARD mit TypeScript, ESLint,
+74 Tests und Next.js-Build bestanden. Der bisherige Modaltest wurde auf die
+neue Sonderquellen-Bedienung umgestellt; der anschließende Modullauf bestand.
+Die erweiterte synthetische Chromium-Prüfung für 1440/390/320 px bestand mit
+Anlegen/Editieren/Löschen und unverändertem Prüf-/Ablehnungsablauf. Screenshots
+in `.quality/special-source-edit/` geprüft; keine Seitenfehler oder horizontalen
+Überläufe. Kein erneuter Live-Quellenabruf und keine Produktionsdatenänderungen.
+
+Abschluss über regulären QUICK-Commit-Hook, Commit/Push und eigenen PR. CLI- und
+synthetische Browsernachweise ersetzen keine Live-IDE-/Geräteprüfung. FULL in CI
+für den exakt akzeptierten Commit bleibt vor Merge erforderlich.

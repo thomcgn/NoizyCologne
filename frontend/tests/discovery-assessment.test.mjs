@@ -228,17 +228,15 @@ test('below fifty percent no new portfolio series is offered even when an indivi
   await openReview();assert.match(dialog().textContent,/1 von 4/);
   assert.ok(![...dialog().querySelectorAll('button')].some(item=>item.textContent==='Ins Portfolio übernehmen'));
 });
-test('partial MTC source is not an empty calendar and new source options retain focus',async()=>{
+test('Discovery hides location sources and excludes them from source notices and counts',async()=>{
   await mount(candidate());
-  sourceRows=[{id:'mtc-source',venue_id:'blue-shell',venue_name:'MTC Cologne',url:'https://www.mtc-cologne.de/about',source_type:'OFFICIAL',source_kind:'WEBSITE',approved:true,status:'BROWSER_PARTIAL',quality:'PARTIAL',event_count:0,enabled:true,priority:5,fallback_used:false,fetch_method:'BROWSER',item_selector:'',title_selector:'',date_selector:'',fetch_diagnostics:'ROBOTS_BLOCKED; JAVASCRIPT_ERROR',last_fetched_at:'2026-11-06T09:00:00Z',last_success_at:null}];
-  await settle(()=>poll());assert.match(document.body.textContent,/Nur teilweise ausgewertet/);assert.ok(!document.body.textContent.includes('Ausdrücklich keine Veranstaltungen gemeldet'));
-  const technical=[...document.querySelectorAll('details')].find(item=>item.querySelector('summary')?.textContent==='Technische Details');assert.equal(technical.open,false);
-  await settle(()=>button('Quelle / Profil bearbeiten').click());
-  change(control('Quellenart'),'OFFICIAL_TICKETS');change(control('Reihenfolge'),'7');
-  const url=control('Quell-URL');change(url,'https://tickets.example/mtc');assert.equal(document.activeElement,url);
-  await settle(()=>button('Speichern',dialog()).click());
-  const body=JSON.parse(calls.find(call=>call.url.endsWith('/sources')&&call.method==='POST').body);
-  assert.equal(body.sourceKind,'OFFICIAL_TICKETS');assert.equal(body.priority,7);assert.equal(body.enabled,true);assert.equal(body.approved,true);
+  sourceRows=[{id:'mtc-source',venue_id:'blue-shell',venue_name:'MTC Cologne',url:'https://www.mtc-cologne.de/about',source_type:'OFFICIAL',source_kind:'WEBSITE',approved:true,status:'BROWSER_PARTIAL',quality:'PARTIAL',event_count:0}];
+  await settle(()=>poll());
+  await settle(()=>document.querySelector('.discovery-tools > summary').click());
+  assert.doesNotMatch(document.body.textContent,/Location-Quellen|MTC Cologne|Nur teilweise ausgewertet/);
+  assert.equal([...document.querySelectorAll('button')].some(item=>item.textContent==='Quelle hinzufügen'),false);
+  assert.match(document.querySelector('.discovery-tools > summary').textContent,/0 Sonderquellen/);
+  assert.equal(document.querySelector('.discovery-source-notice'),null);
 });
 test('source comparison displays title, date and location without raw JSON',async()=>{
   await mount(candidate());await openReview();const previous=globalThis.fetch;
@@ -493,4 +491,34 @@ test('failed special-source addition preserves the entered configuration', async
   await settle(()=>dialog().querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
   assert.equal(control('Quell-URL').value,'https://qrushapp.de/');
   assert.match(dialog().textContent,/bereits vorhanden/);
+});
+
+
+test('special-source edit preloads configuration, retains focus and updates the existing identity',async()=>{
+  await mount(candidate());
+  sourceRows=[{id:'qrush',name:'QRUSH',special_source:true,venue_id:null,venue_name:'',url:'https://qrushapp.de/',source_type:'EXTERNAL',approved:false,status:'EVENTS_FOUND',item_selector:'.event',title_selector:'h2',date_selector:'time'}];
+  await settle(()=>poll());await settle(()=>document.querySelector('.discovery-tools > summary').click());
+  await settle(()=>button('Sonderquelle editieren').click());
+  assert.equal(control('Name der Sonderquelle').value,'QRUSH');
+  assert.equal(control('Event-Container').value,'.event');
+  change(control('Name der Sonderquelle'),'QRUSH Köln');
+  const url=control('Quell-URL');change(url,'https://qrushapp.de/eventfinder/koeln');assert.equal(document.activeElement,url);
+  await settle(()=>dialog().querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  const edited=calls.find(call=>call.method==='PUT');
+  assert.equal(edited.url,'/api/v1/discovery/special-sources/qrush');
+  assert.deepEqual(JSON.parse(edited.body),{name:'QRUSH Köln',url:'https://qrushapp.de/eventfinder/koeln',itemSelector:'.event',titleSelector:'h2',dateSelector:'time'});
+  assert.equal(calls.some(call=>call.method==='POST'||call.method==='DELETE'),false);
+  assert.equal(document.querySelector('[role="dialog"]'),null);
+});
+
+test('special-source edit conflict retains edited values and leaves the existing source visible',async()=>{
+  await mount(candidate());
+  sourceRows=[{id:'qrush',name:'QRUSH',special_source:true,venue_id:null,venue_name:'',url:'https://qrushapp.de/',source_type:'EXTERNAL',approved:false,status:'NOT_CHECKED',item_selector:'',title_selector:'',date_selector:''}];
+  await settle(()=>poll());await settle(()=>document.querySelector('.discovery-tools > summary').click());
+  await settle(()=>button('Sonderquelle editieren').click());
+  change(control('Name der Sonderquelle'),'Geänderter Name');
+  globalThis.fetch=async()=>new Response(JSON.stringify({message:'Diese Sonderquelle ist bereits vorhanden'}),{status:409});
+  await settle(()=>dialog().querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  assert.equal(control('Name der Sonderquelle').value,'Geänderter Name');assert.match(dialog().textContent,/bereits vorhanden/);
+  assert.equal(sourceRows[0].name,'QRUSH');
 });
