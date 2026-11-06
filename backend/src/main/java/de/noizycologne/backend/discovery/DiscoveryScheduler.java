@@ -146,7 +146,7 @@ public class DiscoveryScheduler {
             roots.put((String)saved.get("source_url"),EventExtractor.Profile.defaults());
         if (!venue.getEventsUrl().isBlank()) roots.put(venue.getEventsUrl(),EventExtractor.Profile.defaults());
         if (!venue.getWebsiteUrl().isBlank()) roots.put(venue.getWebsiteUrl(),EventExtractor.Profile.defaults());
-        for (var s : store.jdbc().queryForList("SELECT * FROM discovery_sources WHERE venue_id=? AND is_seed=true ORDER BY url LIMIT 3",venue.getId()))
+        for (var s : store.jdbc().queryForList("SELECT * FROM discovery_sources WHERE venue_id=? AND is_seed=true AND enabled=true ORDER BY priority,url LIMIT 8",venue.getId()))
             roots.put((String)s.get("url"),new EventExtractor.Profile((String)s.get("item_selector"),(String)s.get("title_selector"),(String)s.get("date_selector")));
         var targets=store.jdbc().queryForList("SELECT c.id,c.identity_key,c.title,COALESCE(e.event_date,c.event_date) AS event_date FROM discovery_candidates c LEFT JOIN calendar_entries e ON e.id=c.calendar_entry_id WHERE c.venue_id=? AND COALESCE(e.event_date,c.event_date) BETWEEN (now() AT TIME ZONE 'Europe/Berlin')::date AND (now() AT TIME ZONE 'Europe/Berlin')::date+21 AND (c.calendar_entry_id IS NOT NULL OR c.status NOT IN ('IGNORED','REJECTED','DUPLICATE'))",venue.getId());
         Set<String> targetKeys=new HashSet<>();
@@ -158,46 +158,47 @@ public class DiscoveryScheduler {
         var knownGenres=List.copyOf(genres.terms());
         record Pending(String sourceId, EventExtractor.@org.jspecify.annotations.NonNull Event event, boolean approved,boolean official) { }
         List<@NonNull Pending> pending=new ArrayList<>();
+        Set<String> fetchedRoots=new HashSet<>();boolean fallbackRequired=false;
         List<String> statuses=new ArrayList<>(); int count=0;
         record Checked(String sourceId,List<EventExtractor.@NonNull Event> events,boolean complete) { }
         List<Checked> checks=new ArrayList<>();
-        for (var root : roots.entrySet().stream().limit(changesOnly ? 23 : 3).toList()) {
+        for (var root : roots.entrySet().stream().limit(changesOnly ? 28 : 8).toList()) {
+            if (fetchedRoots.contains(root.getKey()) && root.getValue().itemSelector().isBlank()) continue;
+            if (Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM discovery_sources WHERE venue_id=? AND url=? AND NOT enabled)",Boolean.class,venue.getId(),root.getKey()))) continue;
             String rootId=store.source(venue.getId(),root.getKey(),official(venue,root.getKey()) ? "OFFICIAL" : "EXTERNAL",official(venue,root.getKey()));
             try {
                 for (var found : discovery.discover(root.getKey(),root.getValue())) {
                     String sourceId=store.source(venue.getId(),found.url().toString(),official(venue,found.url().toString()) ? "OFFICIAL" : "EXTERNAL",official(venue,found.url().toString()));
+                    fetchedRoots.add(found.url().toString());
+                    var source=store.jdbc().queryForMap("SELECT * FROM discovery_sources WHERE id=?",sourceId);
+                    if (!Boolean.TRUE.equals(source.get("enabled"))) continue;
                     store.fetched(sourceId,found);
+                    store.jdbc().update("UPDATE discovery_sources SET fallback_used=? WHERE id=?",fallbackRequired,sourceId);
                     statuses.add(found.extraction().status());
                     if (official(venue,found.url().toString())) checks.add(new Checked(sourceId,found.extraction().events(),found.extraction().complete()));
-                    boolean approved=Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT approved FROM discovery_sources WHERE id=?",Boolean.class,sourceId));
+                    boolean approved=Boolean.TRUE.equals(source.get("approved"));
+                    boolean trusted=official(venue,found.url().toString()) || approved && List.of("OFFICIAL_ORGANIZER","OFFICIAL_TICKETS").contains(source.get("source_kind"));
                     for (var event : found.extraction().events()) {
                         if(changesOnly && !targetKeys.contains(EventChangeMonitor.identity(event)) && targets.stream().noneMatch(target -> EventMatcher.nameMatches(event.title(),(String)target.get("title")) || EventMatcher.nameMatches((String)target.get("title"),event.title()) || Objects.equals(EventChangeMonitor.date(event),target.get("event_date") instanceof java.sql.Date day ? day.toLocalDate() : target.get("event_date")))) continue;
-                        if (++count>300) break; pending.add(new Pending(sourceId,event,approved,official(venue,found.url().toString()))); }
+                        if (++count>300) break; pending.add(new Pending(sourceId,event,approved,trusted)); }
+                    if (!found.extraction().status().equals("SOURCE_LINKS_FOUND") && !List.of("SUCCESS","NO_EVENTS_CONFIRMED").contains(SourceQuality.assess(found))) fallbackRequired=true;
                 }
             } catch (java.io.IOException e) {
                 String status=e instanceof EventPageFetcher.FetchFailure f ? f.status : "SCAN_FAILED";
-                statuses.add(status); store.jdbc().update("UPDATE discovery_sources SET status=?,last_fetched_at=now() WHERE id=?",status,rootId);
+                statuses.add(status);fallbackRequired=true;
+                store.fetched(rootId,new VenueSourceDiscoveryService.Found(SafeUrls.parse(root.getKey()),new EventExtractor.Extraction(List.of(),status),"HTTP",List.of(Objects.requireNonNull(status))));
             }
         }
         // Compare the complete bounded batch before importing anything. A contradictory second source
         // must not arrive after an already committed automatic import from the first source.
         monitor.batch(venue,pending.stream().map(item -> new EventChangeMonitor.Observation(item.sourceId(),item.event(),item.official())).toList(),operation,changesOnly);
         for (var check:checks) monitor.missing(venue,check.sourceId(),check.events(),operation,check.complete() && count<=300);
-        // Unapproved portals cannot add speculative data to an approved source.
-        // Distinct stable identities on different days are separate occurrences.
-        for (var item:pending.stream().sorted(Comparator.comparingInt(p -> p.approved() ? 1 : 0)).toList()) {
-            var event=item.event();
-            var related=pending.stream().filter(p -> sameBatchEvent(item.event(),p.event())).toList();
-            var approvedRelated=related.stream().filter(Pending::approved).toList();
-            var authoritative=approvedRelated.isEmpty() ? related : approvedRelated;
-            var starts=authoritative.stream().flatMap(p -> p.event().starts().stream()).distinct().toList();
-            boolean conflicting=starts.stream().map(EventNormalizer::date).filter(Objects::nonNull).distinct().count()>1
-                || starts.stream().map(EventNormalizer::time).filter(Objects::nonNull).distinct().count()>1
-                || authoritative.stream().anyMatch(p -> EventVerification.assess(p.event(),venue.getName()).conflicting());
-            String states=authoritative.stream().map(p -> p.event().state()).distinct().collect(java.util.stream.Collectors.joining(" "));
-            if (conflicting) states+=" SOURCE_CONFLICT";
-            event=new EventExtractor.Event(event.identity(),event.title(),event.url(),conflicting ? starts : event.starts(),event.evidence(),states,event.location());
-            processor.process(venue,item.sourceId(),event,knownParties,aliases,knownGenres,item.approved(),operation);
+        var combined=DiscoveryBatchMerger.merge(pending.stream().map(p -> new DiscoveryBatchMerger.Input(p.sourceId(),p.event(),p.approved(),p.official())).toList(),venue.getName());
+        for (var merged:combined) {
+            var primary=merged.primary();var event=merged.event();
+            processor.process(venue,primary.sourceId(),event,knownParties,aliases,knownGenres,primary.approved(),operation);
+            var ids=store.jdbc().queryForList("SELECT candidate_id FROM discovery_candidate_identities WHERE venue_id=? AND identity_key=?",String.class,venue.getId(),EventChangeMonitor.identity(EventPrivacy.safe(event)));
+            if (!ids.isEmpty()) for (var origin:merged.origins()) monitor.rememberOrigin(Objects.requireNonNull(ids.getFirst()),origin.sourceId(),origin.event(),operation);
         }
         var outcomes=statuses.stream().filter(s -> !List.of("SOURCE_LINKS_FOUND","EXCLUDED_CONCERTS").contains(s)).toList();
         String status=outcomes.contains("EVENTS_FOUND") ? "EVENTS_FOUND"
@@ -207,18 +208,13 @@ public class DiscoveryScheduler {
         else if (!statuses.contains("EVENTS_FOUND") && status.equals("SOURCE_LINKS_FOUND")) status="UNINTERPRETABLE";
         if (statuses.stream().anyMatch(s -> s.equals("SCAN_FAILED") || s.contains("BLOCKED"))) status="PARTIAL_FAILURE";
         store.jdbc().update("UPDATE venues SET discovery_status=?,last_discovery_at=CASE WHEN ? IN ('EVENTS_FOUND','NO_EVENTS','EXCLUDED_CONCERTS') THEN now() ELSE last_discovery_at END WHERE id=?",status,status,venue.getId());
+        String quality=outcomes.isEmpty() ? "PARTIAL" : outcomes.stream().allMatch(q -> q.equals("NO_EVENTS")) ? "NO_EVENTS_CONFIRMED"
+            : pending.isEmpty() ? outcomes.stream().allMatch(q -> q.contains("BLOCKED")) ? "BLOCKED" : "FAILED"
+            : count>300 || roots.size()>(changesOnly ? 28 : 8) || fallbackRequired || statuses.stream().anyMatch(q -> !List.of("EVENTS_FOUND","NO_EVENTS","SOURCE_LINKS_FOUND").contains(q)) ? "PARTIAL" : "SUCCESS";
+        store.jdbc().update("UPDATE venues SET last_discovery_attempt_at=now(),discovery_quality=?,discovery_event_count=? WHERE id=?",quality,combined.size(),venue.getId());
         return List.of("EVENTS_FOUND","NO_EVENTS","EXCLUDED_CONCERTS").contains(status);
     }
     private boolean official(Venue venue,String url) {
         return !venue.getWebsiteUrl().isBlank() && SafeUrls.parse(venue.getWebsiteUrl()).getHost().equalsIgnoreCase(SafeUrls.parse(url).getHost());
-    }
-    private static boolean sameBatchEvent(EventExtractor.Event left,EventExtractor.Event right) {
-        boolean leftStable=!left.identity().isBlank(),rightStable=!right.identity().isBlank();
-        if (leftStable && rightStable && left.identity().equals(right.identity())) return true;
-        if (!EventMatcher.nameMatches(left.title(),right.title()) && !EventMatcher.nameMatches(right.title(),left.title())) return false;
-        var leftDate=EventChangeMonitor.date(left);
-        var rightDate=EventChangeMonitor.date(right);
-        if (leftDate!=null && rightDate!=null && !leftDate.equals(rightDate) && leftStable && rightStable) return false;
-        return true;
     }
 }

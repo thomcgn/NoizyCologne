@@ -58,3 +58,30 @@ Transaktionslock wie Import/Prüfentscheidungen gespeichert. Vorhandene API-Aufr
 ohne neue Felder bleiben kompatibel. Quellenherkunft ist aus dem bestehenden
 Beobachtungsprotokoll abrufbar; Migration und Persistenz werden mit dem nachfolgenden
 Integrationstest in einer eigenen Testdatenbank geprüft, nicht in QUICK behauptet.
+
+## Phase 3 – konfigurierte Fallbacks und Herkunft
+
+Der bestehende Scheduler untersucht primäre Website/Eventübersicht und bis zu acht
+konfigurierte Quellen in Prioritätsreihenfolge; nach Fehlern wird fortgesetzt.
+Bereits während desselben Crawls geprüfte URLs brauchen ohne besonderes Profil
+keinen zweiten Abruf. Deaktivierte Quellen werden nicht verwertet. Es werden keine
+fremden Domains geraten. Zusätzliche konfigurierte Quellen dürfen auch bei
+brauchbarer Primärquelle ergänzen; eine vorausgegangene unvollständige Quelle wird
+als Fallback-Anlass festgehalten. Seiten-/Event-/Browserbudgets bleiben begrenzt.
+
+Ein gemeinsamer Batch kombiniert nur belastbar zugeordnete Vorkommen: passender
+Titel, gleicher Tag und gebundene Location oder passende stabile Eventidentität.
+Eine ungebundene externe Liste oder abweichende Location darf keine Genres leihen.
+Unterschiedliche Tage/Uhrzeiten bleiben Konflikte; klar verschiedene stabile
+Wiederholungstermine bleiben getrennt. Ein Datum ohne Uhrzeit kann durch eine
+belegte Uhrzeit ergänzt werden, ohne eine zu raten. Ungeprüfte externe Absagen
+werden nicht zu offiziellen Bestätigungen.
+
+Originalbeobachtungen bleiben pro Quelle im vorhandenen Beobachtungsprotokoll
+abgelegt. Änderungsvergleiche benutzen den letzten Stand derselben Quelle;
+zusätzliche passende Genreinformationen und wiederholte identische Abrufe sind
+keine fingierten Änderungen. Kalender-/Redaktionsschutz und zentraler
+Cancellation-Prozess bleiben erhalten. Unit-Fixtures prüfen Zusammenführung,
+abweichende Location, ungebundene Plattform, Datum-/Zeitkonflikte, Wiederholungen
+und Herkunft. Die nachfolgende Datenbankintegration prüft Persistenz und idempotente
+Wiederholung; QUICK behauptet diese Prüfung nicht.

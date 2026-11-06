@@ -91,12 +91,20 @@ public class EventChangeMonitor {
             }
             for (var found:matching) {
                 var event=found.event();
+                var history=store.jdbc().queryForList("SELECT event_data FROM discovery_observations WHERE candidate_id=? AND source_id=? ORDER BY observed_at DESC,id DESC LIMIT 1",String.class,candidate.get("id"),found.sourceId());
+                var sourceBefore=history.isEmpty() ? old : JsonValues.readRequired(json,Objects.requireNonNull(history.getFirst()),EventExtractor.Event.class);
+                boolean unchanged=!history.isEmpty() && fingerprint(sourceBefore).equals(fingerprint(event));
+                boolean supplement=history.isEmpty() && compatibleSupplement(old,event,venue.getName());
+                if (unchanged || supplement) {
+                    rememberOrigin((String)candidate.get("id"),found.sourceId(),event,operation);
+                    continue;
+                }
                 if (!found.official()) {
                     observation((String)candidate.get("id"),found.sourceId(),event,operation);
                     if (!fingerprint(old).equals(fingerprint(event))) alert(candidate,venue,"CONFLICTING_SOURCES",old,event,sourceUrl(found.sourceId()),"Abweichende nicht-offizielle Quelle; Bestätigung erforderlich");
                     continue;
                 }
-                String kind=classify(old,event,false);
+                String kind=classify(sourceBefore,event,false);
                 if (kind!=null) alert(candidate,venue,kind,old,event,sourceUrl(found.sourceId()),"Offizieller Quellenbefund weicht ab: "+kind);
                 if("POSSIBLE_REPLACEMENT".equals(kind)) observation((String)candidate.get("id"),found.sourceId(),event,operation);
                 else record((String)candidate.get("id"),found.sourceId(),event,operation);
@@ -113,6 +121,22 @@ public class EventChangeMonitor {
                     alert(candidate,venue,"POSSIBLE_REPLACEMENT",old,found.event(),sourceUrl(found.sourceId()),"Bisheriges Event nicht bestätigt; andere Party an derselben Location und demselben Tag. Mehrere Veranstaltungen sind möglich.");
             }
         }
+    }
+    private boolean compatibleSupplement(EventExtractor.Event old,EventExtractor.Event event,String venue) {
+        return Objects.equals(date(old),date(event)) && date(old)!=null
+            && (EventMatcher.nameMatches(old.title(),event.title()) || EventMatcher.nameMatches(event.title(),old.title()))
+            && DiscoveryBatchMerger.locationMatches(event.location(),venue)
+            && EventLifecycle.signal(old).equals("ACTIVE") && EventLifecycle.signal(event).equals("ACTIVE")
+            && !EventVerification.assess(event,venue).conflicting()
+            && (old.starts().stream().map(EventNormalizer::time).filter(Objects::nonNull).findFirst().isEmpty()
+                || event.starts().stream().map(EventNormalizer::time).filter(Objects::nonNull).findFirst().isEmpty()
+                || old.starts().stream().map(EventNormalizer::time).filter(Objects::nonNull).findFirst()
+                    .equals(event.starts().stream().map(EventNormalizer::time).filter(Objects::nonNull).findFirst()));
+    }
+    @Transactional
+    public void rememberOrigin(String candidate,String source,EventExtractor.Event event,String operation) {
+        observation(candidate,source,EventPrivacy.safe(event),operation);
+        store.jdbc().update("INSERT INTO discovery_source_checks(candidate_id,source_id,consecutive_missing,last_operation) VALUES (?,?,0,?) ON CONFLICT(candidate_id,source_id) DO UPDATE SET consecutive_missing=0,last_operation=excluded.last_operation",candidate,source,operation);
     }
     private boolean inHorizon(Map<String,Object> row,LocalDate today) {
         Object value=row.get("calendar_entry_id")==null ? row.get("event_date") : store.jdbc().queryForObject("SELECT event_date FROM calendar_entries WHERE id=?",LocalDate.class,row.get("calendar_entry_id"));
