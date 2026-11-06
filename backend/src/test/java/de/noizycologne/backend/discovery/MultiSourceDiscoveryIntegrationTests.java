@@ -98,7 +98,7 @@ class MultiSourceDiscoveryIntegrationTests {
         source(ticket,event);configure(platform,"PLATFORM",false,2);scheduler.scan();
         var c=store.jdbc().queryForMap("SELECT * FROM discovery_candidates WHERE venue_id=?",venue.getId());
         assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,venue.getId())).isZero();
-        String id=portfolio.approve((String)c.get("id"),"New Alternative Party");createdParties.add(id);
+        String id=portfolio.approve((String)c.get("id"),"New Alternative Party",null,"23:00");createdParties.add(id);
         assertThat(portfolio.approve((String)c.get("id"),"New Alternative Party")).isEqualTo(id);
         scheduler.scan();
         assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,venue.getId())).isEqualTo(1);

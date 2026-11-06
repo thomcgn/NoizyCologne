@@ -125,6 +125,28 @@ class PartySeriesControllerIntegrationTests {
         assertThat(updated.recurrence()).isEqualTo(new PartyRecurrenceResponse("monthly_weekday", 2, -1, null));
     }
 
+    @Test void persistsSeriesDefaultsAndKeepsUnknownSeparateFromFree() throws Exception {
+        String name="Default Party "+UUID.randomUUID();
+        var created=createParty(new PartySeriesRequest(name,"","#123456","manual",Set.of(),Set.of(),Set.of(),null,Set.of(),"22:45",0));
+        createdPartyIds.add(created.id());
+        assertThat(created.defaultStartTime()).isEqualTo("22:45");assertThat(created.defaultEntryPrice()).isZero();
+        var update=new PartySeriesRequest(name,"","#123456","manual",Set.of(),Set.of(),Set.of(),null,Set.of(),"23:15",12);
+        mockMvc.perform(requireNonNull(put("/api/v1/parties/{id}",created.id()).contentType(MediaType.APPLICATION_JSON).content(JsonValues.write(objectMapper,update)))).andExpect(status().isOk());
+        var reloaded=List.of(getParties()).stream().filter(party->party.id().equals(created.id())).findFirst().orElseThrow();
+        assertThat(reloaded.defaultStartTime()).isEqualTo("23:15");assertThat(reloaded.defaultEntryPrice()).isEqualTo(12);
+        var unknown=new PartySeriesRequest(name,"","#123456","manual",Set.of(),Set.of(),Set.of(),null,Set.of(),null,null);
+        mockMvc.perform(requireNonNull(put("/api/v1/parties/{id}",created.id()).contentType(MediaType.APPLICATION_JSON).content(JsonValues.write(objectMapper,unknown)))).andExpect(status().isOk());
+        var cleared=List.of(getParties()).stream().filter(party->party.id().equals(created.id())).findFirst().orElseThrow();
+        assertThat(cleared.defaultStartTime()).isNull();assertThat(cleared.defaultEntryPrice()).isNull();
+    }
+
+    @Test void rejectsMissingNewSeriesTimeInvalidTimesAndNonWholeOrOutOfRangePrices() throws Exception {
+        for(String fields:List.of("\"defaultEntryPrice\":null", "\"defaultStartTime\":\"24:00\"", "\"defaultStartTime\":\"23:15:30\"", "\"defaultStartTime\":\"23:00\",\"defaultEntryPrice\":-1", "\"defaultStartTime\":\"23:00\",\"defaultEntryPrice\":31", "\"defaultStartTime\":\"23:00\",\"defaultEntryPrice\":8.5")) {
+            String body="{\"name\":\"Invalid "+UUID.randomUUID()+"\",\"color\":\"#123456\",\"djMentionDefault\":\"manual\","+fields+"}";
+            mockMvc.perform(requireNonNull(post("/api/v1/parties").contentType(MediaType.APPLICATION_JSON).content(body))).andExpect(status().isBadRequest());
+        }
+    }
+
     @Test
     void persistsOtherRecurrenceAndRejectsInvalidReferencesOrAssignments() throws Exception {
         String suffix = UUID.randomUUID().toString();
@@ -265,6 +287,7 @@ class PartySeriesControllerIntegrationTests {
     }
 
     private PartySeriesResponse createParty(PartySeriesRequest request) throws Exception {
+        if (request.defaultStartTime() == null) request = new PartySeriesRequest(request.name(), request.instagram(), request.color(), request.djMentionDefault(), request.residentDjIds(), request.otherDjIds(), request.organizerIds(), request.recurrence(), request.standardGenres(), "23:00", request.defaultEntryPrice());
         String body = mockMvc.perform(requireNonNull(post("/api/v1/parties")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(JsonValues.write(objectMapper,request))))
@@ -303,7 +326,8 @@ class PartySeriesControllerIntegrationTests {
                 residentDjIds,
                 otherDjIds,
                 organizerIds,
-                recurrence
+                recurrence,
+                Set.of(), "23:00", null
         );
     }
 }

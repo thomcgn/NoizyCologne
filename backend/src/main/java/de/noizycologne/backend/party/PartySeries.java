@@ -55,6 +55,18 @@ public class PartySeries {
     @Column(name = "default_flyer_media_id", length = 100)
     private String defaultFlyerMediaId;
 
+    @Column(name = "default_start_time")
+    private java.time.@Nullable LocalTime defaultStartTime;
+    @Column(name = "default_entry_price")
+    private @Nullable Integer defaultEntryPrice;
+
+    public java.time.@Nullable LocalTime getDefaultStartTime() { return defaultStartTime; }
+    public @Nullable Integer getDefaultEntryPrice() { return defaultEntryPrice; }
+    public void setDefaults(java.time.@Nullable LocalTime startTime, @Nullable Integer entryPrice) {
+        defaultStartTime = startTime;
+        defaultEntryPrice = entryPrice;
+    }
+
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "party_series_genres", joinColumns = @JoinColumn(name = "party_id"))
     @Column(name = "genre", nullable = false, length = 100)

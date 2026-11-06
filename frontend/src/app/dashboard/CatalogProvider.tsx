@@ -90,6 +90,8 @@ export type PartySeries = CatalogItem & {
   djMentionDefault: DjMentionDefault;
   recurrence: RecurrenceRule | null;
   defaultFlyer: PartyFlyer | null;
+  defaultStartTime: string | null;
+  defaultEntryPrice: number | null;
 };
 
 export type EditorialDraftStatus = "DRAFT" | "READY_FOR_REVIEW" | "APPROVED";
@@ -295,6 +297,12 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       throw new Error("Die Partyreihen-API lieferte ein unerwartetes Antwortformat.");
     }
 
+    const defaultStartTime = party.defaultStartTime ?? null;
+    const defaultEntryPrice = party.defaultEntryPrice ?? null;
+    if (!(defaultStartTime === null || typeof defaultStartTime === "string" && /^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(defaultStartTime))
+      || !(defaultEntryPrice === null || typeof defaultEntryPrice === "number" && Number.isInteger(defaultEntryPrice) && defaultEntryPrice >= 0 && defaultEntryPrice <= 30)) {
+      throw new Error("Die Partyreihen-API lieferte ungültige Standardwerte.");
+    }
     let recurrence: RecurrenceRule | null = null;
     if (party.recurrence !== null) {
       if (typeof party.recurrence !== "object" || party.recurrence === null) {
@@ -342,6 +350,8 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       djMentionDefault: party.djMentionDefault,
       recurrence,
       defaultFlyer,
+      defaultStartTime,
+      defaultEntryPrice,
     };
   }, [parsePartyFlyer]);
 
@@ -585,6 +595,8 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
           standardGenres: party.standardGenres,
           djMentionDefault: party.djMentionDefault,
           recurrence: party.recurrence,
+          defaultStartTime: party.defaultStartTime,
+          defaultEntryPrice: party.defaultEntryPrice,
         }),
       }
     );

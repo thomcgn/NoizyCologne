@@ -72,14 +72,22 @@ public class CalendarEntryService {
     public CalendarEntryResponse createEntry(CalendarEntryRequest request) {
         lockCalendar();
         ValidatedEntry validated = validate(request);
+        LocalTime startTime = validated.startTime();
+        String entryPrice = validated.entryPrice();
+        if (validated.type().equals("event")) {
+            var series = java.util.Objects.requireNonNull(partySeriesRepository.findById(validated.partyId()).orElseThrow());
+            if (startTime == null && !de.noizycologne.backend.discovery.EventTiming.hasRelativeStart(validated.notes())) startTime = series.getDefaultStartTime();
+            var price = series.getDefaultEntryPrice();
+            if (entryPrice.isBlank() && price != null) entryPrice = price == 0 ? "Eintritt frei" : price + " €";
+        }
         CalendarEntry entry = new CalendarEntry(
                 validated.date(),
                 validated.locationId(),
                 validated.type(),
                 validated.notes(),
-                validated.entryPrice(),
+                entryPrice,
                 validated.partyId(),
-                validated.startTime(),
+                startTime,
                 validated.reason(),
                 validated.mentionDjIds()
         );

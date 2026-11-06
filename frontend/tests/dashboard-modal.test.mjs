@@ -421,6 +421,7 @@ test('party standard genres submit display names, remain checked on edit and can
   await act(async () => { mount(h(Page)); });
   click(button('Neu anlegen'));
   type(document.querySelector('[role="dialog"] input'), 'Genre Test');
+  changeField(document.querySelector('[role="dialog"] input[type="time"]'), '23:00');
   function genreCheckbox(name) {
     const label = [...document.querySelectorAll('[role="dialog"] label')].find(label => label.textContent.trim() === name);
     assert.ok(label, `Genre label ${name}`);
@@ -643,6 +644,54 @@ function changeField(element, value) {
     }
   });
 }
+
+test('party defaults require a new start time and preserve unknown, free and slider values across edits', async () => {
+  const saved=[];
+  const save=async value=>{const result={...value,id:'defaults'};saved.push(value);catalogue.parties=[result];return result;};
+  catalogue={parties:[],venues:[venue],actors:[],createParty:save,updateParty:save};
+  globalThis.fetch=async url=>new Response(JSON.stringify(url.includes('aliases')?[]:[genre]));
+  const Page=loadSource(new URL('../src/app/dashboard/portfolio/page.tsx',import.meta.url)).default;
+  await act(async()=>mount(h(Page)));click(button('Neu anlegen'));
+  type(document.querySelector('[role="dialog"] input'),'Default Night');
+  const time=document.querySelector('input[type="time"]');assert.equal(time.required,true);
+  const range=document.querySelector('input[type="range"]');assert.equal(range.disabled,true);
+  assert.equal(range.min,'0');assert.equal(range.max,'30');assert.equal(range.step,'1');
+  await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  assert.equal(saved.length,0);
+  changeField(time,'22:45');
+  const unknown=[...document.querySelectorAll('label')].find(label=>label.textContent==='Preis noch unbekannt').querySelector('input');
+  click(unknown);assert.match(document.querySelector('output').textContent,/0 €.*Eintritt frei/);
+  await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  assert.equal(saved[0].defaultStartTime,'22:45');assert.equal(saved[0].defaultEntryPrice,0);
+  await act(async()=>button('Bearbeiten').click());
+  assert.equal(document.querySelector('input[type="time"]').value,'22:45');
+  changeField(document.querySelector('input[type="range"]'),'30');assert.equal(document.querySelector('output').textContent,'30 €');
+  await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  assert.equal(saved[1].defaultEntryPrice,30);
+  await act(async()=>button('Bearbeiten').click());
+  click([...document.querySelectorAll('label')].find(label=>label.textContent==='Preis noch unbekannt').querySelector('input'));
+  await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  assert.equal(saved[2].defaultEntryPrice,null);
+});
+
+test('new calendar forms suggest series defaults and retain manual values while relative starts stay unknown', async () => {
+  const saved=[];
+  catalogue={parties:[{...party,defaultStartTime:'22:45',defaultEntryPrice:0}],venues:[venue],actors:[],createEntry:async value=>saved.push(value)};
+  const Editor=loadSource(new URL('../src/app/dashboard/kalender/EntryEditor.tsx',import.meta.url)).default;
+  const props={date:new Date(2027,0,9),onSaved(){},onCancel(){}};
+  mount(h(Editor,props));
+  const select=()=>{const choices=document.querySelectorAll('select');changeField(choices[0],'venue');changeField(choices[1],'party');};
+  select();assert.equal(document.querySelector('input[type="time"]').value,'22:45');
+  const price=[...document.querySelectorAll('label')].find(label=>label.textContent.includes('Eintrittspreis')).querySelector('input');
+  assert.equal(price.value,'Eintritt frei');changeField(price,'9 €');changeField(document.querySelector('input[type="time"]'),'00:30');
+  changeField(document.querySelector('textarea'),'Manueller Termin');
+  await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  assert.equal(saved[0].startTime,'00:30');assert.equal(saved[0].entryPrice,'9 €');
+  act(()=>root.render(h(Editor,{...props,key:'relative'})));select();changeField(document.querySelector('textarea'),'nach dem Konzert');
+  assert.equal(document.querySelector('input[type="time"]').value,'');
+  await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  assert.equal(saved[1].startTime,'');
+});
 
 test('portfolio tables paginate and search genres and related actors without modifying records', async () => {
   const rows = Array.from({length: 60}, (_, index) => ({...party, id: `party-${index}`, name: `Party ${index}`, standardGenres: index === 40 ? ['Emo'] : ['Indie'], residentDjIds: index === 40 ? ['actor'] : []}));

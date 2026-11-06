@@ -25,6 +25,10 @@ public class DiscoveryPortfolioService {
     }
     @Transactional
     public String approve(String candidateId,String name,String seriesAlias) {
+        return approve(candidateId,name,seriesAlias,null);
+    }
+    @Transactional
+    public String approve(String candidateId,String name,String seriesAlias,String defaultStartTime) {
         store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
         var candidate=store.candidate(candidateId);geography.requireInside(candidate);var event=evaluation.event(candidate);var rules=evaluation.rules();
         if (List.of("REJECTED","DUPLICATE","IGNORED").contains(candidate.get("status"))) throw conflict("Geschützten Vorschlag zuerst prüfen");
@@ -35,7 +39,7 @@ public class DiscoveryPortfolioService {
         if (!coverage.eligible()) throw conflict("Weniger als 50 % der erkannten Eventgenres passen zum aktiven Portfolio");
         if (!EventLifecycle.signal(event).equals("ACTIVE") || Boolean.TRUE.equals(candidate.get("has_blocking_change"))) throw conflict("Veranstaltungsänderung zuerst klären");
         Set<String> standardGenres=new LinkedHashSet<>();for (String genre:coverage.names()) standardGenres.add(genre);
-        var party=parties.createParty(new PartySeriesRequest(name,"","#E11D48","manual",Set.of(),Set.of(),Set.of(),null,standardGenres));
+        var party=parties.createParty(new PartySeriesRequest(name,"","#E11D48","manual",Set.of(),Set.of(),Set.of(),null,standardGenres,defaultStartTime,null));
         entities.flush();
         importer.rememberAlias(candidate,party.id(),seriesAlias);
         store.jdbc().update("UPDATE discovery_candidates SET party_id=?,decision_origin='MANUAL',reason='Partyreihe ausdrücklich ins Portfolio aufgenommen',updated_at=now() WHERE id=?",party.id(),candidateId);

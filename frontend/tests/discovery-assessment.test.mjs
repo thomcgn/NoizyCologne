@@ -221,10 +221,12 @@ test('refresh updates lifecycle blockers while retaining saved and unsaved manua
 test('portfolio approval compares recognized event genres with the active portfolio and requires confirmation',async()=>{
   await mount(candidate({title:'New Alternative Party',matching_class:'POSSIBLE_MATCH',assessment:assessment({recognition:{status:'NONE',parties:[]}}),genreCoverage:{matched:2,total:4,percent:50,names:['Emo','Indie'],eligible:true}}));
   await openReview();assert.match(dialog().textContent,/2 von 4 erkannten Eventgenres.*\(50 %\)/);
+  assert.equal(button('Ins Portfolio übernehmen',dialog()).disabled,true);
+  change(control('Standard-Startuhrzeit'),'23:00');
   const name=control('Name im Portfolio');change(name,'New Alternative Night');assert.equal(document.activeElement,name);
   await settle(()=>button('Ins Portfolio übernehmen',dialog()).click());
   const request=calls.find(call=>call.url.endsWith('/portfolio')&&call.method==='POST');
-  assert.deepEqual(JSON.parse(request.body),{name:'New Alternative Night',seriesAlias:null});
+  assert.deepEqual(JSON.parse(request.body),{name:'New Alternative Night',defaultStartTime:'23:00',seriesAlias:null});
   assert.equal(document.querySelector('[role="dialog"]'),null);assert.ok(!calls.some(call=>/instagram|publish|cancellations/.test(call.url)));
   assert.equal(reloadedEntries, 1); assert.equal(reloadedParties, 1); assert.equal(reloadedDrafts, 1);
 });
@@ -296,6 +298,7 @@ test('portfolio confirmation prevents duplicate submissions and removes the appr
     }
     return previous(url, options);
   };
+  change(control('Standard-Startuhrzeit'),'22:30');
   const confirm = button('Ins Portfolio übernehmen', dialog());
   await settle(() => { confirm.click(); confirm.click(); });
   assert.equal(calls.filter(call => call.url.endsWith('/portfolio') && call.method === 'POST').length, 1);

@@ -57,6 +57,24 @@ class DiscoveryIntegrationTests {
         assertThat(store.jdbc().queryForObject("SELECT status FROM discovery_candidates WHERE id=?",String.class,c.get("id"))).isEqualTo("NEEDS_REVIEW");
         assertThat(store.jdbc().queryForObject("SELECT event_date FROM calendar_entries WHERE id=?",LocalDate.class,c.get("calendar_entry_id"))).isEqualTo(LocalDate.of(2027,1,9));
     }
+    @Test void importedEventsUseSeriesDefaultsButPreferSourceValuesAndKeepRelativeTimesAndEdits() throws Exception {
+        party.setDefaults(LocalTime.of(22,45),7);parties.saveAndFlush(requireNonNull(party));
+        found(event("default",party.getName(),"2027-01-09",""));scheduler.scan();
+        var inherited=store.jdbc().queryForMap("SELECT * FROM calendar_entries WHERE location_id=?",venue.getId());
+        assertThat(requireNonNull(inherited.get("start_time")).toString()).isEqualTo("22:45:00");assertThat(inherited.get("entry_price")).isEqualTo("7 €");
+        String id=(String)inherited.get("id");
+        calendar.updateEntry(id,new de.noizycologne.backend.calendar.CalendarEntryRequest("2027-01-09",venue.getId(),"event","Manuell","9 €",party.getId(),"00:30",null,Set.of()));
+        party.setDefaults(LocalTime.of(21,0),12);parties.saveAndFlush(requireNonNull(party));scheduler.scan();
+        assertThat(store.jdbc().queryForMap("SELECT * FROM calendar_entries WHERE id=?",id)).containsEntry("entry_price","9 €").containsEntry("notes","Manuell");
+        assertThat(store.jdbc().queryForObject("SELECT start_time FROM calendar_entries WHERE id=?",String.class,id)).isEqualTo("00:30:00");
+        var specific=event("specific",party.getName(),"2027-01-16T23:30","");
+        found(new EventExtractor.Event(specific.identity(),specific.title(),specific.url(),specific.starts(),"Eintritt: 15 €",specific.state(),specific.location()));scheduler.scan();
+        assertThat(store.jdbc().queryForMap("SELECT * FROM calendar_entries WHERE location_id=? AND event_date='2027-01-16'",venue.getId())).containsEntry("entry_price","15 €");
+        assertThat(store.jdbc().queryForObject("SELECT start_time FROM calendar_entries WHERE location_id=? AND event_date='2027-01-16'",String.class,venue.getId())).isEqualTo("23:30:00");
+        var relative=event("relative",party.getName(),"2027-01-23","");
+        found(new EventExtractor.Event(relative.identity(),relative.title(),relative.url(),relative.starts(),"Indie Party; Beginn: nach dem Konzert",relative.state(),relative.location()));scheduler.scan();
+        assertThat(store.jdbc().queryForMap("SELECT * FROM calendar_entries WHERE location_id=? AND event_date='2027-01-23'",venue.getId())).containsEntry("start_time",null);
+    }
     @Test void automaticImportsReachCalendarApiAndDeletedEntriesStopCountingWithoutLosingDecisions() throws Exception {
         Long before=store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates c JOIN calendar_entries e ON e.id=c.calendar_entry_id WHERE c.status='IMPORTED' AND c.reason='Automatisch übernommen'",Long.class);
         found(event("calendar-one",party.getName(),"2026-11-07T23:00","")); scheduler.scan();

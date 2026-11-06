@@ -39,6 +39,8 @@ export default function EntryEditor({
   const [type, setType] = useState<EntryType>(entry?.type ?? "event");
   const [entryDate, setEntryDate] = useState(() => date);
   const [entryPrice, setEntryPrice] = useState(entry?.entryPrice ?? "");
+  const [priceEdited, setPriceEdited] = useState(false);
+  const [timeEdited, setTimeEdited] = useState(false);
   const [locationId, setLocationId] = useState(entry?.locationId ?? "");
   const [partyId, setPartyId] = useState(
     entry?.type === "event" ? entry.partyId : ""
@@ -243,6 +245,9 @@ export default function EntryEditor({
                 onChange={(event) => {
                   setPartyId(event.target.value);
                   setMentionOverride(null);
+                  const series = parties.find(party => party.id === event.target.value);
+                  if (!entry && !timeEdited) setStartTime(/nach dem konzert|im anschluss an das konzert|after (the )?(concert|show)/i.test(notes) ? "" : series?.defaultStartTime ?? "");
+                  if (!entry && !priceEdited) setEntryPrice(series?.defaultEntryPrice == null ? "" : series.defaultEntryPrice === 0 ? "Eintritt frei" : `${series.defaultEntryPrice} €`);
                 }}
               >
                 <option value="">Partyreihe auswählen</option>
@@ -262,7 +267,7 @@ export default function EntryEditor({
                 className={inputStyle}
                 type="time"
                 value={startTime}
-                onChange={(event) => setStartTime(event.target.value)}
+                onChange={(event) => {setTimeEdited(true); setStartTime(event.target.value);}}
               />
             </label>
 
@@ -273,7 +278,7 @@ export default function EntryEditor({
               <input
                 className={inputStyle}
                 value={entryPrice}
-                onChange={(event) => setEntryPrice(event.target.value)}
+                onChange={(event) => {setPriceEdited(true); setEntryPrice(event.target.value);}}
                 maxLength={100}
                 placeholder="z. B. 8 € AK / 6 € VVK oder frei"
               />
@@ -345,7 +350,10 @@ export default function EntryEditor({
         <textarea
           className={inputStyle}
           value={notes}
-          onChange={(event) => setNotes(event.target.value)}
+          onChange={(event) => {
+            setNotes(event.target.value);
+            if (!entry && !timeEdited) setStartTime(/nach dem konzert|im anschluss an das konzert|after (the )?(concert|show)/i.test(event.target.value) ? "" : selectedParty?.defaultStartTime ?? "");
+          }}
           placeholder="Zusätzliche Informationen"
           rows={3}
         />
