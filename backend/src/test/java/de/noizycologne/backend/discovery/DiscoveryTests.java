@@ -68,7 +68,7 @@ class DiscoveryTests {
         var matcher=new EventMatcher(); var p=party();
         assertThat(matcher.match(event("Indie Party",List.of("2027-01-09T23:00"),""),"New",List.of(p),Map.of(),List.of("Indie"),true).status()).isEqualTo("READY");
         assertThat(matcher.match(event("Alias",List.of("2027-01-09"),""),"New",List.of(p),Map.of("party",List.of("Alias")),List.of(),true).status()).isEqualTo("READY");
-        assertThat(matcher.match(event("Neue Indie Party",List.of("2027-01-09"),""),"New",List.of(p),Map.of(),List.of("Indie"),true).status()).isEqualTo("NEEDS_REVIEW");
+        assertThat(matcher.match(event("Neue Indie Party",List.of("2027-01-09"),""),"New",List.of(p),Map.of(),List.of("Indie"),true).status()).isEqualTo("READY");
         assertThat(matcher.match(event("Indie Konzert",List.of("2027-01-09"),""),"New",List.of(p),Map.of(),List.of("Indie"),true).status()).isEqualTo("IGNORED");
         assertThat(matcher.match(event("Indie Party",List.of("2027-01-09"),""),"New",List.of(p),Map.of(),List.of(),false).status()).isEqualTo("NEEDS_REVIEW");
     }
@@ -76,8 +76,13 @@ class DiscoveryTests {
         var matcher=new EventMatcher(); var p=party();
         for(var dates:List.of(List.<@NonNull String>of(),List.<@NonNull String>of("2027-01"),List.<@NonNull String>of("2027-01-08","2027-01-09")))
             assertThat(matcher.match(event("Indie Party",dates,""),"New",List.of(p),Map.of(),List.of(),true).status()).isEqualTo("NEEDS_INQUIRY");
-        for(String state:List.of("EventCancelled","EventRescheduled","TENTATIVE","UNCONFIRMED"))
+        for(String state:List.of("EventCancelled","EventRescheduled","CANCELLED","POSTPONED","RESCHEDULED","TENTATIVE","SPECULATIVE_DATE"))
             assertThat(matcher.match(event("Indie Party",List.of("2027-01-09"),state),"New",List.of(p),Map.of(),List.of(),true).status()).isEqualTo("NEEDS_INQUIRY");
+    }
+    @Test void knownCompletePartyDoesNotNeedAnExtraConfirmationPhrase() {
+        var p=party();
+        for(String state:List.of("UNCONFIRMED","UNCONFIRMED Detailseite nicht eindeutig auswertbar"))
+            assertThat(new EventMatcher().match(event("Indie Party",List.of("2027-01-09"),state),"New",List.of(p),Map.of(),List.of(),true).status()).isEqualTo("READY");
     }
     @Test void overnightAndMissingTimesAreNotInvented() throws Exception {
         var event=requireNonNull(extractor.extract(page(fixture("mtc.html")),EventExtractor.Profile.defaults()).events().get(0));

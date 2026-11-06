@@ -5,16 +5,40 @@ import { discoveryStatusLabel } from "../discoveryLabels";
 import DashboardModal from "../DashboardModal";
 import { useCatalog } from "../CatalogProvider";
 import EventChangesPanel from "./EventChangesPanel";
+import SourceOverview, {SourceEvidence,sourceKinds,type DiscoverySource} from "../SourceOverview";
 import DiscoveryResetDialog, { type ResetMode } from "./DiscoveryResetDialog";
 
-type Candidate = {id: string; title: string; venue_name: string; instagram: string; source_url: string; event_date: string | null; party_id: string | null; status: string; reason: string; evidence: string; inquiry_status: string; dm_text: string; calendar_entry_id: string | null; decision_origin: string; matching_class: string; automatic_reason: string; matcher_version: string; evaluated_at: string | null; previous_status: string | null; last_evaluation_id: string | null};
-type Source = {id: string; venue_id: string; venue_name: string; url: string; source_type: string; approved: boolean; status: string; item_selector: string; title_selector: string; date_selector: string};
+type DiscoveryAssessment = {
+  recognition: { status: "SINGLE" | "COOPERATION" | "AMBIGUOUS" | "NONE"; parties: { id: string; name: string; matchedName: string }[] };
+  verification: { status: "VERIFIED" | "MISSING_DATA" | "CONFLICTING_DATA" | "SPECULATIVE"; reasons: string[]; date: string | null };
+  lifecycle: "ACTIVE" | "CANCELLED" | "CANCELLATION_UNCONFIRMED" | "POSTPONED" | "RESCHEDULED" | "LINEUP_CHANGE";
+  automaticImportEligible: boolean;
+  importBlockers: string[];
+};
+type Candidate = {id: string; title: string; venue_name: string; instagram: string; source_url: string; event_date: string | null; party_id: string | null; status: string; reason: string; evidence: string; inquiry_status: string; dm_text: string; calendar_entry_id: string | null; decision_origin: string; matching_class: string; automatic_reason: string; matcher_version: string; evaluated_at: string | null; previous_status: string | null; last_evaluation_id: string | null; assessment?: DiscoveryAssessment; genreCoverage?: { matched:number; total:number; percent:number; names:string[]; eligible:boolean }};
+type Source = DiscoverySource;
 type Operation = { id: string; kind: string; status: string; report: string; summary: string };
 type Summary = { evaluated: number; newPossibleMatches: number; stillIgnored: number; preservedManual: number; reclassified: number; failed: number };
 type Diagnosis = { id: number; title: string; venue_name: string; old_status: string | null; new_status: string; reason: string; origin: string };
 type Overview = {metrics: { automaticallyIgnored: number; manuallyRejected: number; needsReview: number; reevaluated: number; unverified: number; possible: number; open: number; archive: number }; operations: Operation[]; diagnoses: Diagnosis[]; automaticallyImported: number; candidates: Candidate[]; sources: Source[]; counts: {status: string; count: number}[]; runs: {id: string; started_at: string; status: string; report: string}[]};
 const labels: Record<string,string> = {NEEDS_REVIEW: "Neue passende Partys / Prüfung", NEEDS_INQUIRY: "Rückfragen nötig", IMPORTED: "Übernommen", REJECTED: "Abgelehnt", DUPLICATE: "Dublette", IGNORED: "Ignoriert", READY: "Bereit zur Übernahme", NONE: "Keine Rückfrage", PREPARED: "Rückfrage vorbereitet", SENT: "Rückfrage gesendet (manuell)", ANSWERED: "Antwort erhalten"};
 const extraFilters: Record<string,string> = {AUTOMATIC_IGNORED: "Automatisch ignoriert", MANUAL_REJECTED: "Manuell abgelehnt", UNVERIFIED: "Unklar", POSSIBLE_MATCH: "Möglicher Treffer", REEVALUATED: "Neu bewertet"};
+const recognitionLabels: Record<DiscoveryAssessment["recognition"]["status"], string> = {SINGLE: "Bekannte Partyreihe erkannt", COOPERATION: "Kooperation erkannt", AMBIGUOUS: "Zuordnung mehrdeutig", NONE: "Keine bekannte Partyreihe erkannt"};
+const verificationLabels: Record<DiscoveryAssessment["verification"]["status"], string> = {VERIFIED: "Termin belegt", MISSING_DATA: "Angaben fehlen", CONFLICTING_DATA: "Widersprüchliche Angaben", SPECULATIVE: "Termin nicht ausreichend belegt"};
+const lifecycleLabels: Record<DiscoveryAssessment["lifecycle"], string> = {ACTIVE: "Kein Absage- oder Verschiebungshinweis", CANCELLED: "Absage erkannt", CANCELLATION_UNCONFIRMED: "Absagehinweis – prüfen", POSTPONED: "Veranstaltung verschoben", RESCHEDULED: "Veranstaltung auf einen anderen Termin verlegt", LINEUP_CHANGE: "Line-up-Änderung – Veranstaltung separat prüfen"};
+function CandidateAssessment({ assessment, detailed = false }: { assessment: DiscoveryAssessment; detailed?: boolean }) {
+  return <section className="space-y-2 text-sm" aria-label="Erkennung, Terminprüfung und Veranstaltungsstatus">
+    <p><strong>Partyreihen-Erkennung:</strong> {recognitionLabels[assessment.recognition.status]}</p>
+    {assessment.recognition.parties.length > 0 && <ul className="list-inside list-disc">{assessment.recognition.parties.map(p => <li key={p.id}>{p.name}{detailed && p.matchedName !== p.name ? ` · erkannt über „${p.matchedName}“` : ""}</li>)}</ul>}
+    {detailed && assessment.recognition.status === "COOPERATION" && <p>Alle erkannten Reihen bleiben sichtbar. Der Kalender führt pro Termin eine Partyreihe; die Zuordnung muss manuell geprüft werden.</p>}
+    {detailed && assessment.recognition.status === "AMBIGUOUS" && <p>Mehrere Zuordnungen passen. Bitte die richtige Partyreihe manuell prüfen.</p>}
+    <p><strong>Terminprüfung:</strong> {verificationLabels[assessment.verification.status]}{assessment.verification.date ? ` · ${assessment.verification.date}` : ""}</p>
+    {detailed && assessment.verification.reasons.length > 0 && <ul className="list-inside list-disc">{assessment.verification.reasons.map((reason, index) => <li key={`${index}-${reason}`}>{reason}</li>)}</ul>}
+    <p><strong>Veranstaltungsstatus:</strong> {lifecycleLabels[assessment.lifecycle]}</p>
+    {detailed && <p>Automatische Übernahme: {assessment.automaticImportEligible ? "Voraussetzungen erfüllt." : "derzeit nicht möglich."}</p>}
+    {detailed && assessment.importBlockers.length > 0 && <div role="status"><p className="font-semibold">Übernahme gesperrt:</p><ul className="list-inside list-disc">{assessment.importBlockers.map((reason, index) => <li key={`${index}-${reason}`}>{reason}</li>)}</ul><p>Absagen und Verschiebungen unter „Änderungen &amp; Absagen“ prüfen.</p></div>}
+  </section>;
+}
 function summaryOf(operation?: Operation): Summary | null {
   if (!operation || !["COMPLETED", "PARTIAL"].includes(operation.status)) return null;
   try { return JSON.parse(operation.summary) as Summary; } catch { return null; }
@@ -29,13 +53,15 @@ async function api(path: string, method = "GET", body?: unknown) {
 function sourceLink(url: string) { try { const u = new URL(url); return u.protocol === "https:" && !u.username && !u.password ? u.href : undefined; } catch { return undefined; } }
 
 export default function SuggestionsPage() {
-  const {parties, venues, reloadEntries} = useCatalog();
+  const {parties, venues, reloadEntries, reloadParties} = useCatalog();
   const [data,setData] = useState<Overview | null>(null);
   const [error,setError] = useState("");
   const [busy,setBusy] = useState(false);
   const [filter,setFilter] = useState("NEEDS_REVIEW");
   const [candidate,setCandidate] = useState<Candidate | null>(null);
   const [source,setSource] = useState<Source | null>(null);
+  const [origins,setOrigins] = useState<{url:string;source_kind:string;event_data:string}[]>([]);
+  const [portfolioName,setPortfolioName] = useState("");
   const [party,setParty] = useState(""); const [date,setDate] = useState("");
   const [status,setStatus] = useState("NEEDS_REVIEW"); const [inquiry,setInquiry] = useState("NONE"); const [dm,setDm] = useState("");
   const [showChanges,setShowChanges] = useState(false);
@@ -45,10 +71,12 @@ export default function SuggestionsPage() {
   const reload = useCallback(async () => { try { setData(await api(`?filter=${encodeURIComponent(filter)}`)); } catch(e) { setError(e instanceof Error ? e.message : "Laden fehlgeschlagen"); } }, [filter]);
   useEffect(() => { const timer = window.setTimeout(() => void reload(),0); const poll = window.setInterval(() => void reload(),10000); return () => { clearTimeout(timer); clearInterval(poll); }; },[reload]);
   async function action(work: () => Promise<void>) { setBusy(true); setError(""); setNotice(""); try { await work(); await reload(); } catch(e) { setError(e instanceof Error ? e.message : "Aktion fehlgeschlagen"); } finally { setBusy(false); } }
-  function edit(c: Candidate) { setCandidate(c); setParty(c.party_id ?? ""); setDate(c.event_date ?? ""); setStatus(["NEEDS_REVIEW","NEEDS_INQUIRY","REJECTED","DUPLICATE"].includes(c.status) ? c.status : "NEEDS_REVIEW"); setInquiry(c.inquiry_status); setDm(c.dm_text); setError(""); }
+  function edit(c: Candidate) { setCandidate(c); setOrigins([]); setPortfolioName(c.title.slice(0,200)); setParty(c.party_id ?? ""); setDate(c.event_date ?? ""); setStatus(["NEEDS_REVIEW","NEEDS_INQUIRY","REJECTED","DUPLICATE"].includes(c.status) ? c.status : "NEEDS_REVIEW"); setInquiry(c.inquiry_status); setDm(c.dm_text); setError(""); }
   const operation = operationId ? data?.operations?.find(item => item.id === operationId) : data?.operations?.[0];
   const summary = summaryOf(operation);
   const running = busy || data?.operations?.some(item => item.status === "RUNNING");
+  // Refresh source assessments and import blockers without replacing unsaved review fields.
+  const currentCandidate = candidate ? data?.candidates.find(item => item.id === candidate.id) ?? candidate : null;
   function countFor(value: string) {
     const m = data?.metrics;
     const extra: Record<string, number | undefined> = {AUTOMATIC_IGNORED: m?.automaticallyIgnored, MANUAL_REJECTED: m?.manuallyRejected, UNVERIFIED: m?.unverified, POSSIBLE_MATCH: m?.possible, REEVALUATED: m?.reevaluated, OPEN: m?.open, ARCHIVE: m?.archive};
@@ -70,7 +98,7 @@ export default function SuggestionsPage() {
     {showChanges && <EventChangesPanel onReviewCandidate={id => void action(async () => { edit(await api(`/candidates/${id}`)); })} />}
     <p className="text-sm text-neutral-400">Gefundene Partys prüfen und in den Kalender übernehmen.</p>
     {error && <p role="alert" className="text-red-400">{error}</p>}{notice && <p role="status">{notice}</p>}
-    <div className="flex flex-wrap gap-2">{["NEEDS_REVIEW","NEEDS_INQUIRY","OPEN","IMPORTED","ARCHIVE", ...Object.keys(extraFilters)].map(value => <button key={value} aria-pressed={filter === value} className={`${button} ${filter === value ? "bg-white/15" : ""}`} onClick={() => setFilter(value)}>{extraFilters[value] ?? (value === "OPEN" ? "Rückfragen offen" : value === "ARCHIVE" ? "Abgelehnt / Archiv" : labels[value])} ({countFor(value)})</button>)}</div>
+    <div className="flex flex-wrap gap-2">{["NEEDS_REVIEW","NEEDS_INQUIRY","READY","OPEN","IMPORTED","ARCHIVE", ...Object.keys(extraFilters)].map(value => <button key={value} aria-pressed={filter === value} className={`${button} ${filter === value ? "bg-white/15" : ""}`} onClick={() => setFilter(value)}>{extraFilters[value] ?? (value === "OPEN" ? "Rückfragen offen" : value === "ARCHIVE" ? "Abgelehnt / Archiv" : labels[value])} ({countFor(value)})</button>)}</div>
     <p className="text-sm">Automatisch ignoriert: {data?.metrics?.automaticallyIgnored ?? 0} · Manuell abgelehnt: {data?.metrics?.manuallyRejected ?? 0} · Prüfbedürftig: {data?.metrics?.needsReview ?? 0} · Neu bewertet: {data?.metrics?.reevaluated ?? 0}</p>
     {operation && <section className="rounded-xl border border-white/15 p-3" aria-live="polite"><p>Letzter Vorgang: {operation.status} · {operation.report}</p>
       {summary && <p>{summary.evaluated} Kandidaten erneut bewertet · {summary.newPossibleMatches} neue mögliche Treffer · {summary.stillIgnored} weiterhin ignoriert · {summary.preservedManual} manuelle/geschützte Entscheidungen unverändert · {summary.reclassified} neu klassifiziert · {summary.failed} Location-Fehler</p>}
@@ -78,10 +106,10 @@ export default function SuggestionsPage() {
     <details className="rounded-xl border border-white/15 p-3"><summary>Matching-Diagnose · letzte {data?.diagnoses?.length ?? 0} Entscheidungen</summary><div className="overflow-x-auto"><table className="mt-3 w-full text-left text-sm"><thead><tr><th>Party</th><th>Location</th><th>Alter Status</th><th>Neuer Status</th><th>Grund</th></tr></thead><tbody>{data?.diagnoses?.map(item => <tr key={item.id}><td className="p-2">{item.title}</td><td>{item.venue_name}</td><td>{item.old_status ?? "Neu"}</td><td>{item.new_status}</td><td>{item.origin} · {item.reason}</td></tr>)}</tbody></table></div></details>
     <p className="text-sm">Automatisch übernommen: {data?.automaticallyImported ?? 0}</p>
     <p className="text-sm">Letzter Suchlauf: {data?.runs[0] ? `${new Date(data.runs[0].started_at).toLocaleString("de-DE",{timeZone:"Europe/Berlin"})} · ${discoveryStatusLabel(data.runs[0].status)} · ${data.runs[0].report}` : "Noch kein Suchlauf"}</p>
-    <div className="space-y-3">{data?.candidates.filter(visible).map(c => <article key={c.id} className="rounded-xl border border-white/10 p-4"><div className="flex flex-wrap justify-between gap-3"><div><h2 className="font-semibold">{c.title}</h2><p>{c.venue_name} · {c.event_date ?? "Datum unklar"}</p><p className="text-sm text-neutral-400">{c.reason}</p><p className="text-xs text-neutral-500">{c.decision_origin} · {c.matching_class} · {c.matcher_version}</p></div><button className={button} onClick={() => edit(c)}>Veranstaltung prüfen</button></div></article>)}</div>
+    <div className="space-y-3">{data?.candidates.filter(visible).map(c => <article key={c.id} className="rounded-xl border border-white/10 p-4"><div className="flex flex-wrap justify-between gap-3"><div><h2 className="font-semibold">{c.title}</h2><p>{c.venue_name} · {c.event_date ?? "Datum unklar"}</p><p className="text-sm text-neutral-400">{c.reason}</p>{c.assessment && <CandidateAssessment assessment={c.assessment} />}<p className="text-xs text-neutral-500">{c.decision_origin} · {c.matching_class} · {c.matcher_version}</p></div><button className={button} onClick={() => edit(c)}>Veranstaltung prüfen</button></div></article>)}</div>
     <details className="rounded-xl border border-white/10 p-4"><summary>Location-Quellen · {data?.sources.filter(s => !["EVENTS_FOUND","NO_EVENTS","NOT_CHECKED","SOURCE_LINKS_FOUND","EXCLUDED_CONCERTS"].includes(s.status)).length ?? 0} mit Diagnosebedarf</summary>
-      <button className={`${button} mt-3`} onClick={() => setSource({id:"",venue_id:venues[0]?.id ?? "",venue_name:"",url:"",source_type:"EXTERNAL",approved:false,status:"NOT_CHECKED",item_selector:"",title_selector:"",date_selector:""})}>Quelle hinzufügen</button>
-      {data?.sources.map(s => <div key={s.id} className="mt-3 break-words border-t border-white/10 pt-3"><p>{s.venue_name} · {s.source_type === "OFFICIAL" ? "Offizielle Website" : "Externe Quelle"} · {discoveryStatusLabel(s.status)} · {s.approved ? "Automatik freigegeben" : "Prüfung erforderlich"}</p><a href={sourceLink(s.url)} target="_blank" rel="noreferrer" className="underline">{s.url}</a> <button className={button} onClick={() => setSource({...s})}>Quelle / Profil bearbeiten</button></div>)}
+      <button className={`${button} mt-3`} onClick={() => setSource({id:"",venue_id:venues[0]?.id ?? "",venue_name:"",url:"",source_type:"EXTERNAL",approved:false,status:"NOT_CHECKED",item_selector:"",title_selector:"",date_selector:"",source_kind:"CUSTOM",enabled:true,priority:100})}>Quelle hinzufügen</button>
+      <SourceOverview sources={data?.sources ?? []} onEdit={s => setSource({...s})} />
     </details>
     {resetMode && <DiscoveryResetDialog initialMode={resetMode} onClose={() => setResetMode(null)} onStarted={id => { setOperationId(id); setResetMode(null); setNotice("Neubewertung angefordert. Der Vorgang wird mit Ergebnis und Fehlern protokolliert."); void reload(); }} />}
     <DashboardModal open={!!candidate} onClose={() => setCandidate(null)} title={candidate?.title ?? "Vorschlag prüfen"}>
@@ -90,6 +118,10 @@ export default function SuggestionsPage() {
         <p>{candidate.venue_name} · {candidate.reason}</p>
         <p className="text-sm">Entscheidungsursprung: {candidate.decision_origin} · {candidate.matching_class}<br />Regelversion: {candidate.matcher_version} · Bewertet: {candidate.evaluated_at ?? "Noch nicht versioniert"}</p>
         {candidate.automatic_reason && <p className="text-sm">Technische Entscheidung: {candidate.automatic_reason}</p>}
+        {currentCandidate?.assessment && <CandidateAssessment assessment={currentCandidate.assessment} detailed />}
+        {candidate.genreCoverage && <p>Genreübereinstimmung: {candidate.genreCoverage.matched} von {candidate.genreCoverage.total} aktiven Projektgenres ({candidate.genreCoverage.percent} %).</p>}
+        {!candidate.party_id && candidate.assessment?.recognition.status === "NONE" && candidate.genreCoverage?.eligible && !candidate.assessment.importBlockers.length && <fieldset className="space-y-2 rounded-lg border p-3"><legend>Neue Partyreihe einmalig freigeben</legend><label className="block">Name im Portfolio<input className={field} value={portfolioName} maxLength={200} onChange={e=>setPortfolioName(e.target.value)} /></label><p>Ab 50 % aller aktiven Projektgenres. Bei belegtem Datum aus freigegebener Quelle wird der Termin mit übernommen. Geprüfte Angaben bleiben erhalten.</p><button type="button" className={button} disabled={busy || !portfolioName.trim()} onClick={()=>void action(async()=>{await api(`/candidates/${candidate.id}/portfolio`,"POST",{name:portfolioName});await reloadEntries();await reloadParties();setCandidate(null);setNotice("Partyreihe im Portfolio freigegeben.");})}>Ins Portfolio aufnehmen</button></fieldset>}
+        <details><summary>Quellen und Angaben vergleichen</summary><button type="button" className={button} disabled={busy} onClick={()=>void action(async()=>{const rows=await api(`/candidates/${candidate.id}/sources`);setOrigins(Array.isArray(rows)?rows:[]);})}>Quellenbelege laden</button><SourceEvidence origins={origins} /></details>
         <a href={sourceLink(candidate.source_url)} target="_blank" rel="noreferrer" className="underline">Quellseite öffnen</a>
         <label className="block">Partyreihe zuordnen<select className={field} value={party} onChange={e => setParty(e.target.value)}><option value="">Bitte wählen</option>{parties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
         <label className="block">Korrigiertes / bestätigtes Datum<input className={field} type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
@@ -103,15 +135,18 @@ export default function SuggestionsPage() {
           <label className="block mt-3">Rückfragestatus<select className={field} value={inquiry} onChange={e => setInquiry(e.target.value)}>{["NONE","PREPARED","SENT","ANSWERED"].map(s => <option key={s} value={s}>{labels[s]}</option>)}</select></label>
           <p className="text-sm mt-2">Nachrichten werden von dir in Instagram verschickt. Den Status anschließend manuell setzen.</p>
         </details>
-        <div className="flex flex-wrap gap-2"><button disabled={busy} className={button} onClick={() => void action(async () => { await save(); setCandidate(null); })}>Speichern</button><button disabled={busy || !party || !date || !!candidate.calendar_entry_id} className={button} onClick={() => void action(async () => { await save(); await api(`/candidates/${candidate.id}/import`,"POST",{partyId:party,date}); await reloadEntries(); setCandidate(null); })}>Manuell übernehmen</button></div>
-        {candidate.calendar_entry_id && <p>Bereits übernommene Änderungen bitte direkt im Kalender prüfen.</p>}
+        <div className="flex flex-wrap gap-2"><button disabled={busy} className={button} onClick={() => void action(async () => { await save(); setCandidate(null); })}>Speichern</button><button disabled={busy || !party || !date || !!currentCandidate?.calendar_entry_id || !!currentCandidate?.assessment?.importBlockers.length} className={button} onClick={() => void action(async () => { await save(); await api(`/candidates/${candidate.id}/import`,"POST",{partyId:party,date}); await reloadEntries(); setCandidate(null); })}>Manuell übernehmen</button></div>
+        {currentCandidate?.calendar_entry_id && <p>Bereits übernommene Änderungen bitte direkt im Kalender prüfen.</p>}
       </div>}
     </DashboardModal>
     <DashboardModal open={!!source} onClose={() => setSource(null)} title="Quelle & Extraktionsprofil">
-      {source && <form className="space-y-4" onSubmit={e => {e.preventDefault(); void action(async () => { await api("/sources","POST",{venueId:source.venue_id,url:source.url,approved:source.approved,itemSelector:source.item_selector,titleSelector:source.title_selector,dateSelector:source.date_selector}); setSource(null); });}}>
+      {source && <form className="space-y-4" onSubmit={e => {e.preventDefault(); void action(async () => { await api("/sources","POST",{venueId:source.venue_id,url:source.url,approved:source.approved,itemSelector:source.item_selector,titleSelector:source.title_selector,dateSelector:source.date_selector,sourceKind:source.source_kind ?? (source.source_type==="OFFICIAL"?"WEBSITE":"CUSTOM"),enabled:source.enabled ?? true,priority:source.priority ?? 100}); setSource(null); });}}>
         {error && <p role="alert" className="text-red-400">{error}</p>}
         <label className="block">Location<select className={field} value={source.venue_id} onChange={e => setSource({...source,venue_id:e.target.value})} required>{venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}</select></label>
         <label className="block">Quell-URL<input className={field} type="url" required maxLength={2048} value={source.url} onChange={e => setSource({...source,url:e.target.value})} /></label>
+        <label className="block">Quellenart<select className={field} value={source.source_kind ?? (source.source_type==="OFFICIAL"?"WEBSITE":"CUSTOM")} onChange={e=>setSource({...source,source_kind:e.target.value})}>{Object.entries(sourceKinds).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+        <label className="flex gap-2"><input type="checkbox" checked={source.enabled ?? true} onChange={e=>setSource({...source,enabled:e.target.checked})} />Quelle für Discovery verwenden</label>
+        <label className="block">Reihenfolge der Zusatzquellen (kleine Zahl zuerst)<input type="number" min={0} max={999} className={field} value={source.priority ?? 100} onChange={e=>setSource({...source,priority:Number(e.target.value)})} /></label>
         <label className="flex gap-2"><input type="checkbox" checked={source.approved} onChange={e => setSource({...source,approved:e.target.checked})} />Quelle ausdrücklich zur automatischen Übernahme freigeben</label>
         <p className="text-sm">Externe Portale bleiben als externe Quellen gekennzeichnet. Freigabe erst nach Prüfung der Verlässlichkeit.</p>
         <details><summary>Optionales HTML-Profil (CSS-Selektoren)</summary>{(["item_selector","title_selector","date_selector"] as const).map((key,i) => <label key={key} className="mt-3 block">{["Event-Container","Titel innerhalb des Containers","Startdatum (datetime/content oder ISO-Text)"][i]}<input className={field} maxLength={300} value={source[key]} onChange={e => setSource({...source,[key]:e.target.value})} /></label>)}</details>

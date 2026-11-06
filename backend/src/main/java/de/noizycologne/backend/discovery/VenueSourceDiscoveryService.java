@@ -10,19 +10,28 @@ import java.io.IOException;
 @Service
 public class VenueSourceDiscoveryService {
     private final EventPageFetcher fetcher;
+    private final BrowserPageRenderer browser;
     private final EventExtractor extractor;
     private final DiscoveryGenreFilter genres;
     private final de.noizycologne.backend.party.PartySeriesRepository parties;
     private final DiscoveryStore store;
     public VenueSourceDiscoveryService(EventPageFetcher fetcher, EventExtractor extractor, DiscoveryGenreFilter genres) {
-        this(fetcher,extractor,genres,null,null);
+        this(fetcher,extractor,genres,null,null,null);
+    }
+    public VenueSourceDiscoveryService(EventPageFetcher fetcher,EventExtractor extractor,DiscoveryGenreFilter genres,
+            de.noizycologne.backend.party.PartySeriesRepository parties,DiscoveryStore store) {
+        this(fetcher,extractor,genres,parties,store,null);
     }
     @org.springframework.beans.factory.annotation.Autowired
     public VenueSourceDiscoveryService(EventPageFetcher fetcher,EventExtractor extractor,DiscoveryGenreFilter genres,
-            de.noizycologne.backend.party.PartySeriesRepository parties,DiscoveryStore store) {
-        this.fetcher=fetcher;this.extractor=extractor;this.genres=genres;this.parties=parties;this.store=store;
+            de.noizycologne.backend.party.PartySeriesRepository parties,DiscoveryStore store,BrowserPageRenderer browser) {
+        this.browser=browser;this.fetcher=fetcher;this.extractor=extractor;this.genres=genres;this.parties=parties;this.store=store;
     }
-    public record Found(URI url, EventExtractor.Extraction extraction) { }
+    public record Found(URI url, EventExtractor.Extraction extraction,String fetchMethod,List<@NonNull String> diagnostics,String siteName) {
+        public Found(URI url,EventExtractor.Extraction extraction) { this(url,extraction,"HTTP",List.of(),""); }
+        public Found(URI url,EventExtractor.Extraction extraction,String method,List<@NonNull String> diagnostics) { this(url,extraction,method,diagnostics,""); }
+        @NonNull Found withExtraction(EventExtractor.Extraction updated) { return new Found(url,updated,fetchMethod,diagnostics,siteName); }
+    }
     /** Calendar navigation before details, one host, depth <= 2, at most 8 pages and 200 inspected links/page. */
     public List<@NonNull Found> discover(String input, EventExtractor.Profile profile) throws IOException {
         URI root = SafeUrls.parse(input);
@@ -35,7 +44,13 @@ public class VenueSourceDiscoveryService {
         if (parties!=null) parties.findAll().forEach(p -> knownNames.add(p.getName()));
         if (store!=null) store.aliases().values().forEach(knownNames::addAll);
         Set<URI> eligibleDetails = new HashSet<>();
+        int browserJobs=0;
+        long deadline=System.nanoTime()+60_000_000_000L;
         while (!queue.isEmpty() && seen.size() < 8) {
+            if (System.nanoTime()>deadline) {
+                found.add(new Found(root,new EventExtractor.Extraction(List.of(),"CRAWL_LIMIT"),"HTTP",List.of("CRAWL_LIMIT")));
+                break;
+            }
             // Find programme sections before spending the page budget on event details.
             Step step = queue.stream().filter(s -> !s.detail()).findFirst().orElse(queue.getFirst());
             queue.remove(step);
@@ -44,7 +59,36 @@ public class VenueSourceDiscoveryService {
                 if (!fetcher.robotsAllowed(step.url(), robots)) throw new EventPageFetcher.FetchFailure("ROBOTS_BLOCKED");
                 var page = fetcher.fetch(step.url());
                 var extraction = extractor.extract(page, profile);
-                found.add(new Found(step.url(), extraction));
+                String method="HTTP";List<@NonNull String> diagnostics=List.of();
+                if (browser!=null && extractor.needsRendering(page,extraction) && !hasStaticProgrammeLink(page)) {
+                    var rendered=browserJobs++<2 ? browser.render(step.url())
+                        : new BrowserPageRenderer.Result("BROWSER_LIMIT",List.of(),List.of("BROWSER_LIMIT"),false);
+                    diagnostics=rendered.warnings();
+                    if (!rendered.status().equals("BROWSER_DISABLED")) method="BROWSER";
+                    if (!rendered.pages().isEmpty()) {
+                        method="BROWSER";
+                        StringBuilder combined=new StringBuilder();
+                        for (var renderedPage:rendered.pages()) {
+                            if (renderedPage.url().equals(step.url())) combined.append(renderedPage.body()).append("\n");
+                            else {
+                                var embedded=extractor.extract(renderedPage,profile);
+                                found.add(new Found(renderedPage.url(),new EventExtractor.Extraction(embedded.events(),embedded.status(),false),"BROWSER",diagnostics));
+                            }
+                        }
+                        if (!combined.isEmpty()) {
+                            page=new EventPageFetcher.Page(step.url(),Objects.requireNonNull(combined.toString()),"text/html");
+                            var parsed=extractor.extract(page,profile);
+                            extraction=new EventExtractor.Extraction(parsed.events(),parsed.status(),false);
+                        }
+                        if (!rendered.status().equals("RENDERED"))
+                            extraction=new EventExtractor.Extraction(extraction.events(),rendered.status(),false);
+                    } else if (!rendered.status().equals("BROWSER_DISABLED"))
+                        extraction=new EventExtractor.Extraction(extraction.events(),rendered.status(),false);
+                }
+                var metadata=Jsoup.parse(page.body());
+                var site=metadata.selectFirst("meta[property=og:site_name][content]");
+                String siteName=site==null ? metadata.title() : site.attr("content");
+                found.add(new Found(step.url(), extraction,method,diagnostics,siteName.substring(0,Math.min(200,siteName.length()))));
                 if (step.depth() >= 2) continue;
                 if (step.detail()) continue;
                 Set<URI> eventLinks = new HashSet<>();
@@ -52,7 +96,7 @@ public class VenueSourceDiscoveryService {
                     try {
                         URI detail = SafeUrls.parse(step.url().resolve(event.url()).toString().split("#", 2)[0]);
                         eventLinks.add(detail);
-                        boolean known=knownNames.stream().anyMatch(name -> EventMatcher.nameMatches(event.title(),name));
+                        boolean known=knownNames.stream().anyMatch(name -> PartySeriesRecognition.containsName(event.title(),name));
                         boolean partyLead=EventNormalizer.text(event.title()).matches(".*\\b([\\p{L}]*party|partys|parties|clubnacht|disco|dancefloor|dj|djs)\\b.*");
                         if (PartyOnlyPolicy.concert(event) || (!known && (EventMatcher.unrelated(event) || (!partyLead && !DiscoveryGenreFilter.matches(event, genreTerms)))) || detail.equals(step.url())
                                 || !detail.getHost().equalsIgnoreCase(root.getHost())) continue;
@@ -84,13 +128,24 @@ public class VenueSourceDiscoveryService {
                     } catch (IllegalArgumentException ignored) { }
                 }
                 if (programmeLink && extraction.events().isEmpty() && extraction.status().equals("UNINTERPRETABLE"))
-                    found.set(found.size() - 1, new Found(step.url(), new EventExtractor.Extraction(List.of(), "SOURCE_LINKS_FOUND")));
+                    found.set(found.size() - 1, Objects.requireNonNull(found.getLast(),"Quellenbefund fehlt").withExtraction(new EventExtractor.Extraction(List.of(), "SOURCE_LINKS_FOUND")));
             } catch (IOException e) {
                 if (step.depth() == 0) throw e;
                 found.add(new Found(step.url(), new EventExtractor.Extraction(List.of(), e instanceof EventPageFetcher.FetchFailure f ? f.status : "SCAN_FAILED")));
             }
         }
         return enrich(found, eligibleDetails);
+    }
+    private boolean hasStaticProgrammeLink(EventPageFetcher.Page page) {
+        for (var link:Jsoup.parse(page.body(),Objects.requireNonNull(page.url().toString())).select("a[href]").stream().limit(200).toList()) {
+            String label=EventNormalizer.text(link.text().isBlank() ? link.attr("aria-label") : link.text());
+            if (!label.matches("events|party|partys|parties|programm|kalender|veranstaltungen|calendar|upcoming events")) continue;
+            try {
+                URI next=SafeUrls.parse(link.absUrl("href").split("#",2)[0]);
+                if (!next.equals(page.url()) && next.getHost().equalsIgnoreCase(page.url().getHost())) return true;
+            } catch (IllegalArgumentException ignored) { /* Not a permitted navigation target. */ }
+        }
+        return false;
     }
     /** Preserve overview evidence, including date conflicts and cancellation, when adding detail data. */
     private List<@NonNull Found> enrich(List<@NonNull Found> found, Set<URI> eligible) {
@@ -125,17 +180,17 @@ public class VenueSourceDiscoveryService {
                         d.location().isBlank() ? event.location() : d.location());
                 events.add(merged); mergedDetails.put(url, merged);
             }
-            result.add(new Found(page.url(), new EventExtractor.Extraction(events, page.extraction().status())));
+            result.add(page.withExtraction(new EventExtractor.Extraction(events, page.extraction().status(),page.extraction().complete())));
         }
         // Both source records use the same merged identity/evidence, preventing duplicate proposals.
         return result.stream().map(f -> {
             var merged=mergedDetails.get(f.url());
             if (merged!=null)
-                return new Found(f.url(), new EventExtractor.Extraction(List.of(merged), "EVENTS_FOUND"));
+                return f.withExtraction(new EventExtractor.Extraction(List.of(merged), "EVENTS_FOUND",f.extraction().complete()));
             if (eligible.contains(f.url()))
-                return new Found(f.url(), new EventExtractor.Extraction(f.extraction().events().stream().map(e ->
+                return f.withExtraction(new EventExtractor.Extraction(f.extraction().events().stream().map(e ->
                         new EventExtractor.Event(e.identity(), e.title(), e.url(), e.starts(), e.evidence(),
-                                e.state() + " UNCONFIRMED Detailzuordnung unklar", e.location())).toList(), f.extraction().status()));
+                                e.state() + " UNCONFIRMED Detailzuordnung unklar", e.location())).toList(), f.extraction().status(),f.extraction().complete()));
             return f;
         }).toList();
     }

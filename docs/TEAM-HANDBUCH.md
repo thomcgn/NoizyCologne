@@ -197,6 +197,35 @@ Beispiel: „Teenage Dirtbag“ entfällt am 07.11.2026, „Neon Paradise“ fin
 
 Die alte Partyreihe und ihr Entwurf werden nicht in die Ersatzparty umbenannt. Der Ersatz braucht seine eigene Kalenderübernahme und seinen eigenen redaktionellen Entwurf.
 
+## Neue Website prüfen und gefundene Partys beurteilen
+
+Beim Anlegen einer Location reicht zunächst die offizielle **Website**. Wähle
+**Website automatisch prüfen**. Die Anwendung schlägt einen Namen vor und zeigt,
+welche Veranstaltungen und passenden Partys sie lesen konnte. Prüfe den Namen
+und die Quellen vor dem Speichern. Die Prüfung allein legt noch keine Location
+und keine Kalendereinträge an. Erst **Übernehmen** speichert die Location und die
+geprüften Quellen. Eine vorgeschlagene externe Website braucht eine eigene Prüfung.
+
+Manche Websites bauen ihren Kalender erst nach dem Laden auf. Wenn die zusätzliche
+Browserfunktion eingerichtet ist, versucht die Anwendung auch diese Inhalte zu
+lesen. Eine technische Warnung oder **Vollständigkeit nicht bestätigt** bedeutet:
+Es können weitere Termine existieren. Sieh auf der offiziellen Website nach;
+null auswertbare Veranstaltungen bedeutet nicht, dass dort nichts stattfindet.
+Unter **Vorgeschlagene → Location-Quellen** siehst du den letzten Versuch und den
+letzten erfolgreichen Abruf. Ein erfolgreicher Abruf bestätigt noch nicht alle
+inhaltlichen Angaben.
+
+Gefundene Partys zeigen getrennt, **welche Partyreihe erkannt wurde**, **ob der
+Termin belegt ist** und **ob es Absage- oder Verschiebungshinweise gibt**. Eine
+bekannte Reihe mit eindeutig belegtem Datum kann aus einer freigegebenen Quelle
+automatisch in den Kalender gelangen. Eine neue, musikalisch passende Reihe
+bleibt ein Vorschlag. Bei Kooperationen wie „Neon Paradise VS. Neon Kult“ bleiben
+beide Namen sichtbar; prüfe die Zuordnung selbst, weil ein Kalendertermin derzeit
+nur eine Partyreihe führen kann. Widersprüchliche Termine nicht einfach übernehmen:
+Quelle prüfen und gegebenenfalls eine Rückfrage vorbereiten. Absagen und
+Verschiebungen über **Änderungen & Absagen** klären. Bereits manuell getroffene
+Entscheidungen werden durch den nächsten Scan nicht aufgehoben.
+
 ## Wenn etwas nicht klappt
 
 | Meldung oder Situation | Nächster Schritt |
@@ -229,3 +258,29 @@ Für eine Fehlermeldung ans Team genügen Bereich, Party, Datum, genauer Meldung
 | **Cancellation-Workflow** | Gemeinsamer Ablauf für eine bestätigte Veranstaltungsabsage und ihren eigenen Absageentwurf |
 
 Technischen Hintergrund und den weiteren Projektplan findest du in [PROJECT.md](PROJECT.md). Für die tägliche Teamarbeit ist dieses Handbuch der Einstieg.
+
+## Wenn die Hauptwebsite nicht lesbar ist
+
+Unter **Vorgeschlagene → Location-Quellen → Quelle hinzufügen** kannst du weitere
+zulässige öffentliche Quellen derselben Location hinterlegen, etwa deren offiziellen
+Veranstalter oder Ticketseite. Wähle die Quellenart bewusst. Die Freigabe zur
+automatischen Übernahme ist eine eigene Entscheidung. Deaktivierte Quellen werden
+nicht verwertet; eine kleinere Reihenfolge-Zahl wird früher geprüft. Keine
+Zugangssperren umgehen oder private Kalender hinterlegen.
+
+Bei **Nur teilweise ausgewertet**, **Abruf gesperrt** oder **Auswertung fehlgeschlagen**
+können weitere konfigurierte Quellen helfen. Null erkannte Veranstaltungen bei
+einer Teilauswertung bedeutet nicht, dass keine Partys stattfinden. Nur
+**Ausdrücklich keine Veranstaltungen gemeldet** bezeichnet einen belegten
+Leerbefund dieser Quelle. Unter **Technische Details** stehen die konkreten Probleme.
+In der Location-Bearbeitung lädt **Quellenstatus aktualisieren** dieselbe Übersicht.
+
+Im Prüfdialog zeigt **Quellen und Angaben vergleichen → Quellenbelege laden**, wo
+Titel, Datum, Location und zusätzliche Angaben herkommen. Widersprüche bleiben zur
+Prüfung erhalten. Neue Partyreihen werden erst über **Ins Portfolio aufnehmen**
+bestätigt. Die angezeigte Genreübereinstimmung bezieht sich auf **alle aktiven
+Projektgenres**: Bei vier aktiven Genres müssen mindestens zwei belegt sein.
+Aliasse erhöhen die Zahl nicht. Bei belegtem Datum und freigegebener Quelle kann
+der Termin mit dieser ausdrücklichen Freigabe übernommen werden; andere Fälle
+bleiben zur Prüfung offen. Ein relativer Beginn wie „nach dem Konzert“ bleibt
+Text, keine geratene Uhrzeit. Instagram wird dadurch nicht bedient.

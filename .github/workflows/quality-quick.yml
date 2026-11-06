@@ -1,0 +1,59 @@
+name: NoizyCologne QUICK
+
+on:
+  push:
+    branches: ['**', '!main']
+
+permissions:
+  contents: read
+
+jobs:
+  quick:
+    name: Targeted quality checks
+    runs-on: ubuntu-latest
+    env:
+      QUALITY_BASE_REF: ${{ github.event.before }}
+    steps:
+      - name: Checkout changed commit and baseline
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Determine affected modules
+        id: scope
+        run: |
+          python3 scripts/quality-scope.py > "$RUNNER_TEMP/quality-scope.json"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          scope = json.loads((Path(os.environ['RUNNER_TEMP']) / 'quality-scope.json').read_text())
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              for key in ('backend', 'frontend', 'browser'):
+                  print(f'{key}={str(scope[key]).lower()}', file=output)
+          PY
+
+      - name: Set up Java
+        if: steps.scope.outputs.backend == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Set up Node.js
+        if: steps.scope.outputs.frontend == 'true' || steps.scope.outputs.browser == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        if: steps.scope.outputs.frontend == 'true'
+        working-directory: frontend
+        run: npm ci
+
+      - name: Quick quality gate
+        run: scripts/check-quality.sh --quick

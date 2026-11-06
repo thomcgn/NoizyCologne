@@ -22,6 +22,9 @@ public class EventImportService {
         var c = store.candidate(id);
         if (PartyOnlyPolicy.concert((String)c.get("title"),(String)c.get("evidence")) || PartyOnlyPolicy.concert(evaluator.event(c)))
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT,"Konzerte sind von der Discovery-Übernahme ausgeschlossen");
+        String lifecycle=EventLifecycle.signal(evaluator.event(c));
+        if (List.of("CANCELLED","CANCELLATION_UNCONFIRMED","POSTPONED","RESCHEDULED").contains(lifecycle))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Absage oder Verschiebung zuerst im Änderungsworkflow klären");
         if (Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM event_changes WHERE candidate_id=? AND blocks_publication)",Boolean.class,id))) throw new ResponseStatusException(HttpStatus.CONFLICT,"Offene Veranstaltungsänderung zuerst klären");
         if (List.of("REJECTED", "DUPLICATE", "IGNORED").contains(c.get("status"))) throw new ResponseStatusException(HttpStatus.CONFLICT, "Archivierten Vorschlag zuerst prüfen");
         if (c.get("calendar_entry_id") != null) {
@@ -30,8 +33,12 @@ public class EventImportService {
         }
         if (party == null || date == null) throw new IllegalArgumentException("Partyreihe und bestätigtes Datum sind erforderlich");
         if (!manual) {
-            Boolean approved = store.jdbc().queryForObject("SELECT approved FROM discovery_sources WHERE id=?", Boolean.class, c.get("source_id"));
-            if (!Boolean.TRUE.equals(approved) || !"READY".equals(c.get("status"))) throw new IllegalArgumentException("Automatische Übernahme nicht freigegeben");
+            if (!"AUTOMATIC".equals(c.get("decision_origin")) || !Boolean.TRUE.equals(c.get("approved")) || !"READY".equals(c.get("status")))
+                throw new ResponseStatusException(HttpStatus.CONFLICT,"Automatische Übernahme nicht freigegeben oder manuelle Entscheidung geschützt");
+            var current=evaluator.evaluate(c,evaluator.rules());
+            var verified=EventVerification.assess(evaluator.event(c),(String)c.get("venue_name"));
+            if (!"READY".equals(current.status()) || !party.equals(current.partyId()) || !date.equals(verified.date()))
+                throw new ResponseStatusException(HttpStatus.CONFLICT,"Automatische Übernahme nach erneuter Prüfung gesperrt: "+current.reason());
         }
         String venue = (String)c.get("venue_id");
         var existing = store.jdbc().queryForList("""
@@ -49,7 +56,9 @@ public class EventImportService {
             return;
         }
         String time = c.get("start_time") == null ? null : c.get("start_time").toString().substring(0,5);
-        var entry = calendar.createEntry(new CalendarEntryRequest(date.toString(), venue, "event", "Quelle: " + c.get("source_url"), party, time, null, Set.of()));
+        String relative=EventTiming.relativeStart(evaluator.event(c));
+        String notes="Quelle: "+c.get("source_url")+(time==null && !relative.isBlank() ? "\nBeginn: "+relative : "");
+        var entry = calendar.createEntry(new CalendarEntryRequest(date.toString(), venue, "event", notes, party, time, null, Set.of()));
         entityManager.flush();
         store.jdbc().update("UPDATE discovery_candidates SET calendar_entry_id=?,party_id=?,event_date=?,status='IMPORTED',reason=?,updated_at=now() WHERE id=?",
                 entry.id(), party, date, manual ? "Manuell geprüft und übernommen" : "Automatisch übernommen", id);

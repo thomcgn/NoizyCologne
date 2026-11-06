@@ -91,12 +91,20 @@ public class EventChangeMonitor {
             }
             for (var found:matching) {
                 var event=found.event();
+                var history=store.jdbc().queryForList("SELECT event_data FROM discovery_observations WHERE candidate_id=? AND source_id=? ORDER BY observed_at DESC,id DESC LIMIT 1",String.class,candidate.get("id"),found.sourceId());
+                var sourceBefore=history.isEmpty() ? old : JsonValues.readRequired(json,Objects.requireNonNull(history.getFirst()),EventExtractor.Event.class);
+                boolean unchanged=!history.isEmpty() && fingerprint(sourceBefore).equals(fingerprint(event));
+                boolean supplement=history.isEmpty() && compatibleSupplement(old,event,venue.getName());
+                if (unchanged || supplement) {
+                    rememberOrigin((String)candidate.get("id"),found.sourceId(),event,operation);
+                    continue;
+                }
                 if (!found.official()) {
                     observation((String)candidate.get("id"),found.sourceId(),event,operation);
                     if (!fingerprint(old).equals(fingerprint(event))) alert(candidate,venue,"CONFLICTING_SOURCES",old,event,sourceUrl(found.sourceId()),"Abweichende nicht-offizielle Quelle; Bestätigung erforderlich");
                     continue;
                 }
-                String kind=classify(old,event,false);
+                String kind=classify(sourceBefore,event,false);
                 if (kind!=null) alert(candidate,venue,kind,old,event,sourceUrl(found.sourceId()),"Offizieller Quellenbefund weicht ab: "+kind);
                 if("POSSIBLE_REPLACEMENT".equals(kind)) observation((String)candidate.get("id"),found.sourceId(),event,operation);
                 else record((String)candidate.get("id"),found.sourceId(),event,operation);
@@ -114,6 +122,23 @@ public class EventChangeMonitor {
             }
         }
     }
+    private boolean compatibleSupplement(EventExtractor.Event old,EventExtractor.Event event,String venue) {
+        return Objects.equals(date(old),date(event)) && date(old)!=null
+            && (EventMatcher.nameMatches(old.title(),event.title()) || EventMatcher.nameMatches(event.title(),old.title()))
+            && DiscoveryBatchMerger.locationMatches(event.location(),venue)
+            && EventLifecycle.signal(old).equals("ACTIVE") && EventLifecycle.signal(event).equals("ACTIVE")
+            && !EventVerification.assess(event,venue).conflicting()
+            && (old.starts().stream().map(EventNormalizer::time).filter(Objects::nonNull).findFirst().isEmpty()
+                || event.starts().stream().map(EventNormalizer::time).filter(Objects::nonNull).findFirst().isEmpty()
+                || old.starts().stream().map(EventNormalizer::time).filter(Objects::nonNull).findFirst()
+                    .equals(event.starts().stream().map(EventNormalizer::time).filter(Objects::nonNull).findFirst()));
+    }
+    @Transactional
+    public void rememberOrigin(String candidate,String source,EventExtractor.Event event,String operation) {
+        observation(candidate,source,EventPrivacy.safe(event),operation);
+        store.jdbc().update("UPDATE discovery_candidates SET last_confirmed_at=now() WHERE id=? AND EXISTS(SELECT 1 FROM discovery_sources WHERE id=? AND (source_type='OFFICIAL' OR approved AND source_kind IN ('OFFICIAL_ORGANIZER','OFFICIAL_TICKETS')))",candidate,source);
+        store.jdbc().update("INSERT INTO discovery_source_checks(candidate_id,source_id,consecutive_missing,last_operation) VALUES (?,?,0,?) ON CONFLICT(candidate_id,source_id) DO UPDATE SET consecutive_missing=0,last_operation=excluded.last_operation",candidate,source,operation);
+    }
     private boolean inHorizon(Map<String,Object> row,LocalDate today) {
         Object value=row.get("calendar_entry_id")==null ? row.get("event_date") : store.jdbc().queryForObject("SELECT event_date FROM calendar_entries WHERE id=?",LocalDate.class,row.get("calendar_entry_id"));
         LocalDate date=value instanceof java.sql.Date sqlDate ? sqlDate.toLocalDate() : value instanceof LocalDate day ? day : null;
@@ -125,23 +150,35 @@ public class EventChangeMonitor {
     }
     /** Explicit state tokens avoid turning a DJ's illness mentioned in prose into an event cancellation. */
     public static String classify(EventExtractor.Event old,EventExtractor.Event event,boolean conflict) {
-        if (conflict || event.state().contains("SOURCE_CONFLICT") || event.starts().stream().map(EventNormalizer::date).filter(Objects::nonNull).distinct().count()>1) return "CONFLICTING_SOURCES";
-        if (event.state().matches("(?is).*\\b(CANCELLED|CANCELED|EventCancelled|EVENT_CANCELLED)\\b.*")) return "CANCELLATION_DETECTED";
-        if (fingerprint(old).equals(fingerprint(event))) return null;
-        if (event.state().contains("LINEUP_CHANGE")) return "LINEUP_CHANGE";
-        if (event.state().matches("(?is).*(EventPostponed|EventRescheduled|RESCHEDULED).*")) return "RESCHEDULE_DETECTED";
+        var verification=EventVerification.assess(event, "");
+        if (conflict || verification.conflicting()) return "CONFLICTING_SOURCES";
+        String lifecycle=EventLifecycle.signal(event);
+        if (lifecycle.equals("CANCELLED")) return "CANCELLATION_DETECTED";
+        if (fingerprint(old).equals(fingerprint(event)) || sameMeaning(old,event)) return null;
+        if (lifecycle.equals("LINEUP_CHANGE")) return "LINEUP_CHANGE";
+        if (lifecycle.equals("POSTPONED") || lifecycle.equals("RESCHEDULED")) return "RESCHEDULE_DETECTED";
         if (!Objects.equals(date(old),date(event)) && date(old)!=null && date(event)!=null) return "RESCHEDULE_DETECTED";
-        if (event.state().contains("CANCELLATION_HINT")) return "CANCELLATION_UNCONFIRMED";
-        if (event.state().contains("UNCONFIRMED")) return "CONFLICTING_SOURCES";
+        if (lifecycle.equals("CANCELLATION_UNCONFIRMED")) return "CANCELLATION_UNCONFIRMED";
+        if (!verification.sufficient()) return "CONFLICTING_SOURCES";
         if (!EventNormalizer.text(old.title()).equals(EventNormalizer.text(event.title())) && Objects.equals(date(old),date(event))
             && !EventMatcher.nameMatches(event.title(),old.title()) && !EventMatcher.nameMatches(old.title(),event.title())) return "POSSIBLE_REPLACEMENT";
         if (!fingerprint(old).equals(fingerprint(event))) return "EVENT_CHANGED";
         return null;
     }
+    /** Technical confirmation labels alone do not change an otherwise identical event. */
+    private static boolean sameMeaning(EventExtractor.Event old,EventExtractor.Event event) {
+        return EventNormalizer.text(old.title()).equals(EventNormalizer.text(event.title()))
+            && old.starts().stream().map(EventChangeMonitor::normalizedStart).sorted().distinct().toList()
+                .equals(event.starts().stream().map(EventChangeMonitor::normalizedStart).sorted().distinct().toList())
+            && EventNormalizer.text(old.location()).equals(EventNormalizer.text(event.location()))
+            && EventNormalizer.text(old.evidence()).equals(EventNormalizer.text(event.evidence()))
+            && EventLifecycle.signal(old).equals(EventLifecycle.signal(event))
+            && EventVerification.assess(old, "").status().equals(EventVerification.assess(event, "").status());
+    }
     @Transactional
     public void record(String candidate,String source,EventExtractor.Event event,String operation) {
         observation(candidate,source,event,operation);
-        if(!Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM discovery_sources WHERE id=? AND source_type='OFFICIAL')",Boolean.class,source))) return;
+        if(!Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM discovery_sources WHERE id=? AND (source_type='OFFICIAL' OR approved AND source_kind IN ('OFFICIAL_ORGANIZER','OFFICIAL_TICKETS')))",Boolean.class,source))) return;
         store.jdbc().update("UPDATE discovery_candidates SET last_confirmed_at=now(),last_changed_at=CASE WHEN monitor_fingerprint IS DISTINCT FROM ? THEN now() ELSE last_changed_at END,monitored_event=?,monitor_fingerprint=? WHERE id=?",fingerprint(event),evaluator.raw(event),fingerprint(event),candidate);
         store.jdbc().update("INSERT INTO discovery_source_checks(candidate_id,source_id,consecutive_missing,last_operation) VALUES (?,?,0,?) ON CONFLICT(candidate_id,source_id) DO UPDATE SET consecutive_missing=0,last_operation=excluded.last_operation",candidate,source,operation);
     }

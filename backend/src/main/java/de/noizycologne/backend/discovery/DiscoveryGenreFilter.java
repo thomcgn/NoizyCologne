@@ -1,6 +1,7 @@
 package de.noizycologne.backend.discovery;
 
 import de.noizycologne.backend.genre.*;
+import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
@@ -21,6 +22,15 @@ public class DiscoveryGenreFilter {
         if (!active.isEmpty()) aliases.findAllByGenreIdIn(active.stream().map(Genre::getId).toList())
                 .forEach(a -> terms.add(a.getValue()));
         return Set.copyOf(terms);
+    }
+    @Transactional(readOnly = true)
+    public List<GenreCoverage.@NonNull Genre> coverageGenres() {
+        var active=genres.findAllByActiveTrueOrderByCanonicalNameAsc();
+        Map<String,Set<@NonNull String>> names=new HashMap<>();
+        for (var genre:active) names.put(genre.getId(),new LinkedHashSet<>(List.of(Objects.requireNonNull(genre.getCanonicalName()),Objects.requireNonNull(genre.getDisplayName()))));
+        if (!active.isEmpty()) for (var alias:aliases.findAllByGenreIdIn(active.stream().map(Genre::getId).toList()))
+            Objects.requireNonNull(names.get(alias.getGenreId())).add(Objects.requireNonNull(alias.getValue()));
+        return active.stream().map(genre -> new GenreCoverage.Genre(genre.getId(),genre.getDisplayName(),Set.copyOf(Objects.requireNonNull(names.get(genre.getId()))))).toList();
     }
     static boolean matches(EventExtractor.Event event, Collection<String> terms) {
         return !matchingTerms(event,terms).isEmpty();
