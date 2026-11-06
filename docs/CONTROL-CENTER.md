@@ -153,3 +153,13 @@ Artefakte unter `.quality/control-center/phase-5/`. Keine echten Daten-/Instagra
 Schreibvorgänge. Live-IDE-/Geräteabnahme und verpflichtendes CI-FULL bleiben offen.
 Alle fünf Implementierungsphasen sind abgeschlossen; fachliche PR-Abnahme bleibt
 beim Nutzer. Der nachfolgende Discovery-Fachauftrag wird getrennt bearbeitet.
+
+
+## Touch-Hover-Korrektur (06.11.2026)
+
+Ausschließlich `.cc-table tr:hover td` aus der gemeinsamen Hintergrundregel
+entfernt, damit Touch-Geräte keinen bleibenden Zell-Hover in Veranstaltungskarten
+zeigen. `tr[aria-selected="true"]` und sämtliche Fokusregeln unverändert.
+Gezielter Vorher-/Nachher-Vergleich und `git diff --check` bestanden; der reguläre
+QUICK-Hook ist die Commitprüfung. Keine Layoutänderung, kein lokaler Build oder
+Browser-/Gerätetest. FULL bleibt vor Integration der GitHub-CI vorbehalten.

@@ -156,7 +156,7 @@ html[data-density="compact"] .cc-description { max-width: 75ch; }
 .cc-table th button { padding: 3px 0; text-align: left; }
 .cc-table td { padding: var(--ui-row-padding) 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .cc-table tr:last-child td { border-bottom: 0; }
-.cc-table tr:hover td, .cc-table tr[aria-selected="true"] td { background: var(--surface-muted); }
+.cc-table tr[aria-selected="true"] td { background: var(--surface-muted); }
 .cc-record-open { text-align: left; color: var(--foreground); cursor: pointer; font: inherit; line-height: 1.5; min-height: 32px; }
 .cc-record-open:hover { color: var(--accent); }
 .cc-record-open strong { font-weight: 600; }
