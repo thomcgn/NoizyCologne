@@ -1,7 +1,7 @@
 import type { Candidate } from "./discoveryTypes";
 
 export function isOpen(candidate: Candidate) {
-  return !candidate.calendar_entry_id && !["IMPORTED", "REJECTED", "DUPLICATE", "IGNORED"].includes(candidate.status);
+  return !(candidate.special_source && candidate.geo_status && candidate.geo_status!=="INSIDE") && !candidate.calendar_entry_id && !["IMPORTED", "REJECTED", "DUPLICATE", "IGNORED"].includes(candidate.status);
 }
 
 export function canApprovePortfolio(candidate: Candidate) {

@@ -14,14 +14,15 @@ public class DiscoveryEvaluationService {
     private final PartySeriesRepository parties;
     private final DiscoveryGenreFilter genres;
     private final EventMatcher matcher;
+    private final DiscoveryGeographyService geography;
     private final JsonMapper json=JsonMapper.builder().build();
     public record Rules(List<@NonNull PartySeries> parties, Map<String,List<String>> aliases, Collection<String> genres,List<GenreCoverage.@NonNull Genre> coverageGenres) {
         public Rules(List<@NonNull PartySeries> parties,Map<String,List<String>> aliases,Collection<String> genres) {
             this(parties,aliases,genres,List.of());
         }
     }
-    public DiscoveryEvaluationService(DiscoveryStore store,PartySeriesRepository parties,DiscoveryGenreFilter genres,EventMatcher matcher) {
-        this.store=store;this.parties=parties;this.genres=genres;this.matcher=matcher;
+    public DiscoveryEvaluationService(DiscoveryStore store,PartySeriesRepository parties,DiscoveryGenreFilter genres,EventMatcher matcher,DiscoveryGeographyService geography) {
+        this.store=store;this.parties=parties;this.genres=genres;this.matcher=matcher;this.geography=geography;
     }
     public Rules rules() { var coverage=genres.coverageGenres();
         Set<String> terms=new LinkedHashSet<>();
@@ -32,6 +33,14 @@ public class DiscoveryEvaluationService {
     /** Additive API diagnostics; persisted editorial decisions remain authoritative and unchanged. */
     public Map<String,Object> forApi(Map<String,Object> row,Rules rules) {
         var event=event(row);
+        if(Boolean.TRUE.equals(row.get("special_source")) && row.get("calendar_entry_id")==null) {
+            var geo=geography.assess(event);
+            if(!geo.inside()) {
+                var excluded=DiscoveryStore.forApi(row);excluded.put("reported_location",event.location());excluded.put("geography",geo);
+                excluded.put("assessment",new Assessment(new PartySeriesRecognition.Recognition("NONE",List.of()),EventVerification.assess(event,""),EventLifecycle.signal(event),false,List.of("Standortklärung: "+geo.reason())));
+                return excluded;
+            }
+        }
         var recognition=PartySeriesRecognition.recognize(event.title(),rules.parties(),rules.aliases());
         var verification=EventVerification.assess(event,row.get("venue_id")==null ? "" : (String)row.get("venue_name"));
         String lifecycle=EventLifecycle.signal(event);
@@ -40,6 +49,7 @@ public class DiscoveryEvaluationService {
             blockers.add("Absage oder Verschiebung zuerst im bestehenden Änderungs- und Absageworkflow klären");
         if (Boolean.TRUE.equals(row.get("has_blocking_change"))) blockers.add("Offene Veranstaltungsänderung zuerst klären");
         if (List.of("REJECTED","DUPLICATE","IGNORED").contains(row.get("status"))) blockers.add("Archivierten Vorschlag zuerst prüfen");
+        if(Boolean.TRUE.equals(row.get("special_source")) && row.get("calendar_entry_id")==null) {var geo=geography.assess(event);if(!geo.inside())blockers.add("Standortklärung: "+geo.reason());}
         boolean eligible=blockers.isEmpty() && row.get("calendar_entry_id")==null
             && "AUTOMATIC".equals(row.get("decision_origin")) && "READY".equals(row.get("status"))
             && evaluate(event,(String)row.get("venue_id"),(String)row.get("venue_name"),Boolean.TRUE.equals(row.get("approved")),rules).status().equals("READY");
@@ -55,7 +65,7 @@ public class DiscoveryEvaluationService {
     public String raw(EventExtractor.Event event) { return json.writeValueAsString(EventPrivacy.safe(event)); }
     public EventExtractor.Event event(Map<String,Object> row) {
         if (row.get("raw_event") instanceof String raw && !raw.isBlank())
-            return JsonValues.readRequired(json,raw,EventExtractor.Event.class);
+            return new EventExtractor().recoverPlace(JsonValues.readRequired(json,raw,EventExtractor.Event.class));
         // Old rows did not retain state/location/conflicting starts. Never invent confirmation.
         String start=Objects.toString(row.get("event_date"),"");
         if (!start.isBlank() && row.get("start_time")!=null) start+="T"+row.get("start_time");
@@ -110,6 +120,7 @@ public class DiscoveryEvaluationService {
         return duplicate;
     }
     public EventMatcher.Match evaluate(Map<String,Object> row,Rules rules) {
+        if(Boolean.TRUE.equals(row.get("special_source"))) {var geo=geography.assess(event(row));if(!geo.inside())return new EventMatcher.Match("NEEDS_REVIEW",(String)row.get("party_id"),"Standortklärung: "+geo.reason(),"UNVERIFIED");}
         return evaluate(event(row),(String)row.get("venue_id"),(String)row.get("venue_name"),Boolean.TRUE.equals(row.get("approved")),rules);
     }
 }

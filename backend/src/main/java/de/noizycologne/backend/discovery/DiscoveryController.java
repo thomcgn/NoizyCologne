@@ -37,16 +37,16 @@ public class DiscoveryController {
     @GetMapping public Map<String,Object> overview(@RequestParam(defaultValue="ALL") String filter) {
         var rules=evaluator.rules();
         return Map.of("candidates",store.candidates(filter).stream().map(row -> evaluator.forApi(row,rules)).toList(),"sources",store.sources(),
-                "counts",store.jdbc().queryForList("SELECT status,count(*) AS count FROM discovery_candidates GROUP BY status"),
+                "counts",store.jdbc().queryForList("SELECT status,count(*) AS count FROM discovery_candidates WHERE (geo_status='INSIDE' OR source_id IN (SELECT id FROM discovery_sources WHERE venue_id IS NOT NULL)) OR calendar_entry_id IS NOT NULL OR status IN ('REJECTED','DUPLICATE','IGNORED') GROUP BY status"),
                 "automaticallyImported",store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates WHERE status='IMPORTED' AND reason='Automatisch übernommen'",Long.class),
                 "metrics",store.jdbc().queryForMap("""
                     SELECT count(*) FILTER (WHERE decision_origin='AUTOMATIC' AND status='IGNORED') AS "automaticallyIgnored",
                     count(*) FILTER (WHERE decision_origin='MANUAL' AND status='REJECTED') AS "manuallyRejected",
-                    count(*) FILTER (WHERE status IN ('NEEDS_REVIEW','NEEDS_INQUIRY','READY')) AS "needsReview",
+                    count(*) FILTER (WHERE status IN ('NEEDS_REVIEW','NEEDS_INQUIRY','READY') AND (geo_status='INSIDE' OR source_id IN (SELECT id FROM discovery_sources WHERE venue_id IS NOT NULL))) AS "needsReview",
                     count(*) FILTER (WHERE EXISTS (SELECT 1 FROM discovery_decisions d JOIN discovery_operations o ON o.id=d.operation_id WHERE d.candidate_id=discovery_candidates.id AND o.kind<>'SCAN' AND d.old_status IS NOT NULL)) AS reevaluated,
-                    count(*) FILTER (WHERE matching_class='UNVERIFIED' AND status NOT IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED')) AS unverified,
-                    count(*) FILTER (WHERE matching_class='POSSIBLE_MATCH' AND status NOT IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED')) AS possible,
-                    count(*) FILTER (WHERE inquiry_status IN ('PREPARED','SENT') AND status NOT IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED')) AS open,
+                    count(*) FILTER (WHERE matching_class='UNVERIFIED' AND status NOT IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED') AND (geo_status='INSIDE' OR source_id IN (SELECT id FROM discovery_sources WHERE venue_id IS NOT NULL))) AS unverified,
+                    count(*) FILTER (WHERE matching_class='POSSIBLE_MATCH' AND status NOT IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED') AND (geo_status='INSIDE' OR source_id IN (SELECT id FROM discovery_sources WHERE venue_id IS NOT NULL))) AS possible,
+                    count(*) FILTER (WHERE inquiry_status IN ('PREPARED','SENT') AND status NOT IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED') AND (geo_status='INSIDE' OR source_id IN (SELECT id FROM discovery_sources WHERE venue_id IS NOT NULL))) AS open,
                     count(*) FILTER (WHERE status IN ('REJECTED','DUPLICATE','IGNORED')) AS archive FROM discovery_candidates
                     """),
                 "operations",store.jdbc().queryForList("SELECT * FROM discovery_operations ORDER BY started_at DESC LIMIT 10").stream().map(DiscoveryStore::forApi).toList(),

@@ -6,7 +6,7 @@ import { discoveryApi } from "./discoveryApi";
 
 export type ResetMode = "IGNORED" | "ALL" | "RESCAN";
 type PreviewItem = { id: string; title: string; venue: string; oldStatus: string; newStatus: string; classification: string; reason: string };
-type Preview = { token: string; affectedCount: number; preservedManual: number; missingRaw: number; enabledLocations: number; items: PreviewItem[] };
+type Preview = { token: string; affectedCount: number; preservedManual: number; missingRaw: number; enabledLocations: number; items: PreviewItem[]; geography?:{id:string;status:string;reason:string}[] };
 const modes: { value: ResetMode; label: string; description: string }[] = [
   { value: "IGNORED", label: "Automatisch ignorierte Kandidaten neu bewerten", description: "Automatische IGNORE-/REJECT-Entscheidungen anhand aktueller Regeln prüfen." },
   { value: "ALL", label: "Alle nicht übernommenen Kandidaten neu bewerten", description: "Gespeicherte Belege verwenden. Manuelle Prüfentscheidungen erhalten." },
@@ -58,6 +58,7 @@ export default function DiscoveryResetDialog({ initialMode, onClose, onStarted }
       {error && <p role="alert" className="text-red-400">{error}</p>}
       {!preview && !error && <p role="status">Vorschau wird geladen …</p>}
       {preview && <section aria-label="Reset-Vorschau" className="space-y-2">
+        {!!preview.geography?.length && <div><p>{preview.geography.length} Bestandsfunde aus Sonderquellen werden geografisch eingestuft. Teamentscheidungen und Kalendertermine bleiben dabei erhalten.</p><p>{preview.geography.filter(item=>item.status==="OUTSIDE").length} außerhalb Kölns · {preview.geography.filter(item=>item.status==="UNRESOLVED").length} ungeklärt. Diese Funde gelangen nicht in den fachlichen Prüfbedarf.</p></div>}
         <p className="text-sm">Eindeutig erkannte bekannte Partyreihen können weiterhin nach den bestehenden Freigabe- und Konfliktprüfungen automatisch übernommen werden. Genre-Matches allein bleiben Vorschläge.</p>
         <p>{preview.affectedCount} Kandidaten werden neu bewertet; {preview.preservedManual} manuelle oder nicht eindeutig zuordenbare Altentscheidungen bleiben unverändert.</p>
         {preview.missingRaw > 0 && <p className="text-sm text-amber-300">Bei {preview.missingRaw} Kandidaten fehlen vollständige Rohdaten. Ein vollständiger Suchlauf kann diese ergänzen; fehlende Angaben bleiben ungeklärt.</p>}

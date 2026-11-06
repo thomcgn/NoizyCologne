@@ -6,7 +6,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-import java.net.URI;
 import java.util.*;
 
 /** Global portals have their own source identity; no placeholder venue is created. */
@@ -25,9 +24,7 @@ public class SpecialSourceService {
             .stream().map(DiscoveryStore::forApi).toList();
     }
     private static String url(String value) {
-        URI parsed=SafeUrls.parse(value.trim());
-        try { return new URI("https",null,parsed.getHost().toLowerCase(Locale.ROOT),-1,parsed.getPath().isEmpty() ? "/" : parsed.getPath(),parsed.getQuery(),null).toString(); }
-        catch (java.net.URISyntaxException e) { throw new IllegalArgumentException("Ungültige Quellenadresse",e); }
+        return CanonicalSourceUrl.of(value);
     }
     @Transactional
     public String add(String name,String input,String item,String title,String date) {
@@ -71,7 +68,7 @@ public class SpecialSourceService {
         int checked=0,failed=0;
         for (var source:list()) {
             if (!Boolean.TRUE.equals(source.get("enabled"))) continue;
-            checked++;String id=(String)source.get("id"),root=(String)source.get("url");
+            checked++;String id=(String)source.get("id"),root=CanonicalSourceUrl.of((String)source.get("url"));
             try {
                 var found=discovery.discoverSpecial(root,new EventExtractor.Profile((String)source.get("item_selector"),(String)source.get("title_selector"),(String)source.get("date_selector")));
                 List<EventExtractor.@NonNull Event> events=new ArrayList<>();

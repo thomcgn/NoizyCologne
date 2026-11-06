@@ -24,12 +24,14 @@ let root;
 const calls = [];
 let candidates;
 let sourceRows=[];
+let geoRows=[];
 let reloadedEntries;
 let reloadedParties;
 let reloadedDrafts;
 const catalogue = {
   parties: [{ id: 'paradise', name: 'NEON PARADISE' }, { id: 'kult', name: 'NEON KULT' }],
   venues: [{ id: 'blue-shell', name: 'Blue Shell' }],
+  reloadVenues: async () => {},
   reloadEntries: async () => { reloadedEntries++; },
   reloadParties: async () => { reloadedParties++; },
   reloadDrafts: async () => { reloadedDrafts++; },
@@ -81,9 +83,10 @@ async function settle(work = () => {}) {
   await act(async () => { await work(); await new Promise(resolve => setTimeout(resolve, 20)); });
 }
 async function mount(item, failInitial = false) {
-  candidates = Array.isArray(item) ? item : [item]; sourceRows=[]; calls.length = 0; reloadedEntries = 0; reloadedParties = 0; reloadedDrafts = 0;
+  candidates = Array.isArray(item) ? item : [item]; sourceRows=[]; geoRows=[]; calls.length = 0; reloadedEntries = 0; reloadedParties = 0; reloadedDrafts = 0;
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url, ...options });
+    if (url.endsWith('/geography') && !failInitial) return new Response(JSON.stringify({items:geoRows}));
     if (failInitial) return new Response(JSON.stringify({message: 'Quelle nicht erreichbar'}), {status: 503});
     if (url.endsWith('/confirm') && options.method === 'POST') {
       const payload=JSON.parse(options.body);
@@ -521,4 +524,45 @@ test('special-source edit conflict retains edited values and leaves the existing
   await settle(()=>dialog().querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
   assert.equal(control('Name der Sonderquelle').value,'Geänderter Name');assert.match(dialog().textContent,/bereits vorhanden/);
   assert.equal(sourceRows[0].name,'QRUSH');
+});
+
+
+test('unknown geography stays separate from party review until an explicit address confirmation',async()=>{
+  await mount(candidate({special_source:true,geo_status:'UNRESOLVED',venue_id:null}));
+  geoRows=[{id:'geo-one',title:'Ungeklärte Indie Party',source_url:'https://portal.example/event',status:'UNRESOLVED',location:'Blue Shell',reason:'Kein Ortsbeleg',place:{city:'',street:''}}];
+  await settle(()=>poll());
+  assert.equal(document.querySelector('section[aria-label="Prüfbedarf"] [data-record-id]'),null);
+  assert.match(document.querySelector('section[aria-label="Standortklärung"]').textContent,/Ungeklärte Indie Party/);
+  await settle(()=>button('Standort klären').click());
+  assert.equal(button('Kölner Standort bestätigen',dialog()).disabled,true);
+  change(control('Location'),'blue-shell');change(control('Straße und Hausnummer'),'Luxemburger Straße 32');
+  await settle(()=>dialog().querySelector('input[type="checkbox"]').click());
+  const fallback=globalThis.fetch;
+  globalThis.fetch=async(url,options={})=>{if(url.endsWith('/geography/geo-one/confirm')){calls.push({url,...options});geoRows=[];return new Response(null,{status:204});}return fallback(url,options);};
+  await settle(()=>dialog().querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  const saved=calls.find(call=>call.url.endsWith('/geography/geo-one/confirm'));
+  assert.deepEqual(JSON.parse(saved.body),{venueId:'blue-shell',venueName:null,city:'Köln',street:'Luxemburger Straße 32',proofUrl:'https://portal.example/event',confirmed:true});
+  assert.equal(document.querySelector('[role="dialog"]'),null);
+  assert.equal(calls.some(call=>call.url.includes('/candidates/')&&call.method==='POST'),false);
+});
+
+test('outside geography is excluded from normal review and never offers a Cologne confirmation',async()=>{
+  await mount([]);
+  geoRows=[{id:'bonn',title:'Köln Party',source_url:'https://portal.example/koeln',status:'OUTSIDE',location:'Gleis8',reason:'Ort Bonn',place:{city:'Bonn',street:'Straße 1'}}];
+  await settle(()=>poll());
+  const geography=document.querySelector('[aria-label="Standortklärung"]');
+  assert.match(geography.textContent,/Außerhalb Kölns \(1\)/);assert.match(geography.textContent,/Gleis8 · Bonn/);
+  assert.equal([...geography.querySelectorAll('button')].some(item=>item.textContent==='Standort klären'),false);
+  assert.equal(document.querySelectorAll('[data-record-id]').length,0);
+});
+
+test('geography confirmation failures preserve the new location and proof inputs',async()=>{
+  await mount([]);geoRows=[{id:'unknown',title:'Party',source_url:'https://portal.example/event',status:'UNRESOLVED',location:'Neuer Club',reason:'Unbekannt'}];
+  await settle(()=>poll());await settle(()=>button('Standort klären').click());
+  change(control('Location'),'new');change(control('Name der neuen Location'),'Neuer Club Köln');change(control('Straße und Hausnummer'),'Straße 12');
+  await settle(()=>dialog().querySelector('input[type="checkbox"]').click());
+  globalThis.fetch=async()=>new Response(JSON.stringify({message:'Ortsbelege widersprechen sich'}),{status:409});
+  await settle(()=>dialog().querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  assert.equal(control('Name der neuen Location').value,'Neuer Club Köln');assert.equal(control('Straße und Hausnummer').value,'Straße 12');
+  assert.match(dialog().textContent,/Ortsbelege widersprechen sich/);
 });

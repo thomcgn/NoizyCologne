@@ -336,3 +336,35 @@ Quell-URL und optionales HTML-Profil werden vorausgefüllt. Änderungen mit
 erhalten. Nach Änderung der URL oder des Profils wird der Abrufstatus erst beim
 nächsten Suchlauf neu ermittelt. Location-Quellen erscheinen nur bei der jeweiligen
 Location, nicht in Discovery.
+
+
+## Sonderquellen: Nur Kölner Veranstaltungen zulassen
+
+Discovery verarbeitet aus Sonderquellen nur Veranstaltungen mit nachgewiesenem
+Ort in der Stadt Köln. Eine Erwähnung von „Köln“ im Titel oder Portalpfad reicht
+nicht. Auswärtige Funde stehen getrennt unter **Standortklärung → Außerhalb Kölns**
+und werden nicht als Kölner Party vorgeschlagen.
+
+Bei ungeklärtem Ort:
+
+1. Unter **Standortklärung** den **Ortsbeleg öffnen** und die tatsächliche
+   Veranstaltungsadresse prüfen. Veranstalterkontakt oder Konzertadresse können
+   von der Partyadresse abweichen.
+2. **Standort klären** wählen. Eine bestehende Location ausdrücklich auswählen
+   oder **Neue Location anlegen** und ihren Namen eingeben.
+3. Stadt Köln, Straße/Hausnummer und Beleg-URL prüfen und die Bestätigung anhaken.
+   Nur bei belegter Zugehörigkeit zu Köln **Kölner Standort bestätigen** wählen.
+4. Danach erscheint der Fund im normalen Discovery-Ablauf. Partyreihe und Termin
+   werden weiterhin separat geprüft; die Ortsbestätigung importiert keinen Termin.
+
+Bestätigte Namen und Namensvarianten werden zusammen mit ihrer belegten
+Ortsidentität für spätere Suchläufe wiederverwendet. Bloße Namensgleichheit mit
+einem bekannten Club genügt nicht. Fehlende oder widersprüchliche Ortsangaben
+bleiben ungeklärt und können nicht über die Kalenderfreigabe umgangen werden.
+
+Für ältere Sonderquellen-Vorschläge **Gespeicherte Standorte neu bewerten** wählen,
+die geografische Vorschau lesen und **Neubewertung bestätigen**. Alte Funde werden
+klassifiziert, nicht gelöscht. Gespeicherte Prüfentscheidungen und Rückfragetexte
+bleiben erhalten; bereits importierte Termine und ihre Absagedaten werden nicht
+umgeschrieben. Neu belegte auswärtige Orte sperren die weitere Übernahme auch
+bei bereits manuell bearbeiteten Vorschlägen.

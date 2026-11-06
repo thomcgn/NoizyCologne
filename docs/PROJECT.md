@@ -1,6 +1,6 @@
 # NoizyCologne – Lastenheft, Pflichtenheft & Entwicklungs-/Lernhandbuch
 
-> **Version:** 1.9.2 · **Stand:** 6. November 2026 · **Status:** Persistente Team-Anwendung mit Redaktion, Party-Discovery und Änderungsprüfung; Instagram-Publishing nicht implementiert
+> **Version:** 1.9.3 · **Stand:** 6. November 2026 · **Status:** Persistente Team-Anwendung mit Redaktion, Party-Discovery und Änderungsprüfung; Instagram-Publishing nicht implementiert
 > **Zielgruppe:** NoizyCologne-Team und Entwickler  
 > **Source of Truth:** Diese Version ersetzt v1.6 und frühere Projektdokumente fachlich. Für das tatsächlich implementierte Verhalten gilt zusätzlich der aktuelle Codezustand; nur dokumentierte Features sind noch nicht automatisch umgesetzt.  
 > **Wichtig:** Dieses Handbuch enthält Lastenheft, Pflichtenheft, technische Lern-/Agenten-Referenzen **und einen Ist-/Soll-Abgleich**. Die früheren Beispielskripte sind nicht automatisch identisch mit der aktuellen Codebasis. Die Entwicklung erfolgt auf Arch Linux; der Benutzer hat den lokalen Kalender-Prototyp erfolgreich getestet. Plattform-Funktionen werden vor Produktivstart im realen Meta-Konto verifiziert.  
@@ -2120,6 +2120,7 @@ Bei jeder Ergänzung gleichzeitig **Kapitel 3 (Lastenheft), 4 (Pflichtenheft), 5
 
 | Version | Datum | Änderungen |
 |---|---|---|
+| v1.9.3 Geografischer Sonderquellen-Filter | 06.11.2026 | Nur nachgewiesene Kölner Veranstaltungsorte gelangen in den normalen Discovery-Prozess. Eigener Standortbereich, bestätigte Ortsidentitäten/Aliase, bewusste Bestands-Neubewertung ohne Datenverlust, generische kanonische URLs ohne `_rsc`. Migration V18 und Prüfbelege: [DISCOVERY-GEOGRAPHY.md](DISCOVERY-GEOGRAPHY.md). |
 | v1.9.2 Sonderquellen und Sofort-Ablehnung | 06.11.2026 | Unabhängige Sonderquellen hinzufügen/löschen, begrenzter Discovery-Scan ohne Standardlocation, explizite Ortszuordnung und dauerhafte Sofort-Ablehnung durch das Team. Migration V17; Details und Prüfbelege in [SPECIAL-SOURCES.md](SPECIAL-SOURCES.md). |
 | v1.9.1 QRUSH-Sonderquelle | 06.11.2026 | QRUSH als eigenständige, locationunabhängige Sonderquelle festgelegt, ohne fachliche Verbindung zum MTC. Veranstaltungsorte müssen je Termin belegt werden; keine MTC-Standardzuordnung oder Verwendung als MTC-Fallback. Anforderung und technische Umsetzungslücke getrennt dokumentiert, siehe 24.17. |
 | v1.9 Quality-Gate-Optimierung | 06.11.2026 | QUICK für Entwicklung/lokale Commits und Feature-Pushes; FULL vor PR-Merge und für main. GHCR verwendet nur streng nachgewiesene identische Commit-SHAs statt parallel erneut FULL. Fehlender Live-IDE-Zugriff blockiert Codex Cloud bei grünen CLI-Prüfungen nicht. Branch-Protection-Konfiguration vorbereitet, Aktivierung noch offen; Details und Messungen in QUALITY.md. |
@@ -3593,6 +3594,34 @@ Termine erfordern weiterhin den Kalender-/Änderungsworkflow. Eine bewusste
 Wiederöffnung folgt dem vorhandenen Reset mit zusätzlicher Bestätigung.
 
 Prüfungen und verbleibende Abnahmegrenzen: [SPECIAL-SOURCES.md](SPECIAL-SOURCES.md).
+
+
+## 24.18 Geografische Zulassung globaler Sonderquellen
+
+Zielgebiet ist ausschließlich die Stadt Köln, ohne zusätzlichen Umkreis.
+`CologneGeography` prüft vor Party-/Genre-Matching bestätigte Ortsidentitäten,
+tatsächliche Veranstaltungsstadt/-adresse oder belastbare Koordinaten innerhalb
+der Stadtgeometrie. Herkunfts-URL, Titel, allgemeine Textnennungen und PLZ-Listen
+reichen nicht als Nachweis. Vorhandene Locations haben ohne bestätigte
+Stadtzugehörigkeit und passende Ortsidentität keinen automatischen Köln-Status.
+
+Neue auswärtige oder ungeklärte Funde werden getrennt gespeichert und erzeugen
+keine normalen Vorschläge. **Discovery → Standortklärung** enthält die ungeklärten
+Funde und den getrennten Verlauf **Außerhalb Kölns**. Das Team kann anhand eines
+Belegs einen Kölner Veranstaltungsort bestätigen und eine bestehende oder neue
+Location zuordnen. Belegte Namen/Aliase werden mit Ortsreferenz/Adresse
+wiederverwendet; Namensgleichheit allein reicht nicht. Eine Bestätigung legt
+keinen Kalendertermin an. API-Import und Portfoliofreigabe sind ebenfalls geschützt.
+
+Bestandsfunde bleiben erhalten. **Gespeicherte Standorte neu bewerten** öffnet die
+vorhandene Vorschau mit zusätzlicher geografischer Einstufung; erst Bestätigen
+schreibt die Metadaten. Bereits importierte Termine, Teamentscheidungen sowie
+Cancellation-Daten bleiben erhalten. Geografische Unsicherheit wird nicht mit
+fachlichem Prüfbedarf vermischt. Der generische URL-Kanonisierer entfernt `_rsc`
+auch bei Qrush, ohne eine individuelle Portalregel einzuführen.
+
+Technische Grenzen, Grenzquelle und tatsächlich ausgeführte Prüfungen stehen in
+[DISCOVERY-GEOGRAPHY.md](DISCOVERY-GEOGRAPHY.md).
 
 ---
 

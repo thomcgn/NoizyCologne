@@ -20,7 +20,7 @@ public final class GenreCoverage {
     public static Result assess(EventExtractor.Event event,List<@NonNull Genre> genres) { return assess(event,genres,List.of()); }
     public static Result assess(EventExtractor.Event event,List<@NonNull Genre> genres,Collection<String> standards) {
         String evidence=event.evidence().replaceAll("https?://[^\\s\"<>]+", " ");
-        var facts=new EventExtractor.Event(event.identity(),event.title(),event.url(),event.starts(),evidence,event.state(),event.location());
+        var facts=new EventExtractor.Event(event.identity(),event.title(),event.url(),event.starts(),evidence,event.state(),event.location(),event.place());
         Map<String,Genre> source=new LinkedHashMap<>();
         // Keep compound names as one genre; a source saying Hard Rock does not also say Rock.
         String normalized=EventNormalizer.text(facts.title()+" "+facts.evidence());

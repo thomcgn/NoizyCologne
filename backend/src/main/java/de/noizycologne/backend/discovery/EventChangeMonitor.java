@@ -30,7 +30,7 @@ public class EventChangeMonitor {
     }
     public static String fingerprint(EventExtractor.Event event) {
         return EventNormalizer.hash(EventNormalizer.text(event.title())+"|"+event.starts().stream().map(EventChangeMonitor::normalizedStart).sorted().distinct().toList()
-            +"|"+EventNormalizer.text(event.location())+"|"+Arrays.stream(EventNormalizer.text(event.state()).split(" ")).distinct().sorted().toList()+"|"+EventNormalizer.text(event.evidence()));
+            +"|"+EventNormalizer.text(event.location())+"|"+Arrays.stream(EventNormalizer.text(event.state()).split(" ")).distinct().sorted().toList()+"|"+EventNormalizer.text(event.evidence())+"|"+event.place());
     }
     private Set<String> keys(Map<String,Object> row) {
         var keys=new HashSet<>(store.jdbc().queryForList("SELECT identity_key FROM discovery_candidate_identities WHERE candidate_id=?",String.class,row.get("id")));
@@ -86,7 +86,7 @@ public class EventChangeMonitor {
             if(dates.size()>1 || times.size()>1) {
                 var representative=Objects.requireNonNull(officialMatches.getFirst(), "Offizieller Quellenbefund fehlt");
                 var event=representative.event();
-                var conflicting=new EventExtractor.Event(event.identity(),event.title(),event.url(),officialMatches.stream().flatMap(o -> o.event().starts().stream()).distinct().sorted().toList(),officialMatches.stream().map(o -> sourceUrl(o.sourceId())+": "+o.event().starts()).distinct().sorted().collect(java.util.stream.Collectors.joining("\n")), "SOURCE_CONFLICT",event.location());
+                var conflicting=new EventExtractor.Event(event.identity(),event.title(),event.url(),officialMatches.stream().flatMap(o -> o.event().starts().stream()).distinct().sorted().toList(),officialMatches.stream().map(o -> sourceUrl(o.sourceId())+": "+o.event().starts()).distinct().sorted().collect(java.util.stream.Collectors.joining("\n")), "SOURCE_CONFLICT",event.location(),event.place());
                 alert(candidate,venue,"CONFLICTING_SOURCES",old,conflicting,sourceUrl(representative.sourceId()),"Offizielle Quellen nennen widersprüchliche Datums-/Zeitangaben");
                 for(var found:officialMatches) observation((String)candidate.get("id"),found.sourceId(),found.event(),operation);
                 continue;

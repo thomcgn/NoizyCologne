@@ -27,7 +27,7 @@ public class DiscoveryStore {
             case "ALL" -> "true";
             default -> throw new IllegalArgumentException("Unbekannter Vorschlagsfilter");
         };
-        return db.queryForList(CANDIDATE_SELECT+" WHERE "+where+" ORDER BY c.updated_at DESC LIMIT 500")
+        return db.queryForList(CANDIDATE_SELECT+" WHERE ("+where+") AND (s.venue_id IS NOT NULL OR c.geo_status='INSIDE' OR c.calendar_entry_id IS NOT NULL OR c.status IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED')) ORDER BY c.updated_at DESC LIMIT 500")
             .stream().map(DiscoveryStore::forApi).toList();
     }
     public List<Map<String,Object>> sources() {
@@ -40,6 +40,9 @@ public class DiscoveryStore {
                 value instanceof java.sql.Date date ? date.toLocalDate().toString() :
                 value instanceof java.sql.Time time ? time.toLocalTime().toString() :
                 value instanceof java.sql.Timestamp timestamp ? timestamp.toInstant().toString() : value));
+        if(Boolean.TRUE.equals(row.get("special_source"))) for(String key:List.of("url","source_url")) if(result.get(key) instanceof String address) {
+            try {result.put(key,CanonicalSourceUrl.reference(address));}catch(IllegalArgumentException ignored){/* Historical invalid URLs are never repaired into geographical evidence. */}
+        }
         return result;
     }
     public Map<String,Object> candidate(String id) {

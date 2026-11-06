@@ -129,8 +129,8 @@ public class DiscoveryScheduler {
                     FROM discovery_decisions WHERE operation_id=?
                     """,id);
                 summary.put("stillIgnored",store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates WHERE last_evaluation_id=? AND status='IGNORED'",Long.class,id));
-                summary.put("preservedManual",initial.preservedManual());summary.put("failed",failed);
-                String report="Locations geprüft: "+checked+"; Sonderquellen geprüft: "+specialChecked+"; fehlgeschlagen: "+failed;
+                summary.put("geographicallyClassified",initial.geographicallyClassified());summary.put("preservedManual",initial.preservedManual());summary.put("failed",failed);
+                String report="Locations geprüft: "+checked+"; Sonderquellen geprüft: "+specialChecked+(request==null?"":"; Bestandsstandorte geografisch eingestuft: "+initial.geographicallyClassified())+"; fehlgeschlagen: "+failed;
                 store.jdbc().update("UPDATE discovery_operations SET status=?,finished_at=now(),report=?,summary=? WHERE id=?",
                     failed==0 ? "COMPLETED" : "PARTIAL",report,resets.serialize(summary),id);
                 if (scan) store.jdbc().update("UPDATE discovery_runs SET status=?,finished_at=now(),report=? WHERE id=?",failed==0 ? "COMPLETED" : "PARTIAL",report,id);

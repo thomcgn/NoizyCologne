@@ -41,7 +41,7 @@ public class VenueSourceDiscoveryService {
         return discover(input,profile,true);
     }
     private List<@NonNull Found> discover(String input,EventExtractor.Profile profile,boolean independent) throws IOException {
-        URI root = SafeUrls.parse(input);
+        URI root = SafeUrls.parse(independent?CanonicalSourceUrl.of(input):input);
         record Step(URI url, int depth, boolean detail) { }
         var queue = new ArrayDeque<Step>(); queue.add(new Step(root, 0, false));
         Set<URI> seen = new HashSet<>(); Map<String, String> robots = new HashMap<>();
@@ -106,7 +106,7 @@ public class VenueSourceDiscoveryService {
                 Set<URI> eventLinks = new HashSet<>();
                 for (var event : extraction.events()) {
                     try {
-                        URI detail = SafeUrls.parse(step.url().resolve(event.url()).toString().split("#", 2)[0]);
+                        URI detail = SafeUrls.parse(independent?CanonicalSourceUrl.of(step.url().resolve(event.url()).toString().split("#",2)[0]):step.url().resolve(event.url()).toString().split("#",2)[0]);
                         eventLinks.add(detail);
                         boolean known=knownNames.stream().anyMatch(name -> PartySeriesRecognition.containsName(event.title(),name));
                         boolean partyLead=EventNormalizer.text(event.title()).matches(".*\\b([\\p{L}]*party|partys|parties|clubnacht|disco|dancefloor|dj|djs)\\b.*");
@@ -123,7 +123,7 @@ public class VenueSourceDiscoveryService {
                 for (var link : Jsoup.parse(page.body(), Objects.requireNonNull(step.url().toString())).select("a[href], link[href][type=text/calendar]").stream().limit(200).toList()) {
                     try {
                         String href = link.absUrl("href").split("#", 2)[0];
-                        URI next = SafeUrls.parse(href);
+                        URI next = SafeUrls.parse(independent?CanonicalSourceUrl.of(href):href);
                         String label = EventNormalizer.text(link.text().isBlank()
                                 ? (link.hasAttr("aria-label") ? link.attr("aria-label") : link.attr("title")) : link.text());
                         boolean overview = label.matches("events|party|partys|parties|programm|kalender|veranstaltungen|calendar|veranstaltungskalender|alle events|zum programm|mehr events|live|live shows|konzerte|shows|upcoming events|whats on")
@@ -152,7 +152,7 @@ public class VenueSourceDiscoveryService {
         var result=new LinkedHashSet<URI>();
         for (var link:Jsoup.parse(page.body(),Objects.requireNonNull(page.url().toString())).select("a[href]").stream().limit(200).toList()) {
             try {
-                URI next=SafeUrls.parse(link.absUrl("href").split("#",2)[0]);
+                URI next=SafeUrls.parse(CanonicalSourceUrl.of(link.absUrl("href").split("#",2)[0]));
                 if (!next.getHost().equalsIgnoreCase(root.getHost()) || next.equals(page.url()) || PartyOnlyPolicy.concertLink(link.text(),next)) continue;
                 if (link.attr("title").matches("(?i)^event:.*") || next.getPath().matches("(?i).*/events/[^/]+/?")) result.add(next);
             } catch (IllegalArgumentException ignored) { /* No private, foreign or malformed event targets. */ }
@@ -164,7 +164,7 @@ public class VenueSourceDiscoveryService {
             String label=EventNormalizer.text(link.text().isBlank() ? link.attr("aria-label") : link.text());
             if (!label.matches("events|party|partys|parties|programm|kalender|veranstaltungen|calendar|upcoming events")) continue;
             try {
-                URI next=SafeUrls.parse(link.absUrl("href").split("#",2)[0]);
+                URI next=SafeUrls.parse(CanonicalSourceUrl.of(link.absUrl("href").split("#",2)[0]));
                 if (!next.equals(page.url()) && next.getHost().equalsIgnoreCase(page.url().getHost())) return true;
             } catch (IllegalArgumentException ignored) { /* Not a permitted navigation target. */ }
         }
@@ -188,7 +188,7 @@ public class VenueSourceDiscoveryService {
                         .filter(e -> EventNormalizer.text(e.title()).equals(EventNormalizer.text(event.title()))).toList();
                 if (matching.size() != 1) {
                     events.add(new EventExtractor.Event(event.identity(), event.title(), event.url(), event.starts(),
-                            event.evidence(), event.state() + " UNCONFIRMED Detailseite nicht eindeutig auswertbar", event.location()));
+                            event.evidence(), event.state() + " UNCONFIRMED Detailseite nicht eindeutig auswertbar", event.location(),event.place()));
                     continue;
                 }
                 var d = Objects.requireNonNull(matching.get(0), "Detailveranstaltung fehlt");
@@ -200,7 +200,7 @@ public class VenueSourceDiscoveryService {
                 var merged = new EventExtractor.Event(event.identity().isBlank() ? url.toString() : event.identity(),
                         event.title(), url.toString(), starts.stream().distinct().toList(),
                         evidence.substring(0, Math.min(evidence.length(), 8000)), state,
-                        d.location().isBlank() ? event.location() : d.location());
+                        d.location().isBlank() ? event.location() : d.location(),event.place().merge(d.place()));
                 events.add(merged); mergedDetails.put(url, merged);
             }
             result.add(page.withExtraction(new EventExtractor.Extraction(events, page.extraction().status(),page.extraction().complete())));
@@ -213,7 +213,7 @@ public class VenueSourceDiscoveryService {
             if (eligible.contains(f.url()))
                 return f.withExtraction(new EventExtractor.Extraction(f.extraction().events().stream().map(e ->
                         new EventExtractor.Event(e.identity(), e.title(), e.url(), e.starts(), e.evidence(),
-                                e.state() + " UNCONFIRMED Detailzuordnung unklar", e.location())).toList(), f.extraction().status(),f.extraction().complete()));
+                                e.state() + " UNCONFIRMED Detailzuordnung unklar", e.location(),e.place())).toList(), f.extraction().status(),f.extraction().complete()));
             return f;
         }).toList();
     }
