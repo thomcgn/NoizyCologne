@@ -23,6 +23,7 @@ class DiscoveryIntegrationTests {
     @Autowired VenueRepository venues;
     @Autowired PartySeriesRepository parties;
     @Autowired EventImportService importer;
+    @Autowired DiscoveryEvaluationService evaluation;
     @Autowired de.noizycologne.backend.calendar.CalendarEntryService calendar;
     final Set<String> extraParties=new HashSet<>();
     @MockitoBean VenueSourceDiscoveryService discovery;
@@ -45,6 +46,73 @@ class DiscoveryIntegrationTests {
     }
     void found(EventExtractor.@org.jspecify.annotations.NonNull Event event) throws Exception {
         when(discovery.discover(eq(root),any())).thenReturn(List.of(new VenueSourceDiscoveryService.Found(URI.create(root),new EventExtractor.Extraction(List.of(event),"EVENTS_FOUND"))));
+    }
+
+    void foundEvents(List<EventExtractor.@org.jspecify.annotations.NonNull Event> events) throws Exception {
+        when(discovery.discover(eq(root),any())).thenReturn(List.of(new VenueSourceDiscoveryService.Found(URI.create(root),new EventExtractor.Extraction(events,"EVENTS_FOUND"))));
+    }
+    @Test void programmeYearResolutionUpdatesLegacyRowsAndPreservesManualRejectedAndImportedDecisions() throws Exception {
+        String html;
+        try(var in=getClass().getResourceAsStream("/discovery/sonic-ballroom-parties.html")) { html=new String(requireNonNull(in).readAllBytes(),java.nio.charset.StandardCharsets.UTF_8); }
+        var clock=Clock.fixed(Instant.parse("2026-11-06T12:00:00Z"),ZoneOffset.UTC);
+        var current=new EventExtractor(clock).extract(new EventPageFetcher.Page(URI.create(root),html,"text/html"),EventExtractor.Profile.defaults()).events();
+        var labels=org.jsoup.Jsoup.parse(html).select("strong.date").eachText();
+        List<EventExtractor.@org.jspecify.annotations.NonNull Event> legacy=new ArrayList<>();
+        for(int i=0;i<current.size();i++) {
+            var event=requireNonNull(current.get(i));
+            legacy.add(new EventExtractor.Event(event.identity(),event.title(),event.url(),event.title().equals("Irish-Pogo") ? event.starts() : List.of(requireNonNull(labels.get(i))),event.evidence(),event.state(),event.location(),event.place()));
+        }
+        foundEvents(legacy);scheduler.scan();
+        var rows=store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE venue_id=?",venue.getId());
+        assertThat(rows).hasSize(22);var ids=rows.stream().map(row -> row.get("id")).toList();
+        store.jdbc().update("UPDATE discovery_observations SET observed_at='2026-11-06T12:00:00Z' WHERE candidate_id IN (SELECT id FROM discovery_candidates WHERE venue_id=?)",venue.getId());
+        var rejected=requireNonNull(rows.stream().filter(row -> "BallroomBlitz! mit DER GRAUE KLAUS".equals(row.get("title"))).findFirst().orElseThrow());
+        var manual=requireNonNull(rows.stream().filter(row -> "BallroomBlitz! mit ROMAN EMPIRE".equals(row.get("title")) && evaluation.event(row).starts().contains("Freitag, 11. Dezember")).findFirst().orElseThrow());
+        var imported=requireNonNull(rows.stream().filter(row -> "Shake Appeal mit BEATMIKE, FACE B & HOLLY WOOD".equals(row.get("title"))).findFirst().orElseThrow());
+        store.jdbc().update("UPDATE discovery_candidates SET status='REJECTED',decision_origin='AUTOMATIC',reason='Nicht übernehmen',dm_text='Abgelehnt',inquiry_status='ANSWERED' WHERE id=?",rejected.get("id"));
+        store.jdbc().update("UPDATE discovery_candidates SET decision_origin='MANUAL',party_id=?,event_date='2027-01-09',reason='Manuell entschieden',dm_text='Teamantwort',inquiry_status='ANSWERED' WHERE id=?",party.getId(),manual.get("id"));
+        var entry=calendar.createEntry(new de.noizycologne.backend.calendar.CalendarEntryRequest("2026-12-05",venue.getId(),"event","Manuelle Kalendernotiz","9 €",party.getId(),"23:30",null,Set.of()));
+        store.jdbc().update("UPDATE discovery_candidates SET status='IMPORTED',decision_origin='MANUAL',party_id=?,event_date='2026-12-05',calendar_entry_id=?,monitored_event=raw_event WHERE id=?",party.getId(),entry.id(),imported.get("id"));
+        var calendarBefore=store.jdbc().queryForMap("SELECT * FROM calendar_entries WHERE id=?",entry.id());
+        foundEvents(current);scheduler.scan();scheduler.scan();
+        var after=store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE venue_id=?",venue.getId());
+        assertThat(after).hasSize(22);assertThat(after.stream().map(row -> row.get("id"))).containsExactlyInAnyOrderElementsOf(ids);
+        assertThat(store.candidate((String)rejected.get("id"))).containsEntry("status","REJECTED").containsEntry("event_date",null).containsEntry("dm_text","Abgelehnt");
+        assertThat(store.candidate((String)manual.get("id"))).containsEntry("decision_origin","MANUAL").containsEntry("party_id",party.getId()).containsEntry("dm_text","Teamantwort").containsEntry("inquiry_status","ANSWERED");
+        assertThat(store.jdbc().queryForObject("SELECT event_date FROM discovery_candidates WHERE id=?",LocalDate.class,manual.get("id"))).isEqualTo(LocalDate.of(2027,1,9));
+        assertThat(evaluation.event(store.candidate((String)manual.get("id"))).starts()).containsExactly("2026-12-11");
+        assertThat(store.jdbc().queryForObject("SELECT event_date FROM discovery_candidates WHERE venue_id=? AND title='BallroomBlitz! mit ROMAN EMPIRE' AND id<>?",LocalDate.class,venue.getId(),manual.get("id"))).isEqualTo(LocalDate.of(2026,11,13));
+        assertThat(store.jdbc().queryForMap("SELECT * FROM calendar_entries WHERE id=?",entry.id())).isEqualTo(calendarBefore);
+        assertThat(store.jdbc().queryForObject("SELECT monitored_event::jsonb->'starts'->>0 FROM discovery_candidates WHERE id=?",String.class,imported.get("id"))).isEqualTo("2026-12-05");
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,venue.getId())).isEqualTo(1);
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM event_changes WHERE venue_id=?",Integer.class,venue.getId())).isZero();
+    }
+    @Test void conflictingWeekdayStaysReviewableAndNeverImportsKnownParty() throws Exception {
+        String html="<main><div><strong class='date'>16.12.2026</strong><h1>Anchor Party</h1></div><div><strong class='date'>Donnerstag, 18. Dezember</strong><h1>"+party.getName()+"</h1><p>Indie Party, nach dem Konzert</p></div></main>";
+        var events=new EventExtractor(Clock.fixed(Instant.parse("2026-11-06T12:00:00Z"),ZoneOffset.UTC)).extract(new EventPageFetcher.Page(URI.create(root),html,"text/html"),EventExtractor.Profile.defaults()).events();
+        foundEvents(events);scheduler.scan();
+        var candidate=store.jdbc().queryForMap("SELECT * FROM discovery_candidates WHERE venue_id=? AND title=?",venue.getId(),party.getName());
+        assertThat(candidate).containsEntry("event_date",null).containsEntry("start_time",null).containsEntry("calendar_entry_id",null);
+        assertThat(candidate.get("status")).isNotEqualTo("IMPORTED");
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,venue.getId())).isZero();
+    }
+    @Test void ambiguousUndatedPredecessorsAreNotChosenOrDuplicatedAutomatically() throws Exception {
+        var first=new EventExtractor.Event("",party.getName(),root,List.of("Freitag, 04. Dezember"),"Indie Party","","");
+        var second=new EventExtractor.Event("",party.getName(),root,List.of("04.12."),"Indie Party","","");
+        foundEvents(List.of(first,second));scheduler.scan();
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates WHERE venue_id=?",Integer.class,venue.getId())).isEqualTo(2);
+        foundEvents(List.of(new EventExtractor.Event("",party.getName(),root,List.of("2026-12-04"),"Indie Party","","")));scheduler.scan();
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates WHERE venue_id=?",Integer.class,venue.getId())).isEqualTo(2);
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,venue.getId())).isZero();
+    }
+    @Test void rejectedLegacyRowCannotBeAutomaticallyReimportedWhenItsYearBecomesKnown() throws Exception {
+        foundEvents(List.of(new EventExtractor.Event("",party.getName(),root,List.of("Freitag, 04. Dezember"),"Indie Party","","")));scheduler.scan();
+        String id=requireNonNull(store.jdbc().queryForObject("SELECT id FROM discovery_candidates WHERE venue_id=?",String.class,venue.getId()));
+        store.jdbc().update("UPDATE discovery_candidates SET status='REJECTED',decision_origin='AUTOMATIC',reason='Abgelehnt' WHERE id=?",id);
+        foundEvents(List.of(new EventExtractor.Event("",party.getName(),root,List.of("2026-12-04"),"Indie Party","","")));scheduler.scan();scheduler.scan();
+        assertThat(store.candidate(id)).containsEntry("status","REJECTED").containsEntry("calendar_entry_id",null).containsEntry("event_date",null);
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates WHERE venue_id=?",Integer.class,venue.getId())).isEqualTo(1);
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,venue.getId())).isZero();
     }
     @Test void homepageOnlyImportsIdempotentlyAndChangesRequireReview() throws Exception {
         found(event("stable",party.getName(),"2027-01-09T23:00",""));

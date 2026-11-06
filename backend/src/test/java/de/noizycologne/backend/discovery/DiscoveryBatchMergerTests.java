@@ -44,4 +44,15 @@ class DiscoveryBatchMergerTests {
         assertThat(DiscoveryBatchMerger.merge(List.of(first,next),"MTC")).hasSize(2);
         assertThat(requireNonNull(DiscoveryBatchMerger.merge(List.of(first),"MTC").getFirst()).event().evidence()).isEqualTo("Party");
     }
+    @Test void repeatedEditionsDoNotMergeThroughASecondSourceObservation() {
+        var first=input("venue","","2026-12-04","Party","MTC",true);
+        var second=input("venue","","2026-12-11","Party","MTC",true);
+        var ticket=input("ticket","","2026-12-04","Party","MTC",true);
+        for(var order:List.of(List.of(first,second,ticket),List.of(first,ticket,second),List.of(ticket,second,first))) {
+            var result=DiscoveryBatchMerger.merge(order,"MTC");
+            assertThat(result).hasSize(2);
+            for(var item:result) assertThat(item.event().starts()).hasSize(1);
+        }
+    }
+
 }

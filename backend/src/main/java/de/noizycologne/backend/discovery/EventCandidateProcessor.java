@@ -39,7 +39,7 @@ public class EventCandidateProcessor {
         String venueId=old==null || old.get("venue_id")==null ? finding.result().venueId() : (String)old.get("venue_id");
         String venueName=old!=null && venueId!=null ? (String)store.candidate((String)old.get("id")).get("venue_name") : "";
         var result=evaluator.evaluate(event,venueId,venueName,false,evaluator.rules());
-        if (old!=null && !"AUTOMATIC".equals(old.get("decision_origin"))) {
+        if (old!=null && (!"AUTOMATIC".equals(old.get("decision_origin")) || "REJECTED".equals(old.get("status")))) {
             if (!fingerprint.equals(old.get("fingerprint")) || !EventMatcher.VERSION.equals(old.get("matcher_version"))) {
                 store.jdbc().update("UPDATE discovery_candidates SET raw_event=?,fingerprint=?,evidence=?,source_url=?,automatic_reason=?,matching_class=?,matcher_version=?,evaluated_at=now(),last_evaluation_id=?,updated_at=now() WHERE id=?",
                     evaluator.raw(event),fingerprint,event.evidence(),SafeUrls.parse(event.url()).toString(),result.reason(),result.classification(),EventMatcher.VERSION,operation,old.get("id"));
@@ -108,6 +108,26 @@ public class EventCandidateProcessor {
             """,venue.getId(),identity,venue.getId(),identity);
         var dates=event.starts().stream().map(EventNormalizer::date).distinct().toList();
         LocalDate date=dates.size()==1 ? dates.getFirst() : null;
+        // A resolved year changes the fallback hash. Reuse only an unambiguous source/day occurrence.
+        if(previous.isEmpty() && date!=null) {
+            List<Map<String,Object>> matches=new ArrayList<>();boolean unknownRelative=false;
+            for(var candidate:store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE venue_id=? AND source_id=? AND title=?",venue.getId(),sourceId,event.title())) {
+                var before=evaluator.event(candidate);
+                if(before.starts().isEmpty() || before.starts().stream().anyMatch(start -> EventNormalizer.date(start)!=null)) continue;
+                LocalDate observedOn=null;
+                if(before.starts().stream().anyMatch(start -> List.of("HEUTE","MORGEN").contains(start.trim().toUpperCase(Locale.ROOT)))) {
+                    var observations=store.jdbc().queryForList("SELECT (observed_at AT TIME ZONE 'Europe/Berlin')::date AS day FROM discovery_observations WHERE candidate_id=? AND source_id=? AND event_data::jsonb->'starts' = ?::jsonb->'starts' ORDER BY observed_at DESC,id DESC LIMIT 1",candidate.get("id"),sourceId,evaluator.raw(before));
+                    if(!observations.isEmpty() && Objects.requireNonNull(observations.getFirst()).get("day") instanceof java.sql.Date day) observedOn=day.toLocalDate();
+                    else unknownRelative=true;
+                }
+                if(GermanProgramText.sameUndatedOccurrence(before,date,observedOn)) matches.add(candidate);
+            }
+            if(matches.size()>1 || matches.isEmpty() && unknownRelative) {
+                org.slf4j.LoggerFactory.getLogger(getClass()).warn("Discovery occurrence {} has ambiguous undated predecessors; no new automatic candidate",event.title());
+                return;
+            }
+            if(matches.size()==1) previous=matches;
+        }
         // The same event can be exposed as JSON-LD, a text list and a detail URL.
         if (previous.isEmpty() && date!=null && !evaluator.verification(event,venue.getId(),venue.getName()).conflicting()) {
             var sameOccurrence=store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE venue_id=? AND event_date=?",venue.getId(),date)
@@ -130,7 +150,7 @@ public class EventCandidateProcessor {
                 "SELECT approved FROM discovery_sources WHERE id=?",Boolean.class,old.get("source_id")))) return;
         if (old!=null) store.jdbc().update("INSERT INTO discovery_candidate_identities(venue_id,identity_key,candidate_id) VALUES (?,?,?) ON CONFLICT DO NOTHING",venue.getId(),identity,old.get("id"));
         // Includes ambiguous legacy reviews: uncertainty about provenance never permits overwriting them.
-        if (old!=null && !"AUTOMATIC".equals(old.get("decision_origin"))) {
+        if (old!=null && (!"AUTOMATIC".equals(old.get("decision_origin")) || "REJECTED".equals(old.get("status")))) {
             if (!fingerprint.equals(old.get("fingerprint")) || !EventMatcher.VERSION.equals(old.get("matcher_version"))) {
                 var technical=evaluator.evaluate(event,venue.getId(),venue.getName(),approved,new DiscoveryEvaluationService.Rules(known,aliases,genres));
                 store.jdbc().update("""

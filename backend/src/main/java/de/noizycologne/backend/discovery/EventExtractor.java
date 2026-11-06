@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import java.util.*;
+import java.time.*;
 
 @Component
 public class EventExtractor {
@@ -29,6 +30,10 @@ public class EventExtractor {
     public record Extraction(List<@org.jspecify.annotations.NonNull Event> events, String status, boolean complete) {
         public Extraction(List<@org.jspecify.annotations.NonNull Event> events,String status) { this(events,status,false); }
     }
+    private final Clock clock;
+    public EventExtractor() { this(Clock.systemUTC()); }
+    public EventExtractor(Clock clock) { this.clock=Objects.requireNonNull(clock); }
+    private record HtmlEvent(Element container,Event event,String label) { }
     private final JsonMapper json = JsonMapper.builder().build();
     public Extraction extract(EventPageFetcher.Page page, Profile profile) {
         List<@org.jspecify.annotations.NonNull Event> events = new ArrayList<>();
@@ -45,6 +50,7 @@ public class EventExtractor {
             catch (RuntimeException e) { malformed = true; }
         }
         if(concertPage && events.stream().noneMatch(event -> EventNormalizer.text(event.title()).matches(".*\\b(aftershow ?party|after ?party)\\b.*") && !PartyOnlyPolicy.concert(event))) return new Extraction(List.of(),"EXCLUDED_CONCERTS");
+        List<@NonNull HtmlEvent> htmlEvents=new ArrayList<>();
         if (events.isEmpty()) {
             @NonNull String selector = profile.itemSelector().isBlank()
                     ? "[data-hook=event-list-item], [itemscope][itemtype*=Event], article:has(time), article:has(a[href]), .event:has(time), .event:has(a[href]), .event-item, .event-list-item"
@@ -63,25 +69,42 @@ public class EventExtractor {
                 if (anchor == null) anchor = item.selectFirst("a[href]");
                 String url = anchor == null ? page.url().toString() : anchor.absUrl("href");
                 String state = riskyState(item.text());
-                events.add(new Event(!item.attr("data-event-id").isBlank() ? item.attr("data-event-id") : url.equals(page.url().toString()) ? "" : url, clip(title.text(), 500), url,
-                        dates, clip(item.text(), 8000), state, "",htmlPlace(item)));
+                var label=item.selectFirst(profile.dateSelector().isBlank() ? ".date, "+dateSelector : dateSelector);
+                String dateLabel=label==null ? "" : label.text();
+                if(dates.isEmpty() && !dateLabel.isBlank()) dates=GermanProgramText.starts(dateLabel);
+                htmlEvents.add(new HtmlEvent(item,new Event(!item.attr("data-event-id").isBlank() ? item.attr("data-event-id") : url.equals(page.url().toString()) ? "" : url, clip(title.text(), 500), url,
+                        dates, clip(item.text(), 8000), state, "",htmlPlace(item)),dateLabel));
             }
             // Generic detail pages with a semantic start date.
             var heading = doc.selectFirst("h1");
             var date = doc.selectFirst("[itemprop=startDate], time[datetime]");
-            if (events.isEmpty() && heading != null && date != null) {
+            if (htmlEvents.isEmpty() && heading != null && date != null) {
                 String detailUrl=page.url().toString();
                 var canonical=doc.selectFirst("link[rel=canonical][href]");
                 if(canonical!=null) try {
                     var resolved=SafeUrls.parse(canonical.absUrl("href"));
                     if(resolved.getHost().equalsIgnoreCase(page.url().getHost())) detailUrl=resolved.toString();
                 } catch(IllegalArgumentException ignored) { /* Untrusted canonical links cannot change event identity. */ }
-                events.add(new Event(detailUrl, clip(heading.text(), 500), detailUrl,
+                htmlEvents.add(new HtmlEvent(doc.body(),new Event(detailUrl, clip(heading.text(), 500), detailUrl,
                         List.of(date.hasAttr("datetime") ? date.attr("datetime") : date.attr("content")),
-                        clip(doc.body().text(), 8000), riskyState(doc.body().text()), "",htmlPlace(doc)));
+                        clip(doc.body().text(), 8000), riskyState(doc.body().text()), "",htmlPlace(doc)),date.text()));
             }
         }
-        if (events.isEmpty() && profile.itemSelector().isBlank()) genericCards(doc,page.url().toString(),events);
+        if (events.isEmpty() && htmlEvents.isEmpty() && profile.itemSelector().isBlank()) genericCards(doc,page.url().toString(),htmlEvents);
+        Map<Element,List<@NonNull HtmlEvent>> lists=new LinkedHashMap<>();
+        for(var item:htmlEvents) lists.computeIfAbsent(item.container().parent(),key -> new ArrayList<>()).add(item);
+        var fetchedOn=LocalDate.now(clock.withZone(ZoneId.of("Europe/Berlin")));
+        Map<HtmlEvent,GermanProgramText.ResolvedDate> resolvedByItem=new IdentityHashMap<>();
+        for(var list:lists.values()) {
+            var resolved=GermanProgramText.resolve(list.stream().map(item -> new GermanProgramText.DateEvidence(item.label(),item.event().starts())).toList(),fetchedOn);
+            for(int i=0;i<list.size();i++) resolvedByItem.put(Objects.requireNonNull(list.get(i)),Objects.requireNonNull(resolved.get(i)));
+        }
+        // Resolve in local lists, but retain the original document order in the extraction.
+        for(var item:htmlEvents) {
+            var event=item.event();var day=Objects.requireNonNull(resolvedByItem.get(item));
+            events.add(new Event(event.identity(),event.title(),event.url(),day.starts(),event.evidence(),
+                event.state()+(day.conflict() ? " SOURCE_CONFLICT: Jahreskontext oder Wochentag widersprüchlich" : ""),event.location(),event.place()));
+        }
         if (profile.itemSelector().isBlank()) {
             for (var event : GermanProgramText.events(doc, page.url().toString())) {
                 if (events.size() >= 200) break;
@@ -101,13 +124,17 @@ public class EventExtractor {
             && event.starts().stream().anyMatch(start -> EventNormalizer.date(start)!=null))
             && requiresRendering(Jsoup.parse(page.body()));
     }
-    private void genericCards(org.jsoup.nodes.Document doc,String page,List<@NonNull Event> events) {
+    private void genericCards(org.jsoup.nodes.Document doc,String page,List<@NonNull HtmlEvent> events) {
         doc=doc.clone();
         doc.select("footer, nav, script, style, [hidden], [aria-hidden=true]").remove();
         for (var heading:doc.select("h1, h2, h3, h4").stream().limit(200).toList()) {
             Element container=heading.parent();
             for (int depth=0;container!=null && depth<3;depth++,container=container.parent()) {
                 if (container.select("h1, h2, h3, h4").size()>1) break;
+                // Prefer the card's own date label over a date mentioned inside its description.
+                var parent=container.parent();
+                if(container.selectFirst(".date, time, [itemprop=startDate]")==null && parent!=null
+                        && parent.select("h1, h2, h3, h4").size()==1 && parent.selectFirst(".date, time, [itemprop=startDate]")!=null) continue;
                 List<@NonNull String> starts=new ArrayList<>();
                 for (var date:container.select("time[datetime], [itemprop=startDate][content]"))
                     starts.add(date.hasAttr("datetime") ? date.attr("datetime") : date.attr("content"));
@@ -119,6 +146,9 @@ public class EventExtractor {
                     var label=container.selectFirst(".date");
                     if (label!=null && !label.text().isBlank()) starts.addAll(GermanProgramText.starts(label.text()));
                 }
+                var dateLabel=container.selectFirst(".date, time, [itemprop=startDate]");
+                String label=dateLabel==null ? container.text() : dateLabel.text();
+                if(starts.isEmpty() && GermanProgramText.monthDay(label)!=null) starts.addAll(GermanProgramText.starts(label));
                 if (starts.isEmpty() || heading.text().isBlank()) continue;
                 String url=page;
                 for (var link:container.select("a[href]")) {
@@ -128,8 +158,8 @@ public class EventExtractor {
                         url=target.toString(); break;
                     } catch(IllegalArgumentException ignored) { /* No external social links as event identities. */ }
                 }
-                events.add(new Event(url.equals(page) ? "" : url,clip(heading.text(),500),url,
-                    starts.stream().distinct().toList(),clip(container.text(),8000),riskyState(container.text()),"",htmlPlace(container)));
+                events.add(new HtmlEvent(container,new Event(url.equals(page) ? "" : url,clip(heading.text(),500),url,
+                    starts.stream().distinct().toList(),clip(container.text(),8000),riskyState(container.text()),"",htmlPlace(container)),label));
                 break;
             }
         }
