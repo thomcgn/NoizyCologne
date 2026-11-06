@@ -126,7 +126,7 @@ Maschinenlesbare Browserergebnisse: [results.json](screenshots/discovery/results
   keine Browserfehler und kein horizontaler Seitenüberlauf. Mobile Navigation
   schließt bei Escape und Linkwahl; der Dialog hält den Tab-Fokus und gibt ihn
   bei Escape an seinen Auslöser zurück.
-- `git diff --check` erfolgreich. **Kein Commit, Push oder Deployment**.
+- `git diff --check` erfolgreich. **Commit und Feature-Branch-Push nachträglich vom Nutzer beauftragt; Abnahme per Pull Request. Kein Merge oder Deployment**.
   FULL und Live-IDE-Problemliste wurden nicht geprüft.
 
 ### Browserprüfung wiederholen
@@ -167,4 +167,16 @@ Chrome-Viewports, keine reale iOS-/Android-Geräteabnahme und keinen Live-Import
 gegen eine Datenbank. Die bestehende Backendfunktion wurde weder umgebaut noch
 mit echten Daten ausgeführt. Kein Zugriff auf die Live-VS-Code-Problemliste;
 CLI-Befunde sind davon getrennt. FULL für den exakt zu mergenden Commit bleibt
-in GitHub Actions verpflichtend. Kein Commit, Push oder Deployment ausgelöst.
+in GitHub Actions verpflichtend. Der Nutzer hat anschließend Commit und Push
+auf `feat/discovery-integration` sowie Abnahme per Pull Request beauftragt.
+Merge und Deployment bleiben einem gesonderten Auftrag vorbehalten.
+
+## Übergabe per Pull Request
+
+Am 06.11.2026 hat der Nutzer Commit und Push als dauerhaften Aufgabenabschluss
+und die Abnahme sämtlicher Änderungen per Pull Request festgelegt. Diese Regel
+ist in der Root-`AGENTS.md` hinterlegt. Der reguläre Pre-Commit-Hook führt QUICK
+aus; kein Hook wird umgangen. Für den Hooklauf werden die bereits geprüften
+lokalen Maven-Abhängigkeiten offline verwendet und die mit dem bestehenden
+Mockito-Agenten inkompatible CDS-Optimierung nur im Prüfprozess deaktiviert.
+Compilerregeln, Agent und Testauswahl bleiben unverändert.

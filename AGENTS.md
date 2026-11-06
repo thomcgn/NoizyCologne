@@ -3,6 +3,16 @@
 Read `docs/PROJECT.md` and the instructions in the affected subdirectories before editing.
 Keep existing local changes from other tasks intact. Do not push, deploy, or change production data without an explicit task authorizing it.
 
+## Commit, Push und Pull-Request-Abnahme
+
+Der Nutzer hat Commit und Push als regulären Abschluss jeder Aufgabe dauerhaft
+beauftragt. Nach erfolgreichen erforderlichen Prüfungen nur die Änderungen der
+jeweiligen Aufgabe committen und auf einen Feature-Branch pushen. Einen Pull
+Request zur Abnahme erstellen oder den bestehenden Aufgaben-PR aktualisieren.
+Alle Änderungen müssen per Pull Request abgenommen werden; keine direkten Pushes
+auf `main`, kein eigenständiger Merge und kein Deployment. Die verpflichtende
+FULL-Prüfung für den exakt akzeptierten Commit bleibt unverändert.
+
 ## Mandatory Quality Strategy
 
 These rules apply to every future Codex task, including features, fixes, refactoring,
