@@ -19,9 +19,9 @@ These rules apply to every future Codex task, including features, fixes, refacto
 migrations, APIs, components, tests and configuration changes:
 
 1. Inspect the relevant repository state, instructions and current diagnostics before editing.
-2. After each coherent code change, run the relevant local tests and static analyses.
+2. After a coherent change, run only the directly affected tests and necessary static/compiler checks, according to the scope strategy below. Reuse still-valid results within the task.
 3. Fix project errors and warnings, including conversion, unchecked-conversion and null-type-safety diagnostics. Keep the strict compiler settings and rerun affected checks after corrections; do not add blanket suppressions.
-4. During development and before local commits, use `scripts/check-quality.sh --quick` or suitable component checks (`--backend`, `--frontend`). The pre-commit hook runs QUICK. Full production builds and the entire test suite are not required after every small change or repeated immediately before a local commit.
+4. During development, use targeted tests and necessary compiler/type checks. The mandatory pre-commit hook runs QUICK; do not run QUICK manually immediately before it. STANDARD module checks require the scope or a concrete diagnostic reason; FULL runs in GitHub Actions, locally only when explicitly necessary for diagnosis.
 5. Do not commit or report code complete after a failed or missing required check. Never silently skip checks or report an unexecuted check as passing.
 6. Do not disable inspections, weaken warning rules, add blanket suppressions or remove working functionality to make checks pass.
 7. Add appropriate tests for new behavior and regressions.
@@ -40,8 +40,7 @@ must never authorize publication. Required branch protection must be configured;
 workflow files alone do not prevent an administrator from merging unchecked code.
 Do not use `--no-verify`, alternate hook paths or skip flags to bypass the gate.
 
-When database tests are required, the gate creates its own disposable PostgreSQL
-database; QUICK never starts a database container; selected database integration tests are explicitly deferred to STANDARD/FULL, while all current Java test sources remain compiled/analyzed.
+Required local database integration tests run only against a disposable isolated test database, never inherited development/production connection settings. STANDARD/FULL create their own PostgreSQL database. QUICK never starts a database container and explicitly defers database integration tests; all current Java test sources remain compiled/analyzed. Targeted integration results supplement QUICK and do not replace mandatory CI FULL.
 Never point tests at the development or production database.
 See `docs/QUALITY.md` for prerequisites,
 Java/IDE coverage limits and hook installation. Configured JSpecify `@NullMarked` defaults
@@ -52,14 +51,60 @@ do not invent non-null guarantees to make diagnostics disappear. Passing either 
 compiler versions does not establish live IDE warning freedom. Existing frontend-specific
 `AGENTS.md` instructions remain in force.
 
-## Keep routine work focused
+## Änderungsumfang und lokale Prüfungen
 
-- Read only the instructions and project sections relevant to the requested change; do not repeat a whole-project audit for each small task.
-- Prefer small changes and reuse tested functions. Avoid unsolicited refactors, extra infrastructure and tests for unaffected behavior.
-- Run targeted checks after coherent edits. After a correction, rerun failed or affected checks, not every completed check.
-- The regular pre-commit QUICK hook is the commit check; do not manually run the same QUICK immediately beforehand. Do not repeat FULL for an unchanged commit. FULL remains mandatory in CI before integration or deployment.
-- STANDARD (`--backend`/`--frontend`) covers its module, using safe incremental compilation. FULL performs clean Java compilation. Deletions/shared compiler inputs invalidate stale outputs in every mode.
-- QUICK explicitly reports deferred database tests. It is not a complete integration certificate. Never invent success for a check that did not run.
-- Record phase changes, checks and remaining limits in the task document. Timing targets guide scope, never abort required checks or justify unfinished work.
+- **Klein** (CSS, Texte, einfache Komponenten, isolierte Fehlerkorrektur): direkt
+  betroffene Tests und notwendige statische/Compiler-/Typprüfungen. Keine vollständige
+  Backendtestsuite und keine unnötige Browserprüfung.
+- **Mittel** (Discovery-Services, API-Endpunkte, Datenverarbeitung): betroffene Unit-
+  und Integrationstests; nötige Datenbanktests ausschließlich isoliert. Keine
+  wiederholte vollständige Modulsuite.
+- **Umfangreich** (Migrationen, Authentifizierung, Infrastruktur, gemeinsame
+  Build-Konfiguration): erforderliche Modulprüfungen und risikoabhängige
+  Integrationstests. Betroffene Module begründen; kein pauschaler Backend- plus
+  Frontend-Durchlauf. FULL bleibt in GitHub Actions.
 
-Tooling/negative compiler-fixture regressions run for changed tooling/rules and in FULL. Routine STANDARD module checks do not repeat unchanged gate fixtures. Strict compilation, fresh ECJ reports, module tests and STANDARD builds still run.
+Für jeden Umfang läuft QUICK durch den bestehenden Commit-Hook. Der Umfang richtet
+sich nach den betroffenen Abhängigkeiten und Risiken, nicht allein nach Zeilenzahl.
+Erforderliche Sicherheits- und Regressionstests bleiben verpflichtend. Details und
+Grenzen der Modi stehen in [docs/QUALITY.md](docs/QUALITY.md).
+
+## Keine vermeidbaren Wiederholungen
+
+- Nur relevante Projektabschnitte und Unterverzeichnisregeln lesen; keinen erneuten
+  Gesamtaudit für kleine Aufgaben durchführen.
+- Bereits bestandene Prüfungen bei unverändertem relevantem Code, Teststand,
+  Konfiguration und Abhängigkeiten nicht manuell wiederholen. Im Aufgabenstand
+  Befehl, Ergebnis, geprüften Codezustand und Grenzen kurz festhalten; keine neue
+  Dokumentationsdatei für jede kleine Aufgabe erforderlich.
+- Nach einem Fehler nur die betroffene Prüfung nach fachlicher Korrektur erneut
+  ausführen. Änderungen an gemeinsamen Eingaben können weitere Ergebnisse ungültig
+  machen; dann nur diese betroffenen Prüfungen wiederholen. Ein nachträglich
+  entwertetes Ergebnis gilt nicht als bestanden für den neuen Stand.
+- Keine zusätzlichen lokalen STANDARD-/FULL-Läufe ohne konkreten, festgehaltenen
+  Bedarf. Identische Builds innerhalb einer unveränderten Arbeitsphase nicht
+  wiederholen. STANDARD ist eine vollständige Modulprüfung, kein Standardabschluss
+  jeder Aufgabe.
+- Verpflichtende Hook- und CI-Prüfungen laufen weiterhin vollständig gemäß ihrer
+  bestehenden Auswahl. Frühere lokale Erfolge sind kein Grund, diese zu umgehen;
+  die Vermeidung doppelter Arbeit betrifft zusätzliche manuelle Läufe.
+- STANDARD nutzt sichere inkrementelle Kompilierung; FULL kompiliert Java sauber.
+  Löschungen und gemeinsame Compilereingaben invalidieren alte Ausgaben. Frische
+  ECJ-Berichte, strikte Compilerregeln und negative Prüfer-Fixtures gemäß Gate
+  bleiben verpflichtend. QUICK ist kein vollständiger Integrationsnachweis.
+
+## Browser und Auftragsgrenzen
+
+- Zusätzliche lokale Browserprüfungen nur bei sichtbaren UI-Änderungen oder
+  browserabhängigem Verhalten. Standard: **1440 px Desktop und 390 px Smartphone**.
+  Weitere Größen nur bei einem konkreten Fehler oder ausdrücklichem Auftrag.
+- Bestehende Fixtures und Browserwerkzeuge verwenden. Für einzelne kleinere
+  Änderungen keine neue Screenshot-Infrastruktur entwickeln. Verpflichtende
+  Browser-Worker-/Sandbox-Tests im Gate bleiben unberührt.
+- Auftrag gezielt abschließen: keine ungefragten Features, umfassenden Refactorings,
+  neue Infrastruktur, zusätzliche Dokumentation oder Tests für unbetroffenes
+  Verhalten. Erforderliche Sicherheits- und Regressionstests gehören zum Auftrag.
+- Nach erfolgreicher Implementierung und den erforderlichen Prüfungen nur die
+  Aufgabenänderungen committen, auf den Feature-Branch pushen und den PR erstellen
+  oder aktualisieren. Kein eigenständiger Merge, kein Deployment. Im Abschluss
+  Prüfungen, Grenzen, Commit-/PR-Status und noch ausstehende CI klar nennen.

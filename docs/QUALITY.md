@@ -1,10 +1,12 @@
 # Verbindliches Quality Gate
 
 Die Root-`AGENTS.md` gilt für alle Codex-Aufträge, zusätzlich zu Regeln in
-Unterverzeichnissen. Nach zusammenhängenden Änderungen laufen passende Tests und
-Analysen. Vor lokalen Commits genügt **QUICK** beziehungsweise eine geeignete
-Komponentenprüfung; der installierte Commit-Hook führt QUICK aus. Vor Merge nach
-`main` und Deployment bleibt **FULL für den exakten Commit** verbindlich.
+Unterverzeichnissen. Lokal laufen nach zusammenhängenden Änderungen nur betroffene
+Tests und notwendige statische/Compiler-/Typprüfungen. Der verpflichtende
+Commit-Hook führt **QUICK** aus; unmittelbar davor ist kein manueller QUICK-Lauf
+nötig. **FULL läuft in GitHub Actions** und bleibt vor Merge nach `main` und
+Deployment für den exakten akzeptierten Commit verbindlich. Ein lokaler FULL-Lauf
+ist ausschließlich bei ausdrücklich notwendiger Fehlerdiagnose vorgesehen.
 
 Fehler, Compilerwarnungen, Conversion- und Null-Type-Safety-Diagnosen werden behoben.
 Auch ECJ-Probleme mit Schweregrad `INFO` blockieren. Keine pauschalen Suppressions,
@@ -14,13 +16,14 @@ bewusst weniger als FULL und ist keine vollständige Freigabe des Projekts.
 ## Aufruf und Voraussetzungen
 
 ```sh
-scripts/check-quality.sh --quick       # Entwicklung und lokaler Commit
+scripts/check-quality.sh --quick       # Commit-Hook; keine manuelle Doppelprüfung
 scripts/check-quality.sh --backend     # STANDARD: vollständige Backend-Prüfung
 scripts/check-quality.sh --frontend    # STANDARD: vollständige Frontend-Prüfung
-scripts/check-quality.sh --full        # beide Komponenten, vor Merge/Deployment
+scripts/check-quality.sh --full        # GitHub Actions; lokal nur nötige Diagnose
 ```
 
-Ohne Argument läuft weiterhin FULL. Alle Modi benötigen Bash, Git, Python 3 und
+Ohne Argument läuft weiterhin FULL; lokal daher immer den beabsichtigten Modus
+explizit wählen. Alle Modi benötigen Bash, Git, Python 3 und
 `tee`. Backend-Prüfungen benötigen JDK mindestens 21 und den Maven-Wrapper;
 Integrationstests zusätzlich einen erreichbaren Docker-Daemon. Frontend benötigt
 eine unterstützte Node-Version und einmalig `cd frontend && npm ci`. CI verwendet
@@ -36,7 +39,7 @@ Fehlende benötigte Werkzeuge/Dependencies führen zum Fehler, nicht zum Übersp
 | Backend ECJ einschließlich Tests und XML-Auswertung | bei Backend-Betroffenheit vollständig | vollständig |
 | Echte negative Java-Fixtures | bei geänderten Java-Analyseregeln/-Werkzeugen | bei geänderten Regeln; FULL immer |
 | Backend-Tests | betroffene Unit-Klassen/Pakete über Surefire; Datenbanktests ausdrücklich zurückgestellt | gesamtes `verify` mit Paketierung |
-| PostgreSQL | entfällt; Integrationstests STANDARD/FULL | bei Backend immer |
+| PostgreSQL | entfällt; Integrationstests in STANDARD/FULL | bei Backend immer |
 | Next-Typegen und TypeScript | bei Frontend-Betroffenheit vollständig | bei Frontend vollständig |
 | ESLint mit null Warnungen | geänderte JS-/TS-Dateien, bei gemeinsamem Setup vollständig | bei Frontend vollständig |
 | Frontend-Regressionstests | bei Frontend-Betroffenheit aktuelle gemeinsame Suite | bei Frontend vollständig |
@@ -47,6 +50,87 @@ STANDARD bezeichnet die bestehenden Modulschalter, keinen neuen `--standard`-
 Schalter. FULL führt beide Module aus und beendet sich bei jeder fehlgeschlagenen
 Pflichtprüfung mit Fehler. `skipTests=false` und `maven.test.skip=false` bleiben
 explizit gesetzt; es gibt keinen Skip-Schalter.
+
+## Lokaler Ablauf nach Änderungsumfang
+
+| Umfang | Beispiele | Erforderliche lokale Entwicklungsschritte |
+| --- | --- | --- |
+| Klein | CSS, Texte, einfache Komponenten, isolierte Fehlerkorrektur | Direkt betroffene Tests und notwendige statische/Compiler-/Typprüfungen; keine vollständigen Backendtests oder unnötigen Browserprüfungen |
+| Mittel | Discovery-Services, API-Endpunkte, Datenverarbeitung | Betroffene Unit- und Integrationstests, nötige Datenbanktests ausschließlich isoliert; keine wiederholte vollständige Modulsuite |
+| Umfangreich | Migrationen, Authentifizierung, Infrastruktur, gemeinsame Build-Konfiguration | Erforderliche Modulprüfungen und risikoabhängige Integrationstests; Modulwahl begründen |
+
+Für alle Umfänge ist der bestehende QUICK-Hook die Commitprüfung; FULL bleibt in
+GitHub Actions. Der tatsächliche Wirkungsbereich entscheidet, nicht die Zahl
+geänderter Zeilen. Sicherheits- und Regressionstests für das neue Verhalten sind
+verpflichtend. STANDARD (`--backend`/`--frontend`) ist eine vollständige
+Modulprüfung, kein zusätzlicher Routineabschluss jeder kleinen Aufgabe.
+
+Während der Entwicklung lassen sich vorhandene Tests gezielt auswählen, zum
+Beispiel einzelne Surefire-Klassen/-Methoden über `-Dtest=…` oder vorhandene
+Frontend-Testdateien über `node --test tests/<betroffener-test>.test.mjs`.
+Dazu kommen die notwendigen Compiler-/Typprüfungen und ESLint der betroffenen
+Dateien. Gemeinsame Typ- oder Compilereingaben können eine breitere Analyse
+verlangen. Keine Warnregeln, Tests oder verpflichtenden Hooks deaktivieren.
+
+Gezielte Java-Tests dürfen keine geerbten Entwicklungs-/Produktionszugangsdaten
+verwenden: Unit-Tests ohne Datenbank verwenden wie QUICK eine absichtlich
+unerreichbare Loopback-Verbindung. Für Datenbanktests gelten dieselben
+Isolationsanforderungen wie für STANDARD/FULL: frischer PostgreSQL-Testcontainer
+mit eigenen Zugangsdaten, ohne vorhandene Volumes, zufälliger ausschließlich an
+127.0.0.1 gebundener Port, deaktivierte Discovery-Scheduler, eigenes Medienverzeichnis
+und geprüftes Cleanup auch bei Fehler/Abbruch. `DB_*`, `SPRING_DATASOURCE_*` und
+`SPRING_FLYWAY_*` müssen auf diese Testumgebung zeigen. Fehlt die Isolation, darf
+der Test nicht laufen. Solche gezielten Integrationstests ergänzen QUICK; sie
+werden dadurch weder Bestandteil von QUICK noch Ersatz für CI FULL.
+
+### Ergebnisse wiederverwenden, Grenzen festhalten
+
+Zu einem Prüfergebnis gehören Befehl, Ergebnis, geprüfter Codezustand und
+verbleibende Grenzen. Bei einem Commit die SHA nennen; vor dem Commit die
+betroffenen Dateien beziehungsweise den Diffstand samt relevanten Test-,
+Konfigurations- und Abhängigkeitsänderungen festhalten. Ein kurzer Aufgabenstand
+oder PR-Vermerk genügt; keine neue Dokumentationsdatei pro kleiner Änderung.
+
+Bereits bestandene Prüfungen nicht erneut manuell ausführen, solange ihre
+relevanten Eingaben unverändert sind. Nach einem Fehler fachlich korrigieren und
+nur die fehlgeschlagene oder durch die Korrektur betroffene Prüfung wiederholen.
+Änderungen an gemeinsamen Eingaben entwerten gegebenenfalls weitere Ergebnisse;
+diese gelten dann nicht als Nachweis für den neuen Stand. Identische Builds in
+einer unveränderten Arbeitsphase nicht wiederholen. Zusätzliche lokale
+STANDARD-/FULL-Läufe benötigen einen konkreten, festgehaltenen Diagnose- oder
+Risikogrund; FULL lokal nur bei ausdrücklich notwendiger Fehlerdiagnose.
+
+Diese Wiederverwendung betrifft zusätzliche manuelle Entwicklungsläufe. Der
+verpflichtende Hook und CI führen ihre bestehenden Prüfungen weiterhin aus.
+Keine Skip-Flags, alternativen Hookpfade oder alten Erfolgsmarker zur Freigabe
+verwenden. Ein Hookfehler wird behoben; der nächste reguläre Commitversuch führt
+QUICK erneut aus. Für CI-Freigaben zählt unverändert ausschließlich der exakte
+akzeptierte Commit, niemals ein Erfolg eines abweichenden Stands.
+
+### Zusätzliche lokale Browserprüfungen
+
+Nur sichtbare UI-Änderungen oder browserabhängiges Verhalten erfordern zusätzliche
+lokale Browserprüfungen. Standard sind **1440 px Desktop** und **390 px Smartphone**;
+weitere Größen nur bei einem konkreten Fehler oder ausdrücklichem Auftrag.
+Bestehende Fixtures und Browserwerkzeuge verwenden, keine neue Screenshot-
+Infrastruktur für eine einzelne kleinere Änderung aufbauen. Unveränderte
+Ansichten nicht wiederholt aufnehmen. Die verpflichtenden Browser-Worker- und
+Sandbox-Regressionen im Gate bleiben davon unberührt.
+
+### Umfang und Abschluss
+
+Keine ungefragten Features, umfassenden Refactorings, neue Infrastruktur oder
+Dokumentation/Tests außerhalb des Auftrags ergänzen. Nötige Sicherheits- und
+Regressionstests bleiben Teil des Auftrags. Nach erfolgreicher Implementierung
+und erforderlicher Prüfung direkt nur die Aufgabenänderungen committen, auf einen
+Feature-Branch pushen und den PR erstellen oder aktualisieren. Kein eigener Merge
+und kein Deployment. Der Abschluss nennt Prüfergebnisse, Einschränkungen,
+Commit-/PR-Status und ausstehende CI; keine ungetestete Fertigmeldung.
+
+Arbeitsphase dieser Regelaktualisierung (06.11.2026): bestehende Hook-/Scope-Auswahl
+geprüft, widersprüchliche lokale Wiederholungsvorgaben ersetzt. Die Skripte
+benötigen dafür keine Änderung. Prüfung: finaler Dokumentationsdiff und regulärer
+QUICK-Hook; Modul-/Browserprüfungen sind für diese reine Regeländerung nicht nötig.
 
 ## Wie QUICK seinen Umfang bestimmt
 
@@ -217,7 +301,8 @@ sind idempotent. Die versionierte `.githooks/pre-commit` ruft immer `--quick` au
 manipuliert keine gestagten Dateien und führt weder Commit noch Push aus.
 
 Bei Problemen: tatsächliche Fehlermeldung/Log untersuchen, fachlich korrigieren,
-betroffene Checks wiederholen und vor dem Commit QUICK erfolgreich abschließen. Bei defekter
+nur fehlgeschlagene oder durch die Korrektur betroffene Checks wiederholen;
+der nächste reguläre Commitversuch führt QUICK aus. Bei defekter
 Prüfumgebung die Ursache dokumentieren und die Umgebung reparieren; nicht
 `--no-verify` verwenden. Keine ungetestete Änderung als abgeschlossen melden.
 
@@ -340,7 +425,7 @@ kein Bestandteil des CI-Gates und verändert keine Datenbank. Architektur,
 Cloud-Voraussetzungen und Grenzen: [BROWSER-CRAWLER.md](BROWSER-CRAWLER.md).
 
 
-### Nachtrag: kürzere Entwicklungszyklen
+### Technische Abgrenzung der bestehenden Modi
 
 QUICK kompiliert/analysiert auch Integrationstestquellen streng, führt aber nur
 betroffene Tests ohne Datenbank aus. Zurückgestellte Datenbanktests werden mit
