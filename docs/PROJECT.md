@@ -3794,3 +3794,13 @@ Redaktionsübergabe, Rückfragen und geschützter manueller Entscheidungen bleib
 erhalten. Keine Backend-/Schema-/Crawler-/Deployment-Änderungen. Arbeitsphasen,
 Dateiübersicht, Prüfungen, Browser-Screenshots und Grenzen stehen in
 [DISCOVERY-REDESIGN.md](DISCOVERY-REDESIGN.md).
+
+# 30. Konfigurierbare Darstellung (06.11.2026)
+
+Graphit (`graphite`) und Kompakt (`compact`) sind die Standardpräferenzen ohne
+vorhandene Browserauswahl. Unter Dashboard → Darstellung lassen sich Graphit,
+Dunkel und Hell sowie kompakte/komfortable Informationsdichte unabhängig wählen.
+Die vorhandene Hell-/Dunkel-Auswahl bleibt kompatibel. Speicherung erfolgt lokal
+im Browser; CSS-Variablen steuern Farben, Abstände und Größen. Keine Änderung an
+Backend oder Discovery-Logik. Arbeitsnachweis und Grenzen:
+[UI-PREFERENCES.md](UI-PREFERENCES.md).

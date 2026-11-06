@@ -127,6 +127,16 @@ Den gewünschten Status auswählen und **Entwurf anlegen** beziehungsweise **Ent
 
 Die Karte **Pre-Publishing-Gates** enthält zusätzliche lokale Prüfhaken. Ihr Knopf **Freigabe technisch vorbereitet** beziehungsweise **Freigabe noch blockiert** ist noch nicht bedienbar. Die Kachelreihenfolge und diese Prüfhaken bleiben nur in der aktuellen Ansicht. Eine dauerhafte Veröffentlichungsplanung und automatisches Instagram-Publishing sind noch nicht vorhanden. Veröffentlichungen erfolgen getrennt nach dem vereinbarten Teamablauf.
 
+## Persönliche Darstellung
+
+Mit **Darstellung** oben im Dashboard wählst du **Graphit**, **Dunkel** oder
+**Hell** und unabhängig davon **Kompakt** oder **Komfortabel**. Die Änderung wirkt
+sofort und bleibt in diesem Browser gespeichert. Neue Browser starten mit
+Graphit und Kompakt; eine bereits gespeicherte Themeauswahl bleibt erhalten.
+Kompakt verwendet geringere Abstände. Auf Touchscreens bleiben die Bedienelemente
+mindestens 44 Pixel hoch. Auf anderen Geräten musst du die Auswahl separat
+vornehmen. Der Theme-Schnellschalter bleibt ebenfalls verfügbar.
+
 ## Discovery: Website-Funde kontrollieren
 
 Mit **Discovery → Jetzt suchen** forderst du eine neue Suche für aktivierte Locations an. Ergebnisse erscheinen nach Abschluss; während eines laufenden Vorgangs warten.
