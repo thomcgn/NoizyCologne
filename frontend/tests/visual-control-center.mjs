@@ -51,7 +51,35 @@ try {
     }
     const name = `${theme}-${density}-${width}-${state}`;
     await page.screenshot({path: `${out}/${name}.png`, fullPage: true});
+    if (phase === 4) {
+      await page.getByRole('button', {name: 'Globale Suche öffnen', exact: true}).click();
+      const dialog = page.getByRole('dialog');
+      await dialog.waitFor();
+      const search = dialog.getByRole('searchbox', {name: 'Global suchen'});
+      assert.equal(await search.evaluate(element => element === document.activeElement), true);
+      await search.fill('DJ Beispiel');
+      if (state === 'populated') {
+        const result = dialog.getByRole('link', {name: 'DJ Beispiel dj_0', exact: true});
+        await result.waitFor();
+        await page.keyboard.press('ArrowDown');
+        assert.equal(await result.evaluate(element => element === document.activeElement), true);
+        await page.screenshot({path: `${out}/${name}-search.png`});
+        await result.click();
+        await page.getByRole('dialog').getByRole('textbox').first().waitFor();
+        assert.equal(await page.getByRole('dialog').getByRole('textbox').first().inputValue(), 'DJ Beispiel');
+        await page.keyboard.press('Escape');
+      } else {
+        await dialog.getByRole(state === 'error' ? 'alert' : 'status').first().waitFor();
+        await page.keyboard.press('Escape');
+      }
+      await page.getByRole('dialog').waitFor({state: 'detached'});
+      await page.keyboard.press('Control+k');
+      await page.getByRole('dialog').waitFor();
+      await page.keyboard.press('Escape');
+      await page.getByRole('dialog').waitFor({state: 'detached'});
+    }
     for (const route of ['/dashboard/vorschlaege', '/dashboard/partys', '/dashboard/djs', '/dashboard/locations', '/dashboard/kalender', '/dashboard/redaktion', '/dashboard/settings', '/dashboard/automatisierung']) {
+      if (phase === 4) continue;
       if (phase === 1 && !['/dashboard/settings', '/dashboard/automatisierung'].includes(route)) continue;
       if (phase === 2 && route !== '/dashboard/vorschlaege') continue;
       if (phase === 3 && !['/dashboard/partys', '/dashboard/djs', '/dashboard/locations', '/dashboard/kalender'].includes(route)) continue;

@@ -734,3 +734,44 @@ for (const [file, props] of [['portfolio/page.tsx', {standalone: true}], ['portf
     } finally {window.confirm = () => true;}
   });
 }
+
+test('global search filters real catalogue data, supports keyboard commands and protects active editors', async () => {
+  catalogue = {parties: [party], venues: [venue], actors: [actor], entries: [entry]};
+  const Palette = loadSource(new URL('../src/app/dashboard/CommandPalette.tsx', import.meta.url)).default;
+  let runs = 0;
+  mount(h(Palette, {action: {id: 'create', label: 'Neuer Eintrag', run: () => runs++}}));
+  const trigger = document.querySelector('button'); trigger.focus();
+  act(() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'k', ctrlKey: true, bubbles: true, cancelable: true})));
+  const search = document.querySelector('input[type="search"]');
+  assert.equal(document.activeElement, search);
+  changeField(search, 'Test DJ');
+  assert.equal(document.querySelectorAll('.cc-command-result').length, 1);
+  const result = document.querySelector('.cc-command-result');
+  assert.equal(result.getAttribute('href'), '/dashboard/djs#record=actor');
+  key('ArrowDown'); assert.equal(document.activeElement, result);
+  key('Escape'); assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.equal(document.activeElement, trigger);
+  click(trigger);
+  changeField(document.querySelector('input[type="search"]'), 'Neuer Eintrag');
+  click([...document.querySelectorAll('button')].find(button => button.textContent === 'Neuer Eintrag'));
+  assert.equal(runs, 1); assert.equal(document.querySelector('[role="dialog"]'), null);
+  const editor = document.createElement('div'); editor.setAttribute('role', 'dialog'); document.body.append(editor);
+  act(() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'k', metaKey: true, bubbles: true})));
+  assert.equal(document.querySelectorAll('[role="dialog"]').length, 1);
+});
+
+test('record links resolve after catalogue loading and reopen on same-page hash navigation', async () => {
+  const {useRecordLink, recordLink} = loadSource(new URL('../src/app/dashboard/useRecordLink.ts', import.meta.url));
+  const opened = [];
+  function Links({items}) {useRecordLink(items, item => opened.push(item.id)); return null;}
+  window.history.replaceState(null, '', recordLink('/dashboard/partys', 'party:40'));
+  try {
+    mount(h(Links, {items: []})); assert.deepEqual(opened, []);
+    act(() => root.render(h(Links, {items: [{id: 'party:40'}, {id: 'other'}]})));
+    assert.deepEqual(opened, ['party:40']);
+    act(() => root.render(h(Links, {items: [{id: 'party:40'}, {id: 'other'}]})));
+    assert.deepEqual(opened, ['party:40']);
+    act(() => {window.history.replaceState(null, '', recordLink('/dashboard/partys', 'other')); window.dispatchEvent(new Event('hashchange'));});
+    assert.deepEqual(opened, ['party:40', 'other']);
+  } finally {window.history.replaceState(null, '', '/');}
+});

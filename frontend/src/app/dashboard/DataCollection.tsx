@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { preferenceStore } from "../ThemeProvider";
+import { useRecordLink } from "./useRecordLink";
 
 export type CollectionColumn<T> = {key: string; label: string; render: (item: T) => ReactNode; sortValue?: (item: T) => string | number; className?: string};
 const views = ["table", "cards"] as const;
@@ -15,6 +16,7 @@ export default function DataCollection<T extends {id: string}>({items, columns, 
   const [localQuery, setLocalQuery] = useState("");
   const [sort, setSort] = useState({key: initialSortKey ?? columns[0]?.key ?? "", ascending: true});
   const [page, setPage] = useState(0);
+  useRecordLink(items, onOpen, openDisabled);
   const search = query ?? localQuery;
   const matching = useMemo(() => {
     const needle = search.trim().toLocaleLowerCase("de-DE");

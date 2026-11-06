@@ -10,7 +10,7 @@ Bestehende APIs, Authentifizierung, Redaktion und Absageabläufe bleiben erhalte
 1. Designsystem und Desktop-Shell – umgesetzt und lokal geprüft.
 2. Discovery als kompakte Arbeitsliste – umgesetzt und lokal geprüft.
 3. Portfolio/Kalender, Tabellen und Detailbereiche – umgesetzt und lokal geprüft.
-4. Globale Suche und Command-Palette – ausstehend.
+4. Globale Suche und Command-Palette – umgesetzt und lokal geprüft.
 5. Redaktion und mobile PWA – ausstehend.
 
 Jede Phase erhält einen eigenen Commit mit regulärem QUICK-Hook und Push auf
@@ -106,3 +106,23 @@ Vorschauserver im Next-Ausgabeverzeichnis; Wiederholung nach dessen Beenden
 erfolgreich. Regulärer QUICK-Hook als Commitprüfung.
 Kein Zugriff auf echte Daten und keine API-Schreibaufrufe in den Browserszenarien.
 Live-IDE-/Geräteprüfung und CI-FULL bleiben gesonderte Abnahmegrenzen.
+
+
+## Phase 4
+
+Globale Suche im Header, erreichbar per Strg/⌘ K. Sie durchsucht die tatsächlich
+im Katalog geladenen Partyreihen, Locations, Akteure und Termine und bietet
+Navigation sowie die aktuelle Arbeitsbereichsaktion an. Maximal fünf Treffer je
+Bereich, Lade-/Fehlerzustände und ein leerer Suchzustand sind sichtbar. Pfeiltasten,
+Tab und Escape funktionieren mit Fokus-Rückkehr. Ein geöffneter Editor wird durch
+den Shortcut nicht mit einem zweiten Dialog überlagert. Datensatzlinks öffnen den
+passenden Drawer auch nach verzögertem Laden und bei Hash-Navigation auf derselben
+Seite. Keine neuen Such-APIs und keine Datenänderungen durch Suche.
+
+Prüfungen: STANDARD-Frontend mit TypeScript, ESLint (null Warnungen), 63 Tests und
+Produktionsbuild erfolgreich. Neun Chrome-Szenarien mit drei Themes, zwei Dichten,
+1440/768/390/320 px und leeren/fehlerhaften Daten erfolgreich. Fokus, Pfeiltasten,
+Shortcut, Escape sowie tatsächlicher Wechsel vom Treffer zum passenden
+Akteurseditor geprüft. Screenshot der Desktop-Suche gesichtet; Artefakte unter
+`.quality/control-center/phase-4/`. Regulärer QUICK-Hook prüft den Commitstand.
+Bestehende Live-IDE-/Geräte-/CI-Grenzen bleiben bestehen.

@@ -11,6 +11,7 @@ import WorkspaceIcon from "./WorkspaceIcon";
 import { workspaceRoute } from "./workspaceRoutes";
 import { WorkspaceActionContext, type WorkspaceAction } from "./workspaceActions";
 import { useCatalog } from "./CatalogProvider";
+import CommandPalette from "./CommandPalette";
 
 const sidebar = preferenceStore("noizy-sidebar", ["expanded", "collapsed"], "expanded", "noizy-sidebar-change");
 export default function ApplicationShell({children}: {children: ReactNode}) {
@@ -29,6 +30,7 @@ export default function ApplicationShell({children}: {children: ReactNode}) {
           <header className="cc-workspace-header">
             <div className="cc-workspace-title"><WorkspaceIcon name={route.icon} /><span>{route.label}</span></div>
             <div className="cc-header-actions">
+              <CommandPalette action={action} />
               {!draftsLoading && !draftsError && needsReview > 0 && <Link href="/dashboard/redaktion" className="cc-attention" aria-label={`${needsReview} Redaktionsentwürfe mit Prüfhinweis`}><WorkspaceIcon name="alert" /><span>{needsReview}</span></Link>}
               {action && <button className="cc-button cc-button-primary cc-context-action" disabled={action.disabled} onClick={action.run}>{action.label}</button>}
               <DisplayPreferences /><ThemeToggle /><LogoutButton />
