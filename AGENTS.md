@@ -31,7 +31,7 @@ workflow files alone do not prevent an administrator from merging unchecked code
 Do not use `--no-verify`, alternate hook paths or skip flags to bypass the gate.
 
 When database tests are required, the gate creates its own disposable PostgreSQL
-database; QUICK must not start Docker for pure unit tests or documentation changes.
+database; QUICK never starts a database container; selected database integration tests are explicitly deferred to STANDARD/FULL, while all current Java test sources remain compiled/analyzed.
 Never point tests at the development or production database.
 See `docs/QUALITY.md` for prerequisites,
 Java/IDE coverage limits and hook installation. Configured JSpecify `@NullMarked` defaults
@@ -41,3 +41,13 @@ separate compatible validation. Use explicit null checks at unannotated library 
 do not invent non-null guarantees to make diagnostics disappear. Passing either or both
 compiler versions does not establish live IDE warning freedom. Existing frontend-specific
 `AGENTS.md` instructions remain in force.
+
+## Keep routine work focused
+
+- Read only the instructions and project sections relevant to the requested change; do not repeat a whole-project audit for each small task.
+- Prefer small changes and reuse tested functions. Avoid unsolicited refactors, extra infrastructure and tests for unaffected behavior.
+- Run targeted checks after coherent edits. After a correction, rerun failed or affected checks, not every completed check.
+- The regular pre-commit QUICK hook is the commit check; do not manually run the same QUICK immediately beforehand. Do not repeat FULL for an unchanged commit. FULL remains mandatory in CI before integration or deployment.
+- STANDARD (`--backend`/`--frontend`) covers its module, using safe incremental compilation. FULL performs clean Java compilation. Deletions/shared compiler inputs invalidate stale outputs in every mode.
+- QUICK explicitly reports deferred database tests. It is not a complete integration certificate. Never invent success for a check that did not run.
+- Record phase changes, checks and remaining limits in the task document. Timing targets guide scope, never abort required checks or justify unfinished work.

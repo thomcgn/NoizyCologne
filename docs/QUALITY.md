@@ -32,11 +32,11 @@ Fehlende benötigte Werkzeuge/Dependencies führen zum Fehler, nicht zum Übersp
 | --- | --- | --- |
 | Diff, Index, Secrets, Konflikte, Shell-Syntax | immer | immer |
 | Gate-/Hook-/Deploy-Selbsttests | bei Werkzeug-/Workflowänderungen | immer |
-| Backend javac | inkrementelles `test-compile`, bei Löschungen/Konfigurationsänderungen mit `clean` | `clean test-compile` |
+| Backend javac | inkrementelles `test-compile`, bei Löschungen/Konfigurationsänderungen mit `clean` | STANDARD inkrementell; FULL `clean test-compile` |
 | Backend ECJ einschließlich Tests und XML-Auswertung | bei Backend-Betroffenheit vollständig | vollständig |
 | Echte negative Java-Fixtures | bei Backend plus Werkzeugänderung | bei Backend immer |
-| Backend-Tests | betroffene Klassen/Pakete über Surefire | gesamtes `verify` mit Paketierung |
-| PostgreSQL | nur für ausgewählte Integrationstests | bei Backend immer |
+| Backend-Tests | betroffene Unit-Klassen/Pakete über Surefire; Datenbanktests ausdrücklich zurückgestellt | gesamtes `verify` mit Paketierung |
+| PostgreSQL | entfällt; Integrationstests STANDARD/FULL | bei Backend immer |
 | Next-Typegen und TypeScript | bei Frontend-Betroffenheit vollständig | bei Frontend vollständig |
 | ESLint mit null Warnungen | geänderte JS-/TS-Dateien, bei gemeinsamem Setup vollständig | bei Frontend vollständig |
 | Frontend-Regressionstests | bei Frontend-Betroffenheit aktuelle gemeinsame Suite | bei Frontend vollständig |
@@ -94,7 +94,7 @@ Discovery-Scheduler bleiben deaktiviert. `MEDIA_ROOT` zeigt ins Laufverzeichnis;
 Container und anonyme Daten werden auch bei Fehler/Abbruch entfernt. Ein
 fehlgeschlagenes Cleanup verhindert die Erfolgsmeldung.
 
-Bei ausgewählten Unit-Tests ohne Datenbank wird eine absichtlich unerreichbare
+Bei QUICK-Unit-Tests ohne Datenbank wird eine absichtlich unerreichbare
 Loopback-Verbindung vorgegeben. Ein übersehener Datenbankbedarf muss fehlschlagen,
 statt eine geerbte Entwicklungs-/Produktionsverbindung zu verwenden.
 
@@ -338,3 +338,15 @@ Browserversion. Die Registry muss beim ersten Lauf erreichbar sein; kalte Images
 brauchen zusätzlich Zeit und Plattenplatz. Das eigenständige Live-Probeskript ist
 kein Bestandteil des CI-Gates und verändert keine Datenbank. Architektur,
 Cloud-Voraussetzungen und Grenzen: [BROWSER-CRAWLER.md](BROWSER-CRAWLER.md).
+
+
+### Nachtrag: kürzere Entwicklungszyklen
+
+QUICK kompiliert/analysiert auch Integrationstestquellen streng, führt aber nur
+betroffene Tests ohne Datenbank aus. Zurückgestellte Datenbanktests werden mit
+Klassennamen ausdrücklich ausgegeben. Ein Fehler in einem ausgewählten Unit-Test
+blockiert weiterhin. `--backend` führt sämtliche Backend-/Datenbanktests aus,
+verwendet aber ohne Löschungen/Compiler-Konfigurationsänderungen inkrementelles
+javac; ECJ prüft aktuelle Quellen jedes Mal vollständig. FULL bleibt sauber und
+vollständig. Der normale Hook genügt als Commitprüfung; keine zweite manuelle
+QUICK-/FULL-Wiederholung unmittelbar vor demselben Hook.

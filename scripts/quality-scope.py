@@ -87,6 +87,11 @@ def code_input(name):
     return not is_document(name)
 
 
+def database_test(path):
+    return ('Integration' in path.name or path.stem.endswith('IT') or
+            re.search(r'@(?:SpringBootTest|DataJpaTest|JdbcTest|DataJdbcTest|SpringJUnitConfig)\b', path.read_text()) is not None)
+
+
 def test_classes(root, paths, all_backend=False):
     tests_root = root / 'backend/src/test/java'
     tests = sorted(tests_root.rglob('*.java')) if tests_root.exists() else []
@@ -124,9 +129,7 @@ def test_classes(root, paths, all_backend=False):
     names = sorted('.'.join(path.relative_to(tests_root).with_suffix('').parts) for path in chosen)
     # Existing backend integration tests use SpringBootTest. Other standard Spring
     # database annotations and naming conventions fail conservatively toward isolation.
-    integration = any('Integration' in path.name or path.stem.endswith('IT') or
-                      re.search(r'@(?:SpringBootTest|DataJpaTest|JdbcTest|DataJdbcTest|SpringJUnitConfig)\b', path.read_text())
-                      for path in chosen)
+    integration = any(database_test(path) for path in chosen)
     return names, integration, reset
 
 
@@ -154,6 +157,9 @@ def plan(root, paths=None):
                                       for name in paths)
     names, integration, reset = test_classes(root, paths, shared_backend)
     result.update(backend_tests=names, backend_integration=integration, backend_reset_outputs=reset)
+    tests_root = root / 'backend/src/test/java'
+    deferred = [name for name in names if database_test(tests_root / (name.replace('.', '/') + '.java'))]
+    result.update(backend_unit_tests=[name for name in names if name not in deferred], backend_deferred_tests=deferred)
     return result
 
 

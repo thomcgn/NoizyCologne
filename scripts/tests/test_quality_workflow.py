@@ -76,7 +76,7 @@ printf '%s %s\\n' "$name" "$*" >> "$FIXTURE_ROOT/calls"
 case "$name:$*" in
  docker:run*) printf '%s\\n' fixture-container; exit 0 ;;
  docker:port*) printf '%s\\n' 127.0.0.1:55435; exit 0 ;;
- mvnw:*surefire:test*) printf '%s\\n' "$DB_URL" "$SPRING_DATASOURCE_URL" "$SPRING_FLYWAY_URL" > "$FIXTURE_ROOT/test-connection" ;;
+ mvnw:*surefire:test*|mvnw:*verify*) printf '%s\\n' "$DB_URL" "$SPRING_DATASOURCE_URL" "$SPRING_FLYWAY_URL" > "$FIXTURE_ROOT/test-connection" ;;
 esac
 case "$name:$*:$fail" in
  mvnw:*test-compile*:java-error|mvnw:*test-compile*:java-warning|mvnw:*verify*:test-failure|mvnw:*surefire:test*:test-failure|tsc:*:typescript|npm:*lint*:eslint-warning|npm:*test*:frontend-test|npm:*build*:build|docker:rm*:cleanup) exit 1 ;;

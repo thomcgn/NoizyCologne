@@ -1,4 +1,5 @@
 #!/bin/sh
 set -eu
+# Scoped compilers/unit regressions; database integration and builds run in CI FULL.
 root=$(git rev-parse --show-toplevel)
 exec "$root/scripts/check-quality.sh" --quick

@@ -222,7 +222,7 @@ class QuickWorkflowTests(WorkflowFixture, unittest.TestCase):
         path = self.root / 'backend/src/test/java/fixture/ProbeIntegrationTests.java'
         path.write_text('package fixture; @SpringBootTest class ProbeIntegrationTests {}\n')
         self.git('add', str(path.relative_to(self.root)))
-        result = self.run_gate('test-failure', '--quick')
+        result = self.run_gate('test-failure', '--backend')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('FAILED at backend-tests.', result.stderr)
         self.assertIn('docker run --rm -d', self.calls())
@@ -230,11 +230,31 @@ class QuickWorkflowTests(WorkflowFixture, unittest.TestCase):
         self.assertEqual((self.root / 'test-connection').read_text().splitlines(),
                          ['jdbc:postgresql://127.0.0.1:55435/noizy_quality'] * 3)
 
+    def test_quick_defers_database_tests_explicitly_but_compiles_them(self):
+        path = self.root / 'backend/src/test/java/fixture/ProbeIntegrationTests.java'
+        path.write_text('package fixture; @SpringBootTest class ProbeIntegrationTests {}\n')
+        self.git('add', str(path.relative_to(self.root)))
+        result = self.run_gate(mode='--quick')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('Deferred database integration tests', result.stdout)
+        self.assertIn('fixture.ProbeIntegrationTests', result.stdout)
+        self.assertIn('test-compile', self.calls())
+        self.assertNotIn('docker ', self.calls())
+        self.assertNotIn('surefire:test', self.calls())
+
+    def test_backend_standard_uses_incremental_compile_and_full_database_tests(self):
+        result = self.run_gate(mode='--backend')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('test-compile', self.calls())
+        self.assertNotIn(' clean ', self.calls())
+        self.assertIn(' verify ', self.calls())
+        self.assertIn('docker run', self.calls())
+
     def test_database_cleanup_failure_cannot_report_a_successful_gate(self):
         path = self.root / 'backend/src/test/java/fixture/ProbeIntegrationTests.java'
         path.write_text('package fixture; @SpringBootTest class ProbeIntegrationTests {}\n')
         self.git('add', str(path.relative_to(self.root)))
-        result = self.run_gate('cleanup', '--quick')
+        result = self.run_gate('cleanup', '--backend')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('FAILED at database-cleanup.', result.stderr)
         self.assertNotIn('[quality] PASSED', result.stdout)

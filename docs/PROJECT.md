@@ -3746,3 +3746,18 @@ Sicherheitsgrenzen, Ressourcenlimits, genaue Prüfverfahren und Voraussetzungen
 vor einer späteren Produktionseinführung stehen in
 [BROWSER-CRAWLER.md](BROWSER-CRAWLER.md). Die Ausführung erfolgte mit ausdrücklicher
 Erlaubnis lokal im isolierten Worktree, nicht in Codex Cloud oder auf dem VPS.
+
+# 28. Performance und Multi-Source-Discovery (06.11.2026)
+
+Die schrittweise Erweiterung basiert auf Kapitel 27 und verwendet vorhandene
+Quellen-/Kandidaten-/Monitoring-Tabellen. Arbeitsnachweis mit Phasen, tatsächlich
+ausgeführten Prüfungen und verbleibenden Risiken:
+[MULTI-SOURCE-DISCOVERY.md](MULTI-SOURCE-DISCOVERY.md).
+
+QUICK führt ausgewählte Unit-Tests und strikte Compiler-/Nullanalysen aus;
+Datenbanktests werden ausdrücklich STANDARD/FULL zugewiesen. Der normale Hook
+ist die Commitprüfung und wird nicht unmittelbar durch einen zweiten identischen
+manuellen Lauf ergänzt. STANDARD-Backend kompiliert ohne unnötiges clean;
+FULL und Löschungs-/Konfigurationsfälle bleiben sauber. Die tatsächliche main-
+Absicherung war bei der lesenden Prüfung noch deaktiviert; notwendige Schritte
+bleiben in QUALITY.md dokumentiert.

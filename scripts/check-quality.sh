@@ -120,8 +120,8 @@ if [[ "$backend" == true ]]; then
   require java
   [[ -x backend/mvnw ]] || { printf 'Maven wrapper missing/not executable: backend/mvnw\n' >&2; exit 1; }
   compile_goals=(test-compile)
-  if [[ "$mode" != --quick || $(scope_value backend_reset_outputs) == true ]]; then
-    # FULL/standard retain a fresh javac warning pass. QUICK only cleans after
+  if [[ "$mode" == --full || $(scope_value backend_reset_outputs) == true ]]; then
+    # FULL retains a fresh javac warning pass. Other modes clean after
     # deletions, renames or shared configuration changes that can retain stale classes.
     compile_goals=(clean test-compile)
   fi
@@ -141,7 +141,7 @@ if [[ "$backend" == true ]]; then
   export DB_PASSWORD DISCOVERY_ENABLED=false DISCOVERY_MONITOR_ENABLED=false MEDIA_ROOT="$log_dir/media"
   export SPRING_DATASOURCE_URL="$DB_URL" SPRING_DATASOURCE_USERNAME="$DB_USER" SPRING_DATASOURCE_PASSWORD="$DB_PASSWORD"
   export SPRING_FLYWAY_URL="$DB_URL" SPRING_FLYWAY_USER="$DB_USER" SPRING_FLYWAY_PASSWORD="$DB_PASSWORD"
-  if [[ "$mode" != --quick || $(scope_value backend_integration) == true ]]; then
+  if [[ "$mode" != --quick ]]; then
     step=database-prerequisites
     require docker
     run docker docker info --format '{{.ServerVersion}}'
@@ -159,7 +159,12 @@ if [[ "$backend" == true ]]; then
     printf '[quality] Optional historical discovery replay NOT RUN: NOIZY_DISCOVERY_SNAPSHOT is unset (private export required).\n'
   fi
   if [[ "$mode" == --quick ]]; then
-    mapfile -d '' -t tests < <(scope_list backend_tests)
+    mapfile -d '' -t tests < <(scope_list backend_unit_tests)
+    mapfile -d '' -t deferred < <(scope_list backend_deferred_tests)
+    if (( ${#deferred[@]} )); then
+      printf '[quality] Deferred database integration tests to --backend/FULL (not executed in QUICK):\n'
+      printf '  %s\n' "${deferred[@]}"
+    fi
     if (( ${#tests[@]} )); then
       selection=$(IFS=,; printf '%s' "${tests[*]}")
       run backend-tests ./backend/mvnw -f backend/pom.xml -B -ntp surefire:test "-Dtest=$selection" \
