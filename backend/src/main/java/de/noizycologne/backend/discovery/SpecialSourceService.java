@@ -47,6 +47,20 @@ public class SpecialSourceService {
         return id;
     }
     @Transactional
+    public void update(String id,String name,String input,String item,String title,String date) {
+        String address=url(input);
+        for (String selector:List.of(item,title,date)) if (!selector.isBlank()) org.jsoup.Jsoup.parse("").select(selector);
+        store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
+        var rows=store.jdbc().queryForList("SELECT * FROM discovery_sources WHERE id=? AND venue_id IS NULL AND deleted_at IS NULL",id);
+        if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Sonderquelle nicht gefunden");
+        if (Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM discovery_sources WHERE venue_id IS NULL AND url=? AND id<>?)",Boolean.class,address,id)))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Diese Sonderquelle ist bereits vorhanden");
+        var old=rows.getFirst();
+        boolean changed=!address.equals(old.get("url")) || !item.equals(old.get("item_selector")) || !title.equals(old.get("title_selector")) || !date.equals(old.get("date_selector"));
+        store.jdbc().update("UPDATE discovery_sources SET name=?,url=?,item_selector=?,title_selector=?,date_selector=? WHERE id=?",name.trim(),address,item,title,date,id);
+        if (changed) store.jdbc().update("UPDATE discovery_sources SET status='NOT_CHECKED',quality='NOT_CHECKED',event_count=NULL,last_fetched_at=NULL,last_success_at=NULL,fetch_diagnostics='',scan_complete=false WHERE id=?",id);
+    }
+    @Transactional
     public void delete(String id) {
         store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
         int changed=store.jdbc().update("UPDATE discovery_sources SET deleted_at=COALESCE(deleted_at,now()),enabled=false,approved=false WHERE id=? AND venue_id IS NULL",id);

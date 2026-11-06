@@ -240,7 +240,7 @@ Browserfunktion eingerichtet ist, versucht die Anwendung auch diese Inhalte zu
 lesen. Eine technische Warnung oder **Vollständigkeit nicht bestätigt** bedeutet:
 Es können weitere Termine existieren. Sieh auf der offiziellen Website nach;
 null auswertbare Veranstaltungen bedeutet nicht, dass dort nichts stattfindet.
-Unter **Discovery → Quellen & Konfiguration → Location-Quellen** siehst du den letzten Versuch und den
+Unter **Locations → Location bearbeiten → Quellenstatus aktualisieren** siehst du den letzten Versuch und den
 letzten erfolgreichen Abruf. Ein erfolgreicher Abruf bestätigt noch nicht alle
 inhaltlichen Angaben.
 
@@ -262,7 +262,7 @@ Entscheidungen werden durch den nächsten Scan nicht aufgehoben.
 | Anmeldung oder Laden schlägt fehl | Verbindung prüfen und erneut versuchen. Bei wiederholtem Fehler dem Team die genaue Meldung nennen. |
 | Eintrag nach dem Bearbeiten unverändert | Prüfen, ob **Übernehmen**, **Eintrag speichern** oder **Entwurf speichern** tatsächlich erfolgreich war. Vor Neuladen ungespeicherten Text sichern. |
 | Standardgenre nicht gefunden oder nicht aktiv | Unter **Einstellungen** den aktiven Anzeigenamen prüfen. Einen als nicht verfügbar angezeigten Altwert bewusst abwählen oder mit der Genrepflege klären. |
-| **0 Events**, **Veranstaltungsdaten nicht interpretierbar**, Website-Regeln oder Abruflimit | Die Ankündigung kann trotzdem existieren. Offizielle Programmseite im Browser prüfen, direkte Eventübersicht hinterlegen oder manuell erfassen. **Location-Quellen** zeigt Diagnosen. Technische Profilfelder mit einer zuständigen Person klären. |
+| **0 Events**, **Veranstaltungsdaten nicht interpretierbar**, Website-Regeln oder Abruflimit | Die Ankündigung kann trotzdem existieren. Offizielle Programmseite im Browser prüfen, direkte Eventübersicht hinterlegen oder manuell erfassen. Der Quellenstatus in der Location-Bearbeitung zeigt Diagnosen. Technische Profilfelder mit einer zuständigen Person klären. |
 | Flyer abgelehnt | JPEG/PNG, Dateigröße und Bildabmessungen prüfen. Für Event-Flyer gilt die strengere 8-MB-/8-Millionen-Bildpunkte-Grenze. |
 | Keine OCR-Genres erkannt | Sichtbaren Flyer lesen und Genres manuell auswählen. Fehlende Erkennung bedeutet nicht fehlende Genres. |
 | Freigabe gesperrt | Caption und Bild prüfen; unter **Änderungen & Absagen** offene Befunde klären. Der untere lokale Freigabeknopf bleibt unabhängig davon derzeit deaktiviert. |
@@ -290,12 +290,10 @@ Technischen Hintergrund und den weiteren Projektplan findest du in [PROJECT.md](
 
 ## Wenn die Hauptwebsite nicht lesbar ist
 
-Unter **Discovery → Quellen & Konfiguration → Location-Quellen → Quelle hinzufügen** kannst du weitere
-zulässige öffentliche Quellen derselben Location hinterlegen, etwa deren offiziellen
-Veranstalter oder Ticketseite. Wähle die Quellenart bewusst. Die Freigabe zur
-automatischen Übernahme ist eine eigene Entscheidung. Deaktivierte Quellen werden
-nicht verwertet; eine kleinere Reihenfolge-Zahl wird früher geprüft. Keine
-Zugangssperren umgehen oder private Kalender hinterlegen.
+Unter **Locations → Location bearbeiten** kannst du die Website und die Event-URL
+korrigieren und über **Quellenstatus aktualisieren** die vorhandenen Quellen prüfen.
+Location-Quellen werden in Discovery nicht angezeigt. Keine Zugangssperren umgehen
+oder private Kalender hinterlegen.
 
 Bei **Nur teilweise ausgewertet**, **Abruf gesperrt** oder **Auswertung fehlgeschlagen**
 können weitere konfigurierte Quellen helfen. Null erkannte Veranstaltungen bei
@@ -330,3 +328,11 @@ QRUSH ist unabhängig vom MTC und weist keinem Fund automatisch das MTC zu.
 Suchläufen. Bereits gefundene Veranstaltungen, manuelle Ablehnungen und
 Kalendereinträge bleiben erhalten. Beim erneuten Hinzufügen derselben URL werden
 die bisherigen Entscheidungen weiter berücksichtigt.
+
+
+**Sonderquelle editieren** steht direkt neben **Sonderquelle löschen**. Name,
+Quell-URL und optionales HTML-Profil werden vorausgefüllt. Änderungen mit
+**Speichern** sichern. Bereits gefundene Termine und Teamentscheidungen bleiben
+erhalten. Nach Änderung der URL oder des Profils wird der Abrufstatus erst beim
+nächsten Suchlauf neu ermittelt. Location-Quellen erscheinen nur bei der jeweiligen
+Location, nicht in Discovery.

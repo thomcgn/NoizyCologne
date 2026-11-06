@@ -16,5 +16,8 @@ public class SpecialSourceController {
     @PostMapping public Map<String,String> add(@Valid @RequestBody Create request) {
         return Map.of("id",sources.add(request.name(),request.url(),Objects.toString(request.itemSelector(),""),Objects.toString(request.titleSelector(),""),Objects.toString(request.dateSelector(),"")));
     }
+    @PutMapping("/{id}") public void update(@PathVariable String id,@Valid @RequestBody Create request) {
+        sources.update(id,request.name(),request.url(),Objects.toString(request.itemSelector(),""),Objects.toString(request.titleSelector(),""),Objects.toString(request.dateSelector(),""));
+    }
     @DeleteMapping("/{id}") public void delete(@PathVariable String id) { sources.delete(id); }
 }
