@@ -1,8 +1,11 @@
 # Neue Partyreihe aus Discovery: Standardgenres
 
-Folgeauftrag vom 06.11.2026, Ergänzung des offenen PR #15 auf
-`feat/party-defaults-discovery-progress`. Zu Beginn sauberer Arbeitsbaum;
-bestehende Standardwerte und Fortschrittsanzeige bleiben erhalten.
+Folgeauftrag vom 06.11.2026, begonnen als Ergänzung des damals offenen PR #15
+auf `feat/party-defaults-discovery-progress`. Zu Beginn sauberer Arbeitsbaum;
+bestehende Standardwerte und Fortschrittsanzeige bleiben erhalten. PR #15 wurde
+während der Arbeit außerhalb dieses Auftrags gemergt. Die geprüfte Ergänzung
+liegt deshalb auf `feat/discovery-party-genres` für einen eigenen Folge-PR gegen
+main; kein Rebase oder eigener Merge.
 
 ## Umsetzung
 
@@ -59,8 +62,12 @@ Bibliothek oder zusätzliche Infrastruktur.
 - Frische ECJ-Haupt-/Testanalyse nach den Korrekturen ohne Fehler, Warnungen
   oder INFO-Diagnosen. Die drei betroffenen Datenbanktests erneut bestanden;
   isolierter Container anschließend entfernt.
-- Der reguläre QUICK-Commit-Hook ist die abschließende Prüfung. Ein Commit erfolgt ausschließlich nach erfolgreichem Hook; dessen
-  Einzelprotokolle liegen unter `.quality/run.*/`.
+- Regulärer QUICK-Commit-Hook für `3c30e0c` bestanden: 90 Frontendtests und
+  111 Backendtests erfolgreich, nur der optionale private Offline-Replay ohne
+  Snapshot übersprungen. javac, ECJ, Next-Typegen, TypeScript, ESLint und
+  `git diff --check` erfolgreich. Einzelprotokoll: `.quality/run.WFqtfB/`.
+  Danach ausschließlich diese PR-Ziel-/Prüfdokumentation geändert; deren Commit
+  durchläuft den regulären dokumentationsbezogenen QUICK-Hook.
 
 Alle intensiven Schritte nacheinander mit vorheriger RAM-Prüfung und laufender
 Speicherüberwachung: Abbruch unter 4 GB verfügbarem RAM beziehungsweise über 2 GB
