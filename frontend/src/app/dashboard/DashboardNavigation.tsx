@@ -5,15 +5,21 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-const navigationItems = [
-  { href: "/dashboard", label: "Übersicht" },
-  { href: "/dashboard/kalender", label: "Kalender" },
-  { href: "/dashboard/vorschlaege", label: "Vorgeschlagene" },
-  { href: "/dashboard/partys", label: "Partys" },
-  { href: "/dashboard/djs", label: "DJs" },
-  { href: "/dashboard/locations", label: "Locations" },
-  { href: "/dashboard/redaktion", label: "Redaktion" },
-  { href: "/dashboard/settings/genres", label: "Einstellungen" },
+export const navigationGroups = [
+  { label: "Arbeitsbereich", items: [
+    { href: "/dashboard", label: "Übersicht" },
+    { href: "/dashboard/kalender", label: "Kalender" },
+    { href: "/dashboard/vorschlaege", label: "Discovery" },
+    { href: "/dashboard/redaktion", label: "Redaktion" },
+  ] },
+  { label: "Portfolio", items: [
+    { href: "/dashboard/partys", label: "Partyreihen" },
+    { href: "/dashboard/djs", label: "DJs / Akteure" },
+    { href: "/dashboard/locations", label: "Locations" },
+  ] },
+  { label: "Verwaltung", items: [
+    { href: "/dashboard/settings/genres", label: "Genres & Einstellungen" },
+  ] },
 ];
 
 export default function DashboardNavigation() {
@@ -32,6 +38,7 @@ export default function DashboardNavigation() {
           className="mobile-nav-toggle"
           aria-expanded={mobileOpen}
           aria-controls="dashboard-navigation"
+          onKeyDown={event => { if (event.key === "Escape") setMobileOpen(false); }}
           onClick={() => setMobileOpen((open) => !open)}
         >
           {mobileOpen ? "Schließen" : "Menü"}
@@ -45,10 +52,11 @@ export default function DashboardNavigation() {
 
       <nav
         id="dashboard-navigation"
+        onKeyDown={event => { if (event.key === "Escape") { setMobileOpen(false); document.querySelector<HTMLButtonElement>(".mobile-nav-toggle")?.focus(); } }}
         aria-label="Hauptnavigation"
         className={`dashboard-nav ${mobileOpen ? "is-open" : ""}`}
       >
-        {navigationItems.map((item) => {
+        {navigationGroups.map(group => <section className="dashboard-nav-group" key={group.label} aria-label={group.label}><h2>{group.label}</h2>{group.items.map((item) => {
           const isActive =
             item.href === "/dashboard"
               ? pathname === item.href
@@ -69,7 +77,7 @@ export default function DashboardNavigation() {
               {item.label}
             </Link>
           );
-        })}
+        })}</section>)}
       </nav>
     </aside>
   );

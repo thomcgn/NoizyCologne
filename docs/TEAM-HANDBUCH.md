@@ -23,12 +23,12 @@ Fehlt eine verlässliche Veranstaltungsangabe, zuerst nachfragen. Für das Proje
 |---|---|
 | **Übersicht** | Einstieg in die Verwaltung |
 | **Kalender** | Konkrete Partytermine und Location-Sperren pflegen |
-| **Vorgeschlagene** | Website-Funde, Rückfragen, Änderungen und Absagen prüfen |
-| **Partys** | Wiederkehrende Partyreihen, Standardgenres und Standardflyer pflegen |
-| **DJs** | Personen, Kollektive und Veranstalter pflegen |
+| **Discovery** | Website-Funde, Rückfragen, Änderungen und Absagen prüfen |
+| **Partyreihen** | Wiederkehrende Partyreihen, Standardgenres und Standardflyer pflegen |
+| **DJs / Akteure** | Personen, Kollektive und Veranstalter pflegen |
 | **Locations** | Veranstaltungsorte, Instagram-Kontakte und Suchquellen pflegen |
 | **Redaktion** | Beitragsentwürfe, Flyer, Genres, Mentions und Musik bearbeiten |
-| **Einstellungen** | Genres, ihre Schreibweisen und den Caption-Anfang pflegen |
+| **Genres & Einstellungen** | Genres, ihre Schreibweisen und den Caption-Anfang pflegen |
 
 In Bearbeitungsfenstern schließt **Abbrechen** beziehungsweise **Schließen** das Fenster. Speichere gewünschte Änderungen vorher über den jeweiligen Speicherknopf. Mit der Tabulatortaste wechselst du zwischen Feldern; Umschalt+Tab führt zurück, Escape schließt den Dialog.
 
@@ -45,7 +45,7 @@ Stammdaten beschreiben Dinge, die du mehrfach verwendest. Eine **Partyreihe** is
 5. **Quelle prüfen** wählen und das Ergebnis lesen. Dieser Test legt keine Termine an.
 6. Bei gewünschter regelmäßiger Suche **Automatische Suche aktivieren** anhaken und mit **Übernehmen** speichern.
 
-Die automatische Suche kann eindeutig bestätigte Termine bekannter Partyreihen in den Kalender übernehmen. Unbekannte oder widersprüchliche Funde bleiben zur Prüfung. Kontrolliere Ergebnisse unter **Vorgeschlagene**.
+Die automatische Suche kann eindeutig bestätigte Termine bekannter Partyreihen in den Kalender übernehmen. Unbekannte oder widersprüchliche Funde bleiben zur Prüfung. Kontrolliere Ergebnisse unter **Discovery**.
 
 ### DJs, Kollektive und Veranstalter
 
@@ -127,14 +127,26 @@ Den gewünschten Status auswählen und **Entwurf anlegen** beziehungsweise **Ent
 
 Die Karte **Pre-Publishing-Gates** enthält zusätzliche lokale Prüfhaken. Ihr Knopf **Freigabe technisch vorbereitet** beziehungsweise **Freigabe noch blockiert** ist noch nicht bedienbar. Die Kachelreihenfolge und diese Prüfhaken bleiben nur in der aktuellen Ansicht. Eine dauerhafte Veröffentlichungsplanung und automatisches Instagram-Publishing sind noch nicht vorhanden. Veröffentlichungen erfolgen getrennt nach dem vereinbarten Teamablauf.
 
-## Vorgeschlagene: Website-Funde kontrollieren
+## Discovery: Website-Funde kontrollieren
 
-Mit **Vorgeschlagene → Jetzt suchen** forderst du eine neue Suche für aktivierte Locations an. Ergebnisse erscheinen nach Abschluss; während eines laufenden Vorgangs warten.
+Mit **Discovery → Jetzt suchen** forderst du eine neue Suche für aktivierte Locations an. Ergebnisse erscheinen nach Abschluss; während eines laufenden Vorgangs warten.
 
-Öffne einen Fund über **Veranstaltung prüfen**:
+Die Navigation ist in **Arbeitsbereich**, **Portfolio** und **Verwaltung** gegliedert.
+Die Discovery-Seite hat drei Bereiche:
+
+- **Neue Partyreihen:** Neue passende Reihen mit Termin, Genres und Genre-Match.
+  **Ins Portfolio übernehmen** öffnet den Freigabedialog. Namen prüfen und dort
+  ausdrücklich bestätigen. Die Kalenderübernahme folgt den bestehenden Regeln.
+- **Prüfbedarf:** Nur offene Fragen, etwa widersprüchliche Termine, Kooperationen
+  oder Rückfragen. Jede Karte erklärt, weshalb eine Klärung nötig ist.
+- **Verlauf:** Übernommene Termine, ignorierte Konzerte, Dubletten, Änderungen und
+  abgeschlossene Suchläufe. Bekannte eindeutig erkannte Reihen, die noch bereit
+  zur Übernahme sind, stehen hier ohne erneute Portfoliofreigabe.
+
+Öffne einen Ausnahmefall über **Veranstaltung prüfen**:
 
 1. **Quellseite öffnen** und die Angaben mit der offiziellen Ankündigung vergleichen.
-2. **Partyreihe zuordnen** und **Korrigiertes / bestätigtes Datum** prüfen. Eine neue Partyreihe vorher unter **Partys** anlegen.
+2. **Partyreihe zuordnen** und **Korrigiertes / bestätigtes Datum** prüfen. Eine passende neue Reihe kann im Dialog ausdrücklich ins Portfolio übernommen werden; andernfalls unter **Partyreihen** anlegen.
 3. Bei fehlenden oder widersprüchlichen Angaben eine Rückfrage vorbereiten.
 4. Prüfentscheidung mit **Speichern** sichern. **Abgelehnt** oder **Dublette** im **Prüfstatus** nur mit entsprechend geprüftem Sachverhalt wählen.
 5. Bei vollständig bestätigten Angaben **Manuell übernehmen** wählen und den Kalender kontrollieren.
@@ -149,7 +161,7 @@ Erst nach tatsächlichem Versand den **Rückfragestatus** auf **Rückfrage gesen
 
 ### Neu bewerten und Suchlauf zurücksetzen
 
-Nutze diese Funktionen beispielsweise nach korrigierten Genres oder bisher falsch ignorierten Partys. **Neu bewerten** und **Suchlauf zurücksetzen** öffnen dasselbe Fenster mit unterschiedlicher Vorauswahl:
+Unter **Weitere Aktionen** findest du **Neu bewerten** und **Suchlauf zurücksetzen**. Nutze diese Funktionen beispielsweise nach korrigierten Genres oder bisher falsch ignorierten Partys. **Neu bewerten** und **Suchlauf zurücksetzen** öffnen dasselbe Fenster mit unterschiedlicher Vorauswahl:
 
 | Auswahl im Fenster | Wirkung |
 |---|---|
@@ -163,7 +175,7 @@ Manuelle Entscheidungen bleiben geschützt. **Auch manuell abgelehnte Kandidaten
 
 ## Änderungen und Absagen bearbeiten
 
-Unter **Vorgeschlagene → Änderungen & Absagen** findest du neue Befunde. Bei Bedarf **Änderungen jetzt prüfen** wählen. **Änderung vergleichen** zeigt alte und neue Angaben, **Quelle öffnen** die Ankündigung und **Quellenvergleich und Historie** den bisherigen Verlauf.
+Unter **Discovery → Verlauf → Änderungen & Absagen** findest du neue Befunde. Bei Bedarf **Änderungen jetzt prüfen** wählen. **Änderung vergleichen** zeigt alte und neue Angaben, **Quelle öffnen** die Ankündigung und **Quellenvergleich und Historie** den bisherigen Verlauf.
 
 Eine verschwundene Ankündigung oder **Nicht mehr bestätigt** beweist keine Absage. Ebenso ist **Absage unbestätigt – prüfen** kein Anlass für eine öffentliche Absagemeldung.
 
@@ -211,7 +223,7 @@ Browserfunktion eingerichtet ist, versucht die Anwendung auch diese Inhalte zu
 lesen. Eine technische Warnung oder **Vollständigkeit nicht bestätigt** bedeutet:
 Es können weitere Termine existieren. Sieh auf der offiziellen Website nach;
 null auswertbare Veranstaltungen bedeutet nicht, dass dort nichts stattfindet.
-Unter **Vorgeschlagene → Location-Quellen** siehst du den letzten Versuch und den
+Unter **Discovery → Quellen & Konfiguration → Location-Quellen** siehst du den letzten Versuch und den
 letzten erfolgreichen Abruf. Ein erfolgreicher Abruf bestätigt noch nicht alle
 inhaltlichen Angaben.
 
@@ -261,7 +273,7 @@ Technischen Hintergrund und den weiteren Projektplan findest du in [PROJECT.md](
 
 ## Wenn die Hauptwebsite nicht lesbar ist
 
-Unter **Vorgeschlagene → Location-Quellen → Quelle hinzufügen** kannst du weitere
+Unter **Discovery → Quellen & Konfiguration → Location-Quellen → Quelle hinzufügen** kannst du weitere
 zulässige öffentliche Quellen derselben Location hinterlegen, etwa deren offiziellen
 Veranstalter oder Ticketseite. Wähle die Quellenart bewusst. Die Freigabe zur
 automatischen Übernahme ist eine eigene Entscheidung. Deaktivierte Quellen werden
@@ -277,7 +289,7 @@ In der Location-Bearbeitung lädt **Quellenstatus aktualisieren** dieselbe Über
 
 Im Prüfdialog zeigt **Quellen und Angaben vergleichen → Quellenbelege laden**, wo
 Titel, Datum, Location und zusätzliche Angaben herkommen. Widersprüche bleiben zur
-Prüfung erhalten. Neue Partyreihen werden erst über **Ins Portfolio aufnehmen**
+Prüfung erhalten. Neue Partyreihen werden erst über **Ins Portfolio übernehmen**
 bestätigt. Die angezeigte Genreübereinstimmung bezieht sich auf **alle aktiven
 Projektgenres**: Bei vier aktiven Genres müssen mindestens zwei belegt sein.
 Aliasse erhöhen die Zahl nicht. Bei belegtem Datum und freigegebener Quelle kann

@@ -3128,7 +3128,7 @@ Ein Coding-Agent darf erklären, Tests erzeugen und Code vorschlagen; **die Lern
 | Backend/Deployment | Spring Boot, PostgreSQL, Flyway und persistente CRUD-Anbindung der Stammdaten, Kalenderdaten und Medien | Meta-Publishing bleibt deaktiviert |
 | Flyer/Redaktion | Dauerflyer, Event-Flyer, Instagram-nahe Vorschau und persistente Redaktionsentwürfe | Kein Meta-Publishing; Freigabe ist technisch lokal/serverseitig gespeichert, aber nicht an Instagram gekoppelt |
 | Genres/Musik | Aktive Genres und Aliasse verwalten, lokale Flyer-Genre-Vorschläge prüfen, verifizierte Musik manuell zu Entwürfen zuordnen | Keine automatische Songrecherche, kein automatisches Instagram-Audio |
-| Vorgeschlagene/Änderungen | Begrenzte offizielle Quellensuche, gespeicherte Vorschläge, manuelle Rückfragen, täglicher Änderungscheck und zentraler Absageentwurf | Keine automatischen DMs oder Absageveröffentlichungen; Quellenbefunde benötigen die vorgesehene Prüfung |
+| Discovery/Änderungen | Begrenzte offizielle Quellensuche, gespeicherte Vorschläge, manuelle Rückfragen, täglicher Änderungscheck und zentraler Absageentwurf | Keine automatischen DMs oder Absageveröffentlichungen; Quellenbefunde benötigen die vorgesehene Prüfung |
 
 **Qualifizierung des Status:** Diese Bestandsaufnahme wurde am 05.11.2026 mit dem aktuellen Code und den lokalen Backend-/Frontend-Regressionen abgeglichen. Sie ist **kein** behaupteter End-to-End-Test gegen einen produktiven Server oder Instagram. Ein einzelner TypeScript-Check ersetzt weder Integrationstests noch die vollständige Prüfroutine.
 
@@ -3300,7 +3300,7 @@ Die APIs sind wie die bestehenden Stammdaten auf `local` und `staging` beschrän
 2. Die offizielle HTTPS-Website eintragen; optional eine direkte Kalender-, Detail- oder ICS-URL angeben.
 3. „Quelle prüfen“ zeigt die gefundenen URLs, Eventzahlen und technische Diagnosen, ohne Kalenderdaten anzulegen. Bei einer noch nicht gespeicherten Location bleiben diese Prüfergebnisse vorerst ungespeichert.
 4. Automatische Suche aktivieren und die Location speichern. Der nächste manuelle oder dienstägliche Scan berücksichtigt sie.
-5. Quellen und eventuelle Fehler anschließend unter „Vorgeschlagene → Location-Quellen“ prüfen.
+5. Quellen und eventuelle Fehler anschließend unter „Discovery → Quellen & Konfiguration → Location-Quellen“ prüfen.
 
 Es gibt keine Clubnamen-Whitelist und keine Location-spezifischen Java-Verzweigungen. Eine unbekannte Website kann allein durch ihre URL eingebunden werden, sofern Homepage/Links und Eventdaten den unterstützten öffentlich auslesbaren Strukturen entsprechen. Bei abweichendem HTML lässt sich unter „Quelle / Profil bearbeiten“ ohne Java-Änderung eine direkte URL oder ein CSS-Profil für Event-Container, Titel und Startdatum hinterlegen. Das Startdatum kann als ISO-Wert in `datetime`/`content` oder als unterstützter vollständiger deutscher Datumswert vorliegen. Textlisten können einen expliziten Jahreskontext verwenden; fehlende oder mehrdeutige Jahre werden nicht geraten.
 
@@ -3642,7 +3642,7 @@ Die Aktion „Absagegrafik vorbereiten“ erzeugt idempotent ein **neues PNG-Med
 
 ## 26.5 Oberfläche und API
 
-Unter „Vorgeschlagene“ öffnet **„Änderungen & Absagen“** den eigenen Bereich mit Kategorien, Vorher-/Nachher-Tabelle, Quellenlink, Historie, bestätigter Kalenderaktualisierung, Trennung mehrerer Events, Ablehnung und begründetem Aufheben der Sperre. Der DM-Entwurf enthält Location, alte/neue Party und Datum, ist editierbar/kopierbar und kann manuell als gesendet oder beantwortet markiert werden. Die App versendet keine DM. Bestätigte Absagen verwenden dasselbe Cancellation-Modal wie manuelle Absagen. Die Redaktion zeigt Warnungen/Sperrgründe; der Kalender kennzeichnet bestätigte Absagen.
+Unter „Discovery → Verlauf“ öffnet **„Änderungen & Absagen“** den eigenen Bereich mit Kategorien, Vorher-/Nachher-Tabelle, Quellenlink, Historie, bestätigter Kalenderaktualisierung, Trennung mehrerer Events, Ablehnung und begründetem Aufheben der Sperre. Der DM-Entwurf enthält Location, alte/neue Party und Datum, ist editierbar/kopierbar und kann manuell als gesendet oder beantwortet markiert werden. Die App versendet keine DM. Bestätigte Absagen verwenden dasselbe Cancellation-Modal wie manuelle Absagen. Die Redaktion zeigt Warnungen/Sperrgründe; der Kalender kennzeichnet bestätigte Absagen.
 
 - `POST /api/v1/discovery/monitor`: separaten Änderungscheck anfordern.
 - `GET /api/v1/discovery/changes`: Änderungsvergleiche; `/{id}/history`, `/{id}/dm`, `/{id}/replacements` für Verlauf/Rückfrage/Ersatzkandidaten.
@@ -3716,7 +3716,7 @@ bleiben als Diagnosen sichtbar und beweisen weder leere Kalender noch Abwesenhei
 Migration **V15** ergänzt Quellen um Abrufmethode, Vollständigkeit, begrenzte
 Diagnosen und tatsächlichen letzten Erfolgszeitpunkt. Altbestände werden nicht
 neu bewertet oder mit erfundenen Erfolgen versehen. Diese Informationen stehen
-unter „Vorgeschlagene → Location-Quellen“ neben der bestehenden Quellenfreigabe.
+unter „Discovery → Quellen & Konfiguration → Location-Quellen“ neben der bestehenden Quellenfreigabe.
 
 Im Location-Modal prüft **Website automatisch prüfen** allein die Website und
 schlägt Namen, Quellen und gezählte Veranstaltungen/relevante Partys/bekannte
@@ -3781,3 +3781,16 @@ Bestätigte bekannte Reihen behalten die bisherigen Importregeln. Relative
 Beginnzeiten bleiben Text in Notizen und neuen Captionvorlagen; bestehende
 Entwürfe werden nicht verändert. Die Quellenübersicht und der Prüfdialog zeigen
 Herkunft und Qualität; technische Diagnosen sind einklappbar.
+
+# 29. Navigation und Discovery-Oberfläche (06.11.2026)
+
+Die Navigation gliedert sich in Arbeitsbereich, Portfolio und Verwaltung.
+Discovery ersetzt die bisherige UI-Bezeichnung; `/dashboard/vorschlaege` bleibt
+kompatibel. Neue passende Partyreihen, echte Ausnahmefälle unter Prüfbedarf
+und ein nachgeladener Verlauf bilden die drei Bereiche. Quellen, Konfiguration,
+Neubewertung und technische Diagnosen bleiben nachgeordnet erreichbar.
+Die vorhandenen APIs einschließlich einmaliger Portfoliofreigabe, Kalender-/
+Redaktionsübergabe, Rückfragen und geschützter manueller Entscheidungen bleiben
+erhalten. Keine Backend-/Schema-/Crawler-/Deployment-Änderungen. Arbeitsphasen,
+Dateiübersicht, Prüfungen, Browser-Screenshots und Grenzen stehen in
+[DISCOVERY-REDESIGN.md](DISCOVERY-REDESIGN.md).

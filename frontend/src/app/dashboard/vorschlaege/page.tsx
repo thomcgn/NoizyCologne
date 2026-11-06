@@ -1,157 +1,97 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { discoveryStatusLabel } from "../discoveryLabels";
-import DashboardModal from "../DashboardModal";
 import { useCatalog } from "../CatalogProvider";
-import EventChangesPanel from "./EventChangesPanel";
-import SourceOverview, {SourceEvidence,sourceKinds,type DiscoverySource} from "../SourceOverview";
+import SourceOverview from "../SourceOverview";
 import DiscoveryResetDialog, { type ResetMode } from "./DiscoveryResetDialog";
+import CandidateReviewDialog from "./CandidateReviewDialog";
+import SourceEditorDialog from "./SourceEditorDialog";
+import DiscoveryCandidates from "./DiscoveryCandidates";
+import DiscoveryHistory from "./DiscoveryHistory";
+import { discoveryApi as api } from "./discoveryApi";
+import { isNewSeries, isOpen } from "./discoveryPresentation";
+import type { Candidate, Source, Overview } from "./discoveryTypes";
 
-type DiscoveryAssessment = {
-  recognition: { status: "SINGLE" | "COOPERATION" | "AMBIGUOUS" | "NONE"; parties: { id: string; name: string; matchedName: string }[] };
-  verification: { status: "VERIFIED" | "MISSING_DATA" | "CONFLICTING_DATA" | "SPECULATIVE"; reasons: string[]; date: string | null };
-  lifecycle: "ACTIVE" | "CANCELLED" | "CANCELLATION_UNCONFIRMED" | "POSTPONED" | "RESCHEDULED" | "LINEUP_CHANGE";
-  automaticImportEligible: boolean;
-  importBlockers: string[];
-};
-type Candidate = {id: string; title: string; venue_name: string; instagram: string; source_url: string; event_date: string | null; party_id: string | null; status: string; reason: string; evidence: string; inquiry_status: string; dm_text: string; calendar_entry_id: string | null; decision_origin: string; matching_class: string; automatic_reason: string; matcher_version: string; evaluated_at: string | null; previous_status: string | null; last_evaluation_id: string | null; assessment?: DiscoveryAssessment; genreCoverage?: { matched:number; total:number; percent:number; names:string[]; eligible:boolean }};
-type Source = DiscoverySource;
-type Operation = { id: string; kind: string; status: string; report: string; summary: string };
-type Summary = { evaluated: number; newPossibleMatches: number; stillIgnored: number; preservedManual: number; reclassified: number; failed: number };
-type Diagnosis = { id: number; title: string; venue_name: string; old_status: string | null; new_status: string; reason: string; origin: string };
-type Overview = {metrics: { automaticallyIgnored: number; manuallyRejected: number; needsReview: number; reevaluated: number; unverified: number; possible: number; open: number; archive: number }; operations: Operation[]; diagnoses: Diagnosis[]; automaticallyImported: number; candidates: Candidate[]; sources: Source[]; counts: {status: string; count: number}[]; runs: {id: string; started_at: string; status: string; report: string}[]};
-const labels: Record<string,string> = {NEEDS_REVIEW: "Neue passende Partys / Prüfung", NEEDS_INQUIRY: "Rückfragen nötig", IMPORTED: "Übernommen", REJECTED: "Abgelehnt", DUPLICATE: "Dublette", IGNORED: "Ignoriert", READY: "Bereit zur Übernahme", NONE: "Keine Rückfrage", PREPARED: "Rückfrage vorbereitet", SENT: "Rückfrage gesendet (manuell)", ANSWERED: "Antwort erhalten"};
-const extraFilters: Record<string,string> = {AUTOMATIC_IGNORED: "Automatisch ignoriert", MANUAL_REJECTED: "Manuell abgelehnt", UNVERIFIED: "Unklar", POSSIBLE_MATCH: "Möglicher Treffer", REEVALUATED: "Neu bewertet"};
-const recognitionLabels: Record<DiscoveryAssessment["recognition"]["status"], string> = {SINGLE: "Bekannte Partyreihe erkannt", COOPERATION: "Kooperation erkannt", AMBIGUOUS: "Zuordnung mehrdeutig", NONE: "Keine bekannte Partyreihe erkannt"};
-const verificationLabels: Record<DiscoveryAssessment["verification"]["status"], string> = {VERIFIED: "Termin belegt", MISSING_DATA: "Angaben fehlen", CONFLICTING_DATA: "Widersprüchliche Angaben", SPECULATIVE: "Termin nicht ausreichend belegt"};
-const lifecycleLabels: Record<DiscoveryAssessment["lifecycle"], string> = {ACTIVE: "Kein Absage- oder Verschiebungshinweis", CANCELLED: "Absage erkannt", CANCELLATION_UNCONFIRMED: "Absagehinweis – prüfen", POSTPONED: "Veranstaltung verschoben", RESCHEDULED: "Veranstaltung auf einen anderen Termin verlegt", LINEUP_CHANGE: "Line-up-Änderung – Veranstaltung separat prüfen"};
-function CandidateAssessment({ assessment, detailed = false }: { assessment: DiscoveryAssessment; detailed?: boolean }) {
-  return <section className="space-y-2 text-sm" aria-label="Erkennung, Terminprüfung und Veranstaltungsstatus">
-    <p><strong>Partyreihen-Erkennung:</strong> {recognitionLabels[assessment.recognition.status]}</p>
-    {assessment.recognition.parties.length > 0 && <ul className="list-inside list-disc">{assessment.recognition.parties.map(p => <li key={p.id}>{p.name}{detailed && p.matchedName !== p.name ? ` · erkannt über „${p.matchedName}“` : ""}</li>)}</ul>}
-    {detailed && assessment.recognition.status === "COOPERATION" && <p>Alle erkannten Reihen bleiben sichtbar. Der Kalender führt pro Termin eine Partyreihe; die Zuordnung muss manuell geprüft werden.</p>}
-    {detailed && assessment.recognition.status === "AMBIGUOUS" && <p>Mehrere Zuordnungen passen. Bitte die richtige Partyreihe manuell prüfen.</p>}
-    <p><strong>Terminprüfung:</strong> {verificationLabels[assessment.verification.status]}{assessment.verification.date ? ` · ${assessment.verification.date}` : ""}</p>
-    {detailed && assessment.verification.reasons.length > 0 && <ul className="list-inside list-disc">{assessment.verification.reasons.map((reason, index) => <li key={`${index}-${reason}`}>{reason}</li>)}</ul>}
-    <p><strong>Veranstaltungsstatus:</strong> {lifecycleLabels[assessment.lifecycle]}</p>
-    {detailed && <p>Automatische Übernahme: {assessment.automaticImportEligible ? "Voraussetzungen erfüllt." : "derzeit nicht möglich."}</p>}
-    {detailed && assessment.importBlockers.length > 0 && <div role="status"><p className="font-semibold">Übernahme gesperrt:</p><ul className="list-inside list-disc">{assessment.importBlockers.map((reason, index) => <li key={`${index}-${reason}`}>{reason}</li>)}</ul><p>Absagen und Verschiebungen unter „Änderungen &amp; Absagen“ prüfen.</p></div>}
-  </section>;
-}
-function summaryOf(operation?: Operation): Summary | null {
-  if (!operation || !["COMPLETED", "PARTIAL"].includes(operation.status)) return null;
-  try { return JSON.parse(operation.summary) as Summary; } catch { return null; }
-}
-const field = "mt-1 w-full rounded-lg border border-white/20 bg-neutral-900 p-3";
-const button = "rounded-lg border border-white/20 px-4 py-2 disabled:opacity-50";
-async function api(path: string, method = "GET", body?: unknown) {
-  const response = await fetch(`/api/v1/discovery${path}`, {method, cache: "no-store", headers: {"Content-Type":"application/json"}, ...(body === undefined ? {} : {body: JSON.stringify(body)})});
-  if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.message || `HTTP ${response.status}`); }
-  return response.status === 204 || response.headers.get("content-length") === "0" ? null : response.text().then(text => text ? JSON.parse(text) : null);
-}
-function sourceLink(url: string) { try { const u = new URL(url); return u.protocol === "https:" && !u.username && !u.password ? u.href : undefined; } catch { return undefined; } }
-
-export default function SuggestionsPage() {
-  const {parties, venues, reloadEntries, reloadParties} = useCatalog();
-  const [data,setData] = useState<Overview | null>(null);
-  const [error,setError] = useState("");
-  const [busy,setBusy] = useState(false);
-  const [filter,setFilter] = useState("NEEDS_REVIEW");
-  const [candidate,setCandidate] = useState<Candidate | null>(null);
-  const [source,setSource] = useState<Source | null>(null);
-  const [origins,setOrigins] = useState<{url:string;source_kind:string;event_data:string}[]>([]);
-  const [portfolioName,setPortfolioName] = useState("");
-  const [party,setParty] = useState(""); const [date,setDate] = useState("");
-  const [status,setStatus] = useState("NEEDS_REVIEW"); const [inquiry,setInquiry] = useState("NONE"); const [dm,setDm] = useState("");
-  const [showChanges,setShowChanges] = useState(false);
-  const [notice,setNotice] = useState("");
+export default function DiscoveryPage() {
+  const { venues, reloadEntries, reloadParties, reloadDrafts } = useCatalog();
+  const [data, setData] = useState<Overview | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [candidate, setCandidate] = useState<Candidate | null>(null);
+  const [source, setSource] = useState<Source | null>(null);
+  const [notice, setNotice] = useState("");
   const [resetMode, setResetMode] = useState<ResetMode | null>(null);
-  const [operationId, setOperationId] = useState<string | null>(null);
-  const reload = useCallback(async () => { try { setData(await api(`?filter=${encodeURIComponent(filter)}`)); } catch(e) { setError(e instanceof Error ? e.message : "Laden fehlgeschlagen"); } }, [filter]);
-  useEffect(() => { const timer = window.setTimeout(() => void reload(),0); const poll = window.setInterval(() => void reload(),10000); return () => { clearTimeout(timer); clearInterval(poll); }; },[reload]);
-  async function action(work: () => Promise<void>) { setBusy(true); setError(""); setNotice(""); try { await work(); await reload(); } catch(e) { setError(e instanceof Error ? e.message : "Aktion fehlgeschlagen"); } finally { setBusy(false); } }
-  function edit(c: Candidate) { setCandidate(c); setOrigins([]); setPortfolioName(c.title.slice(0,200)); setParty(c.party_id ?? ""); setDate(c.event_date ?? ""); setStatus(["NEEDS_REVIEW","NEEDS_INQUIRY","REJECTED","DUPLICATE"].includes(c.status) ? c.status : "NEEDS_REVIEW"); setInquiry(c.inquiry_status); setDm(c.dm_text); setError(""); }
-  const operation = operationId ? data?.operations?.find(item => item.id === operationId) : data?.operations?.[0];
-  const summary = summaryOf(operation);
-  const running = busy || data?.operations?.some(item => item.status === "RUNNING");
-  // Refresh source assessments and import blockers without replacing unsaved review fields.
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const actionLock = useRef(false);
+  const generation = useRef(0);
+  const imported = useRef<number | null>(null);
+  const reload = useCallback(async () => {
+    const request = ++generation.current;
+    try {
+      const [review, inquiry, ready] = await Promise.all(["NEEDS_REVIEW", "NEEDS_INQUIRY", "READY"].map(filter => api<Overview>(`?filter=${filter}`)));
+      if (request !== generation.current) return;
+      const candidates = [...new Map([...review.candidates, ...inquiry.candidates, ...ready.candidates].map(item => [item.id, item])).values()];
+      setData({ ...review, candidates });
+      setError("");
+    } catch (error) { if (request === generation.current) setError(error instanceof Error ? error.message : "Discovery konnte nicht geladen werden."); }
+  }, []);
+  useEffect(() => {
+    const requests = generation;
+    const timer = window.setTimeout(() => void reload(), 0);
+    const poll = window.setInterval(() => void reload(), 10000);
+    return () => { clearTimeout(timer); clearInterval(poll); requests.current++; };
+  }, [reload]);
+  useEffect(() => {
+    if (!data) return;
+    if (imported.current !== null && imported.current !== data.automaticallyImported) {
+      void Promise.all([reloadEntries(), reloadParties(), reloadDrafts()]).catch(() => setError("Kalender und Portfolio konnten nicht aktualisiert werden. Bitte erneut laden."));
+    }
+    imported.current = data.automaticallyImported;
+  }, [data, reloadEntries, reloadParties, reloadDrafts]);
+  async function action(work: () => Promise<void>) {
+    if (actionLock.current) return;
+    actionLock.current = true; setBusy(true); setError(""); setNotice("");
+    try { await work(); await reload(); }
+    catch (error) { setError(error instanceof Error ? error.message : "Aktion fehlgeschlagen"); }
+    finally { actionLock.current = false; setBusy(false); }
+  }
+  function edit(item: Candidate) { setCandidate(item); setError(""); }
   const currentCandidate = candidate ? data?.candidates.find(item => item.id === candidate.id) ?? candidate : null;
-  function countFor(value: string) {
-    const m = data?.metrics;
-    const extra: Record<string, number | undefined> = {AUTOMATIC_IGNORED: m?.automaticallyIgnored, MANUAL_REJECTED: m?.manuallyRejected, UNVERIFIED: m?.unverified, POSSIBLE_MATCH: m?.possible, REEVALUATED: m?.reevaluated, OPEN: m?.open, ARCHIVE: m?.archive};
-    return extra[value] ?? data?.counts.find(item => item.status === value)?.count ?? 0;
-  }
-  function visible(c: Candidate) {
-    if (filter === "OPEN") return ["PREPARED", "SENT"].includes(c.inquiry_status);
-    if (filter === "ARCHIVE") return ["REJECTED", "DUPLICATE", "IGNORED"].includes(c.status);
-    if (filter === "AUTOMATIC_IGNORED") return c.status === "IGNORED" && c.decision_origin === "AUTOMATIC";
-    if (filter === "MANUAL_REJECTED") return c.status === "REJECTED" && c.decision_origin === "MANUAL";
-    if (filter === "REEVALUATED") return true; // Server filters against the reset audit history.
-    if (["UNVERIFIED", "POSSIBLE_MATCH"].includes(filter)) return c.matching_class === filter && !["IMPORTED", "REJECTED", "DUPLICATE", "IGNORED"].includes(c.status);
-    return c.status === filter;
-  }
-  async function save() { if (!candidate) return; await api(`/candidates/${candidate.id}`,"PUT",{partyId: party || null,date: date || null,status,inquiryStatus: inquiry,dmText: dm}); }
-  return <main className="min-w-0 space-y-5 p-4 sm:p-7">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-bold">Vorgeschlagene</h1><div className="flex flex-wrap gap-2"><button className={button} disabled={running} onClick={() => void action(async () => { await api("/scan","POST"); setNotice("Suchlauf angefordert. Ergebnisse werden automatisch aktualisiert."); })}>Jetzt suchen</button><button className={button} disabled={running} onClick={() => setResetMode("ALL")}>Neu bewerten</button><button className={button} disabled={running} onClick={() => setResetMode("IGNORED")}>Suchlauf zurücksetzen</button></div></div>
-    <button className={button} aria-expanded={showChanges} onClick={() => setShowChanges(!showChanges)}>Änderungen &amp; Absagen</button>
-    {showChanges && <EventChangesPanel onReviewCandidate={id => void action(async () => { edit(await api(`/candidates/${id}`)); })} />}
-    <p className="text-sm text-neutral-400">Gefundene Partys prüfen und in den Kalender übernehmen.</p>
-    {error && <p role="alert" className="text-red-400">{error}</p>}{notice && <p role="status">{notice}</p>}
-    <div className="flex flex-wrap gap-2">{["NEEDS_REVIEW","NEEDS_INQUIRY","READY","OPEN","IMPORTED","ARCHIVE", ...Object.keys(extraFilters)].map(value => <button key={value} aria-pressed={filter === value} className={`${button} ${filter === value ? "bg-white/15" : ""}`} onClick={() => setFilter(value)}>{extraFilters[value] ?? (value === "OPEN" ? "Rückfragen offen" : value === "ARCHIVE" ? "Abgelehnt / Archiv" : labels[value])} ({countFor(value)})</button>)}</div>
-    <p className="text-sm">Automatisch ignoriert: {data?.metrics?.automaticallyIgnored ?? 0} · Manuell abgelehnt: {data?.metrics?.manuallyRejected ?? 0} · Prüfbedürftig: {data?.metrics?.needsReview ?? 0} · Neu bewertet: {data?.metrics?.reevaluated ?? 0}</p>
-    {operation && <section className="rounded-xl border border-white/15 p-3" aria-live="polite"><p>Letzter Vorgang: {operation.status} · {operation.report}</p>
-      {summary && <p>{summary.evaluated} Kandidaten erneut bewertet · {summary.newPossibleMatches} neue mögliche Treffer · {summary.stillIgnored} weiterhin ignoriert · {summary.preservedManual} manuelle/geschützte Entscheidungen unverändert · {summary.reclassified} neu klassifiziert · {summary.failed} Location-Fehler</p>}
-    </section>}
-    <details className="rounded-xl border border-white/15 p-3"><summary>Matching-Diagnose · letzte {data?.diagnoses?.length ?? 0} Entscheidungen</summary><div className="overflow-x-auto"><table className="mt-3 w-full text-left text-sm"><thead><tr><th>Party</th><th>Location</th><th>Alter Status</th><th>Neuer Status</th><th>Grund</th></tr></thead><tbody>{data?.diagnoses?.map(item => <tr key={item.id}><td className="p-2">{item.title}</td><td>{item.venue_name}</td><td>{item.old_status ?? "Neu"}</td><td>{item.new_status}</td><td>{item.origin} · {item.reason}</td></tr>)}</tbody></table></div></details>
-    <p className="text-sm">Automatisch übernommen: {data?.automaticallyImported ?? 0}</p>
-    <p className="text-sm">Letzter Suchlauf: {data?.runs[0] ? `${new Date(data.runs[0].started_at).toLocaleString("de-DE",{timeZone:"Europe/Berlin"})} · ${discoveryStatusLabel(data.runs[0].status)} · ${data.runs[0].report}` : "Noch kein Suchlauf"}</p>
-    <div className="space-y-3">{data?.candidates.filter(visible).map(c => <article key={c.id} className="rounded-xl border border-white/10 p-4"><div className="flex flex-wrap justify-between gap-3"><div><h2 className="font-semibold">{c.title}</h2><p>{c.venue_name} · {c.event_date ?? "Datum unklar"}</p><p className="text-sm text-neutral-400">{c.reason}</p>{c.assessment && <CandidateAssessment assessment={c.assessment} />}<p className="text-xs text-neutral-500">{c.decision_origin} · {c.matching_class} · {c.matcher_version}</p></div><button className={button} onClick={() => edit(c)}>Veranstaltung prüfen</button></div></article>)}</div>
-    <details className="rounded-xl border border-white/10 p-4"><summary>Location-Quellen · {data?.sources.filter(s => !["EVENTS_FOUND","NO_EVENTS","NOT_CHECKED","SOURCE_LINKS_FOUND","EXCLUDED_CONCERTS"].includes(s.status)).length ?? 0} mit Diagnosebedarf</summary>
-      <button className={`${button} mt-3`} onClick={() => setSource({id:"",venue_id:venues[0]?.id ?? "",venue_name:"",url:"",source_type:"EXTERNAL",approved:false,status:"NOT_CHECKED",item_selector:"",title_selector:"",date_selector:"",source_kind:"CUSTOM",enabled:true,priority:100})}>Quelle hinzufügen</button>
-      <SourceOverview sources={data?.sources ?? []} onEdit={s => setSource({...s})} />
+  const running = !!data?.operations?.some(item => item.status === "RUNNING") || data?.runs[0]?.status === "RUNNING";
+  const newSeries = data?.candidates.filter(isNewSeries) ?? [];
+  const ready = data?.candidates.filter(item => isOpen(item) && !isNewSeries(item) && item.assessment?.automaticImportEligible && !["PREPARED", "SENT"].includes(item.inquiry_status) && item.decision_origin !== "MANUAL") ?? [];
+  const readyIds = new Set(ready.map(item => item.id));
+  const review = data?.candidates.filter(item => isOpen(item) && !isNewSeries(item) && !readyIds.has(item.id)) ?? [];
+  const sourceProblems = data?.sources.filter(item => item.enabled !== false && (["PARTIAL", "BLOCKED", "FAILED"].includes(item.quality ?? "") || !["EVENTS_FOUND", "NO_EVENTS", "NOT_CHECKED", "SOURCE_LINKS_FOUND", "EXCLUDED_CONCERTS"].includes(item.status))) ?? [];
+  const lastRun = data?.runs[0];
+  const operation = data?.operations?.[0];
+  return <main className="discovery-page">
+    <header className="discovery-header">
+      <div><p className="discovery-eyebrow">Arbeitsbereich / Entdecken</p><h1>Discovery</h1><p className="discovery-muted">Passende Partys entdecken. Neue Reihen ins Portfolio aufnehmen.</p>
+        <div className="discovery-run-status" role="status"><span className={`discovery-status-dot ${running ? "is-running" : ""}`} /><span>{running ? "Suchlauf läuft – Ergebnisse werden aktualisiert" : lastRun ? discoveryStatusLabel(lastRun.status) : "Noch kein Suchlauf"}</span><span className="discovery-muted">Letzter Suchlauf: {lastRun ? new Date(lastRun.started_at).toLocaleString("de-DE", { timeZone: "Europe/Berlin", dateStyle: "medium", timeStyle: "short" }) : "–"}</span></div>
+      </div>
+      <div className="discovery-header-actions"><button className="discovery-button discovery-button-primary" disabled={busy || running || !data} onClick={() => void action(async () => { await api("/scan", "POST"); setNotice("Suchlauf angefordert. Ergebnisse werden automatisch aktualisiert."); })}>{running ? "Suche läuft …" : "Jetzt suchen"}</button>
+        <details className="discovery-actions"><summary className="discovery-button">Weitere Aktionen</summary><div className="discovery-action-menu"><button disabled={busy || running} onClick={() => setResetMode("ALL")}>Neu bewerten</button><button disabled={busy || running} onClick={() => setResetMode("IGNORED")}>Suchlauf zurücksetzen</button><button onClick={() => {setToolsOpen(true); window.setTimeout(() => document.getElementById("discovery-tools")?.scrollIntoView({ behavior: "smooth" }), 0);}}>Quellen &amp; Konfiguration</button></div></details>
+      </div>
+    </header>
+    {error && <div className="discovery-message" role="alert">{error}<button className="discovery-button" disabled={busy} onClick={() => void reload()}>Erneut laden</button></div>}
+    {notice && <p className="discovery-message" role="status">{notice}</p>}
+    <div className="discovery-metrics" aria-label="Discovery-Kennzahlen">{[["Automatisch übernommen", data?.automaticallyImported], ["Neue Partyreihen", data ? newSeries.length : undefined], ["Prüfbedarf", data ? review.length : undefined]].map(([label, value]) => <div key={label} className="discovery-metric"><span>{label}</span><strong>{value ?? "–"}</strong></div>)}</div>
+    {data?.counts.some(item => ["NEEDS_REVIEW", "NEEDS_INQUIRY", "READY"].includes(item.status) && item.count >= 500) && <p className="discovery-source-notice">Die API liefert bis zu 500 offene Kandidaten je Status. Die Kennzahlen für neue Reihen und Prüfbedarf beziehen sich auf die geladenen Ergebnisse.</p>}
+    {sourceProblems.length > 0 && <p className="discovery-source-notice">{sourceProblems.length} {sourceProblems.length === 1 ? "Quelle konnte" : "Quellen konnten"} nicht vollständig ausgewertet werden. Weitere Quellen werden unabhängig verarbeitet. <button onClick={() => {setToolsOpen(true); window.setTimeout(() => document.getElementById("discovery-tools")?.scrollIntoView({ behavior: "smooth" }), 0);}}>Quellen ansehen</button></p>}
+    <DiscoveryCandidates title="Neue Partyreihen" description="Neue passende Reihen mit belegtem Termin und mindestens 50 % Genre-Match." candidates={newSeries} kind="new" loading={!data && !error} unavailable={!data && !!error} busy={busy} onReview={edit} />
+    <DiscoveryCandidates title="Prüfbedarf" description="Nur offene Fragen zu Terminen, Quellen oder der Zuordnung. Deine manuellen Entscheidungen bleiben geschützt." candidates={review} kind="review" loading={!data && !error} unavailable={!data && !!error} busy={busy} onReview={edit} />
+    <details className="discovery-section discovery-history" open={historyOpen} onToggle={event => setHistoryOpen(event.currentTarget.open)}><summary><span>Verlauf</span><span className="discovery-muted">Übernahmen, ignorierte Konzerte, Dubletten und Suchläufe</span></summary>
+      {historyOpen && data && <><DiscoveryCandidates title="Bereit zur Übernahme" description="Eindeutig erkannte bekannte Reihen. Keine erneute Portfoliofreigabe erforderlich." candidates={ready} kind="ready" loading={false} busy={busy} onReview={edit} /><DiscoveryHistory data={data} onReview={edit} onReviewId={id => void action(async () => edit(await api<Candidate>(`/candidates/${id}`)))} /></>}
     </details>
-    {resetMode && <DiscoveryResetDialog initialMode={resetMode} onClose={() => setResetMode(null)} onStarted={id => { setOperationId(id); setResetMode(null); setNotice("Neubewertung angefordert. Der Vorgang wird mit Ergebnis und Fehlern protokolliert."); void reload(); }} />}
-    <DashboardModal open={!!candidate} onClose={() => setCandidate(null)} title={candidate?.title ?? "Vorschlag prüfen"}>
-      {candidate && <div className="space-y-4">
-        {error && <p role="alert" className="text-red-400">{error}</p>}
-        <p>{candidate.venue_name} · {candidate.reason}</p>
-        <p className="text-sm">Entscheidungsursprung: {candidate.decision_origin} · {candidate.matching_class}<br />Regelversion: {candidate.matcher_version} · Bewertet: {candidate.evaluated_at ?? "Noch nicht versioniert"}</p>
-        {candidate.automatic_reason && <p className="text-sm">Technische Entscheidung: {candidate.automatic_reason}</p>}
-        {currentCandidate?.assessment && <CandidateAssessment assessment={currentCandidate.assessment} detailed />}
-        {candidate.genreCoverage && <p>Genreübereinstimmung: {candidate.genreCoverage.matched} von {candidate.genreCoverage.total} aktiven Projektgenres ({candidate.genreCoverage.percent} %).</p>}
-        {!candidate.party_id && candidate.assessment?.recognition.status === "NONE" && candidate.genreCoverage?.eligible && !candidate.assessment.importBlockers.length && <fieldset className="space-y-2 rounded-lg border p-3"><legend>Neue Partyreihe einmalig freigeben</legend><label className="block">Name im Portfolio<input className={field} value={portfolioName} maxLength={200} onChange={e=>setPortfolioName(e.target.value)} /></label><p>Ab 50 % aller aktiven Projektgenres. Bei belegtem Datum aus freigegebener Quelle wird der Termin mit übernommen. Geprüfte Angaben bleiben erhalten.</p><button type="button" className={button} disabled={busy || !portfolioName.trim()} onClick={()=>void action(async()=>{await api(`/candidates/${candidate.id}/portfolio`,"POST",{name:portfolioName});await reloadEntries();await reloadParties();setCandidate(null);setNotice("Partyreihe im Portfolio freigegeben.");})}>Ins Portfolio aufnehmen</button></fieldset>}
-        <details><summary>Quellen und Angaben vergleichen</summary><button type="button" className={button} disabled={busy} onClick={()=>void action(async()=>{const rows=await api(`/candidates/${candidate.id}/sources`);setOrigins(Array.isArray(rows)?rows:[]);})}>Quellenbelege laden</button><SourceEvidence origins={origins} /></details>
-        <a href={sourceLink(candidate.source_url)} target="_blank" rel="noreferrer" className="underline">Quellseite öffnen</a>
-        <label className="block">Partyreihe zuordnen<select className={field} value={party} onChange={e => setParty(e.target.value)}><option value="">Bitte wählen</option>{parties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-        <label className="block">Korrigiertes / bestätigtes Datum<input className={field} type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
-        <label className="block">Prüfstatus<select className={field} value={status} onChange={e => setStatus(e.target.value)}>{["NEEDS_REVIEW","NEEDS_INQUIRY","REJECTED","DUPLICATE"].map(s => <option key={s} value={s}>{labels[s]}</option>)}</select></label>
-        <details><summary>Quellenangaben</summary><pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words text-sm">{candidate.evidence}</pre></details>
-        <details open={inquiry !== "NONE"}><summary>Instagram-Rückfrage</summary>
-          <button disabled={busy} className={`${button} mt-3`} onClick={() => void action(async () => { const result = await api(`/candidates/${candidate.id}/dm`); setDm(result.text); setInquiry("PREPARED"); await api(`/candidates/${candidate.id}`,"PUT",{partyId: party || null,date:date || null,status:"NEEDS_INQUIRY",inquiryStatus:"PREPARED",dmText:result.text}); setStatus("NEEDS_INQUIRY"); })}>DM vorbereiten</button>
-          <label className="block mt-3">Rückfragetext<textarea className={field} rows={9} maxLength={12000} value={dm} onChange={e => setDm(e.target.value)} /></label>
-          <div className="flex flex-wrap gap-2"><button className={button} disabled={!dm} onClick={() => void action(async () => { await navigator.clipboard.writeText(dm); setNotice("Text kopiert"); })}>Text kopieren</button>{candidate.instagram && /^[A-Za-z0-9._]+$/.test(candidate.instagram) && <a className={button} target="_blank" rel="noreferrer" href={`https://www.instagram.com/${candidate.instagram}/`}>Instagram-Profil öffnen</a>}</div>
-          {!candidate.instagram && <p className="text-sm mt-2">Kein Instagram-Handle vorhanden. Den Text über einen passenden Kontaktweg verwenden.</p>}
-          <label className="block mt-3">Rückfragestatus<select className={field} value={inquiry} onChange={e => setInquiry(e.target.value)}>{["NONE","PREPARED","SENT","ANSWERED"].map(s => <option key={s} value={s}>{labels[s]}</option>)}</select></label>
-          <p className="text-sm mt-2">Nachrichten werden von dir in Instagram verschickt. Den Status anschließend manuell setzen.</p>
-        </details>
-        <div className="flex flex-wrap gap-2"><button disabled={busy} className={button} onClick={() => void action(async () => { await save(); setCandidate(null); })}>Speichern</button><button disabled={busy || !party || !date || !!currentCandidate?.calendar_entry_id || !!currentCandidate?.assessment?.importBlockers.length} className={button} onClick={() => void action(async () => { await save(); await api(`/candidates/${candidate.id}/import`,"POST",{partyId:party,date}); await reloadEntries(); setCandidate(null); })}>Manuell übernehmen</button></div>
-        {currentCandidate?.calendar_entry_id && <p>Bereits übernommene Änderungen bitte direkt im Kalender prüfen.</p>}
-      </div>}
-    </DashboardModal>
-    <DashboardModal open={!!source} onClose={() => setSource(null)} title="Quelle & Extraktionsprofil">
-      {source && <form className="space-y-4" onSubmit={e => {e.preventDefault(); void action(async () => { await api("/sources","POST",{venueId:source.venue_id,url:source.url,approved:source.approved,itemSelector:source.item_selector,titleSelector:source.title_selector,dateSelector:source.date_selector,sourceKind:source.source_kind ?? (source.source_type==="OFFICIAL"?"WEBSITE":"CUSTOM"),enabled:source.enabled ?? true,priority:source.priority ?? 100}); setSource(null); });}}>
-        {error && <p role="alert" className="text-red-400">{error}</p>}
-        <label className="block">Location<select className={field} value={source.venue_id} onChange={e => setSource({...source,venue_id:e.target.value})} required>{venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}</select></label>
-        <label className="block">Quell-URL<input className={field} type="url" required maxLength={2048} value={source.url} onChange={e => setSource({...source,url:e.target.value})} /></label>
-        <label className="block">Quellenart<select className={field} value={source.source_kind ?? (source.source_type==="OFFICIAL"?"WEBSITE":"CUSTOM")} onChange={e=>setSource({...source,source_kind:e.target.value})}>{Object.entries(sourceKinds).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
-        <label className="flex gap-2"><input type="checkbox" checked={source.enabled ?? true} onChange={e=>setSource({...source,enabled:e.target.checked})} />Quelle für Discovery verwenden</label>
-        <label className="block">Reihenfolge der Zusatzquellen (kleine Zahl zuerst)<input type="number" min={0} max={999} className={field} value={source.priority ?? 100} onChange={e=>setSource({...source,priority:Number(e.target.value)})} /></label>
-        <label className="flex gap-2"><input type="checkbox" checked={source.approved} onChange={e => setSource({...source,approved:e.target.checked})} />Quelle ausdrücklich zur automatischen Übernahme freigeben</label>
-        <p className="text-sm">Externe Portale bleiben als externe Quellen gekennzeichnet. Freigabe erst nach Prüfung der Verlässlichkeit.</p>
-        <details><summary>Optionales HTML-Profil (CSS-Selektoren)</summary>{(["item_selector","title_selector","date_selector"] as const).map((key,i) => <label key={key} className="mt-3 block">{["Event-Container","Titel innerhalb des Containers","Startdatum (datetime/content oder ISO-Text)"][i]}<input className={field} maxLength={300} value={source[key]} onChange={e => setSource({...source,[key]:e.target.value})} /></label>)}</details>
-        <button disabled={busy} className={button}>Speichern</button>
-      </form>}
-    </DashboardModal>
+    <details id="discovery-tools" className="discovery-section discovery-tools" open={toolsOpen} onToggle={event => setToolsOpen(event.currentTarget.open)}><summary>Quellen &amp; Konfiguration <span className="discovery-muted">{data?.sources.length ?? 0} Quellen</span></summary>
+      <section className="mt-5 space-y-4"><h2 className="font-semibold">Location-Quellen</h2><button className="discovery-button" disabled={busy} onClick={() => setSource({ id: "", venue_id: venues[0]?.id ?? "", venue_name: "", url: "", source_type: "EXTERNAL", approved: false, status: "NOT_CHECKED", item_selector: "", title_selector: "", date_selector: "", source_kind: "CUSTOM", enabled: true, priority: 100 })}>Quelle hinzufügen</button><SourceOverview sources={data?.sources ?? []} onEdit={item => setSource({ ...item })} /></section>
+      <details className="discovery-subsection"><summary>Technische Diagnosen</summary>{operation && <p>Letzter Vorgang: {discoveryStatusLabel(operation.status)} · {operation.report}</p>}{operation?.summary && <pre className="whitespace-pre-wrap break-words">{operation.summary}</pre>}<div className="overflow-x-auto"><table className="mt-3 w-full text-left text-sm"><thead><tr><th>Party</th><th>Location</th><th>Vorher</th><th>Nachher</th><th>Grund</th></tr></thead><tbody>{data?.diagnoses?.map(item => <tr key={item.id}><td className="p-2">{item.title}</td><td>{item.venue_name}</td><td>{item.old_status ?? "Neu"}</td><td>{item.new_status}</td><td>{item.origin} · {item.reason}</td></tr>)}</tbody></table></div></details>
+    </details>
+    {resetMode && <DiscoveryResetDialog initialMode={resetMode} onClose={() => setResetMode(null)} onStarted={() => {setResetMode(null); setNotice("Neubewertung angefordert. Der Vorgang wird protokolliert."); void reload();}} />}
+    {candidate && <CandidateReviewDialog key={candidate.id} candidate={candidate} currentCandidate={currentCandidate} busy={busy} error={error} action={action} onClose={() => setCandidate(null)} setNotice={setNotice} />}
+    {source && <SourceEditorDialog key={source.id} initialSource={source} busy={busy} error={error} action={action} onClose={() => setSource(null)} />}
   </main>;
 }
