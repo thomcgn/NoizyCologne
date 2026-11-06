@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -11,6 +12,14 @@ ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('repository_check', ROOT / 'scripts/check-repository.py')
 scanner = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(scanner)
+
+
+def foreign_repository_env():
+    # Git hooks export repository-local variables. Git's documented list must be
+    # cleared only when entering another repository, never in the active gate.
+    local_names = set(subprocess.check_output(['git', 'rev-parse', '--local-env-vars'], text=True).splitlines())
+    return {name: value for name, value in os.environ.items()
+            if name not in local_names and not name.startswith(('GIT_CONFIG_KEY_', 'GIT_CONFIG_VALUE_'))}
 
 
 class RepositoryTests(unittest.TestCase):
@@ -26,12 +35,13 @@ class RepositoryTests(unittest.TestCase):
     def test_staged_secret_cannot_be_hidden_by_a_clean_worktree(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            subprocess.run(['git', 'init', '-q', directory], check=True)
+            env = foreign_repository_env()
+            subprocess.run(['git', 'init', '-q', directory], env=env, check=True)
             file = root / 'config.txt'
             file.write_text('ghp_' + 'b' * 36)
-            subprocess.run(['git', '-C', directory, 'add', 'config.txt'], check=True)
+            subprocess.run(['git', '-C', directory, 'add', 'config.txt'], env=env, check=True)
             file.write_text('clean worktree')
-            result = subprocess.run(['python3', str(ROOT / 'scripts/check-repository.py')], cwd=root, capture_output=True, text=True)
+            result = subprocess.run(['python3', str(ROOT / 'scripts/check-repository.py')], cwd=root, env=env, capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn('index: config.txt: GitHub token', result.stderr)
             self.assertNotIn('b' * 36, result.stderr)
@@ -70,7 +80,7 @@ exit 0
             path = self.root / file
             path.write_text(stub)
             path.chmod(0o755)
-        self.env = {**os.environ, 'PATH': str(self.root / 'bin') + os.pathsep + os.environ['PATH'], 'FIXTURE_ROOT': str(self.root)}
+        self.env = {**foreign_repository_env(), 'PATH': str(self.root / 'bin') + os.pathsep + os.environ['PATH'], 'FIXTURE_ROOT': str(self.root)}
         self.git('init', '-q')
         self.git('config', 'user.name', 'Quality Fixture')
         self.git('config', 'user.email', 'quality@example.invalid')
@@ -130,12 +140,67 @@ exit 0
                 (self.root / 'fail-stage').write_text(failure)
                 failed = subprocess.run(['git', 'commit', '-m', 'blocked fixture'], cwd=self.root, env=self.env, capture_output=True, text=True)
                 self.assertNotEqual(failed.returncode, 0)
-                self.assertNotEqual(subprocess.run(['git', 'rev-parse', '--verify', 'HEAD'], cwd=self.root, capture_output=True).returncode, 0)
+                self.assertNotEqual(subprocess.run(['git', 'rev-parse', '--verify', 'HEAD'], cwd=self.root, env=self.env, capture_output=True).returncode, 0)
         before = self.git('write-tree').stdout
         (self.root / 'fail-stage').write_text('')
         passed = self.git('commit', '-m', 'allowed fixture')
         self.assertEqual(passed.returncode, 0)
         self.assertEqual(self.git('rev-parse', 'HEAD^{tree}').stdout, before)
+
+
+    def test_partial_commit_runs_hook_and_preserves_unrelated_staged_blob(self):
+        self.git('commit', '-m', 'fixture base')
+        unrelated = self.root / 'unrelated.txt'
+        # The commit index must exclude this unrelated staged token. Inspecting
+        # the ordinary index instead would correctly fail the repository check.
+        unrelated.write_text('ghp_' + 'c' * 36)
+        self.git('add', 'unrelated.txt')
+        before = self.git('ls-files', '--stage', '--', 'unrelated.txt').stdout
+        original_contents = unrelated.read_bytes()
+        (self.root / 'change.txt').write_text('task edit\n')
+        (self.root / 'new-task.txt').write_text('new task file\n')
+        self.git('add', 'new-task.txt')
+        self.git('config', 'core.hooksPath', '.githooks')
+        (self.root / 'fail-stage').write_text('')
+
+        committed = self.git('commit', '--only', '-m', 'partial fixture', '--', 'change.txt', 'new-task.txt')
+
+        self.assertIn('[quality] PASSED --full', committed.stdout + committed.stderr)
+        self.assertIn('npm run build', (self.root / 'calls').read_text())
+        self.assertEqual(self.git('ls-files', '--stage', '--', 'unrelated.txt').stdout, before)
+        self.assertEqual(unrelated.read_bytes(), original_contents)
+        self.assertEqual(self.git('diff', '--cached', '--name-only').stdout.splitlines(), ['unrelated.txt'])
+        self.assertEqual(sorted(self.git('show', '--format=', '--name-only', 'HEAD').stdout.splitlines()), ['change.txt', 'new-task.txt'])
+
+
+class EnvironmentIsolationTests(unittest.TestCase):
+    def test_foreign_hook_environment_cannot_redirect_fixture_repositories(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            clean_env = foreign_repository_env()
+            subprocess.run(['git', 'init', '-q', directory], env=clean_env, check=True)
+            (parent / 'parent.txt').write_text('parent index must stay unchanged\n')
+            subprocess.run(['git', '-C', directory, 'add', 'parent.txt'], env=clean_env, check=True)
+            index = parent / '.git/index'
+            before = index.read_bytes()
+            inherited = {**os.environ,
+                         'GIT_INDEX_FILE': str(index),
+                         'GIT_DIR': str(parent / '.git'),
+                         'GIT_WORK_TREE': str(parent),
+                         'GIT_COMMON_DIR': str(parent / '.git'),
+                         'GIT_OBJECT_DIRECTORY': str(parent / '.git/objects'),
+                         'GIT_PREFIX': 'foreign-parent/',
+                         'GIT_CONFIG_COUNT': '1',
+                         'GIT_CONFIG_KEY_0': 'core.hooksPath',
+                         'GIT_CONFIG_VALUE_0': str(parent / 'foreign-hooks')}
+            result = subprocess.run([sys.executable, str(Path(__file__).resolve()),
+                                     'RepositoryTests.test_staged_secret_cannot_be_hidden_by_a_clean_worktree',
+                                     'WorkflowTests.test_success_runs_all_required_stages',
+                                     'WorkflowTests.test_partial_commit_runs_hook_and_preserves_unrelated_staged_blob'],
+                                    cwd=ROOT, env=inherited, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(index.read_bytes(), before)
+            self.assertEqual((parent / 'parent.txt').read_text(), 'parent index must stay unchanged\n')
 
 
 if __name__ == '__main__':

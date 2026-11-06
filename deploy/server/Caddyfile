@@ -1,33 +1,33 @@
 {
-    email {$ACME_EMAIL}
+	email {$ACME_EMAIL}
 }
 
 noizycologne.de {
-    encode zstd gzip
-    reverse_proxy landing:80
+	encode zstd gzip
+	reverse_proxy landing:80
 }
 
 www.noizycologne.de {
-    redir https://noizycologne.de{uri} permanent
+	redir https://noizycologne.de{uri} permanent
 }
 
 tsa.noizycologne.de {
-    encode zstd gzip
+	encode zstd gzip
 
-    @api path /api/v1/*
-    handle @api {
-        forward_auth frontend:3000 {
-            uri /api/auth/verify
-        }
-        reverse_proxy api:8080
-    }
+	@api path /api/v1/*
+	handle @api {
+		forward_auth frontend:3000 {
+			uri /api/auth/verify
+		}
+		reverse_proxy api:8080
+	}
 
-    handle {
-        reverse_proxy frontend:3000
-    }
+	handle {
+		reverse_proxy frontend:3000
+	}
 }
 
 # Do not expose the backend on its former public hostname.
 api.noizycologne.de {
-    respond "Not found" 404
+	respond "Not found" 404
 }

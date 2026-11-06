@@ -1,6 +1,6 @@
 # NoizyCologne – Lastenheft, Pflichtenheft & Entwicklungs-/Lernhandbuch
 
-> **Version:** 1.9 · **Stand:** 5. November 2026 · **Status:** Persistente Team-Anwendung mit Redaktion, Party-Discovery und Änderungsprüfung; Instagram-Publishing nicht implementiert
+> **Version:** 1.9 · **Stand:** 6. November 2026 · **Status:** Persistente Team-Anwendung mit Redaktion, Party-Discovery und Änderungsprüfung; Instagram-Publishing nicht implementiert
 > **Zielgruppe:** NoizyCologne-Team und Entwickler  
 > **Source of Truth:** Diese Version ersetzt v1.6 und frühere Projektdokumente fachlich. Für das tatsächlich implementierte Verhalten gilt zusätzlich der aktuelle Codezustand; nur dokumentierte Features sind noch nicht automatisch umgesetzt.  
 > **Wichtig:** Dieses Handbuch enthält Lastenheft, Pflichtenheft, technische Lern-/Agenten-Referenzen **und einen Ist-/Soll-Abgleich**. Die früheren Beispielskripte sind nicht automatisch identisch mit der aktuellen Codebasis. Die Entwicklung erfolgt auf Arch Linux; der Benutzer hat den lokalen Kalender-Prototyp erfolgreich getestet. Plattform-Funktionen werden vor Produktivstart im realen Meta-Konto verifiziert.  
@@ -2120,6 +2120,7 @@ Bei jeder Ergänzung gleichzeitig **Kapitel 3 (Lastenheft), 4 (Pflichtenheft), 5
 
 | Version | Datum | Änderungen |
 |---|---|---|
+| v1.9 Heller Modus und Branch-CI | 06.11.2026 | Primäre Buttons mit weißem Hintergrund und schwarzer Schrift erhalten im hellen Modus gemeinsam eine dunkle Fläche und weiße Schrift; Location-Übernehmen und gleich gestaltete Formularaktionen bleiben lesbar, weiße Logo-Flächen bleiben erhalten. Anlegen-/Bearbeiten-Regressionen prüfen mindestens 4,5:1 Textkontrast. Die CI prüft jeden Arbeitsbranch mit dem vollständigen Quality Gate; Deployment bleibt an den separaten bestehenden Workflow gebunden. |
 | v1.9 Team und Qualität | 05.11.2026 | Verständliches Team-Handbuch ergänzt; veraltete Prototyp-/Reload-Angaben korrigiert, gespeicherte Freigabe von Instagram-Publishing und noch fehlender Bildversion-Fixierung getrennt. Conversion-/Null-Diagnosen einschließlich INFO blockieren; vier Feldinjektionen auf Konstruktoren umgestellt. Vollständiges Quality Gate und aktueller IDE-Nachweis vor jedem Commit verpflichtend. |
 | v1.8 Nur Partys | 05.11.2026 | Konzerte ausdrücklich aus dem Projektumfang ausgeschlossen; Konzertnavigation, Extraktion, Detailabrufe, Matching und manuelle Discovery-Übernahme abgesichert. |
 | v1.8 Abrufbudget | 05.11.2026 | Konfigurierbares 2-MiB-Response-Limit mit 4-MiB-Hardcap; Größen- und Zeitlimit getrennt; beide aktuellen Live-Music-Hall-Listen lesend geprüft. |

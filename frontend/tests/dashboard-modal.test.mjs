@@ -202,6 +202,21 @@ const venue = { id: 'venue', name: 'Test Venue', instagram: 'venue', websiteUrl:
 const actor = { id: 'actor', name: 'Test DJ', instagram: 'dj', kind: 'person', roles: ['dj'], collectiveIds: [] };
 const entry = { id: 'entry', date: '2027-01-02', type: 'event', locationId: 'venue', partyId: 'party', entryPrice: '10', startTime: '22:00', notes: '', mentionDjIds: [], eventFlyer: null };
 const genre = { id: 'genre', canonicalName: 'rock', displayName: 'Rock', active: true, aliases: [] };
+// jsdom does not compile Tailwind. Supply the two utility baselines, then apply
+// the real global stylesheet so theme overrides are tested on the actual forms.
+const themeStyles = `.bg-white { background-color: #ffffff; } .text-black { color: #000000; }\n${readFileSync(new URL('../src/app/globals.css', import.meta.url), 'utf8').replace('@import "tailwindcss";', '')}`;
+function contrastRatio(foreground, background) {
+  function luminance(color) {
+    const channels = color.match(/\d+(?:\.\d+)?/g).slice(0, 3).map(value => {
+      const channel = Number(value) / 255;
+      return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    });
+    return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  }
+  const first = luminance(foreground);
+  const second = luminance(background);
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+}
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
 function button(text) {
@@ -216,12 +231,15 @@ for (const [name, file, props, opener] of [
   ['DJs / Akteure', 'portfolio/akteure/page.tsx', {}, 'Neu anlegen'],
   ['Kalendereinträge', 'kalender/page.tsx', {}, 'Neuer Eintrag'],
 ]) {
-  test(`${name}: actual create/edit forms preserve input focus and restore trigger`, async () => {
+  test(`${name}: actual create/edit forms preserve focus and button contrast across themes`, async () => {
     catalogue = { parties: [party], venues: [venue], actors: [actor], entries: [entry] };
     globalThis.ResizeObserver = class { observe() {} disconnect() {} };
     globalThis.fetch = async () => new Response(JSON.stringify([genre]), { status: 200, headers: { 'Content-Type': 'application/json' } });
     const Page = loadSource(new URL(`../src/app/dashboard/${file}`, import.meta.url)).default;
     await act(async () => { mount(h(Page, props)); });
+    const style = document.createElement('style');
+    style.textContent = themeStyles;
+    document.body.append(style);
     for (const mode of ['create', 'edit']) {
       const trigger = button(mode === 'create' ? opener : 'Bearbeiten');
       trigger.focus();
@@ -252,6 +270,8 @@ for (const [name, file, props, opener] of [
       key('Tab', true);
       assert.equal(document.activeElement, lastButton);
       const focusedField = dialog.querySelector('input:not(:disabled):not([type="hidden"]), select, textarea');
+      const primaryButtons = dialog.querySelectorAll('button.bg-white.text-black');
+      assert.ok(primaryButtons.length > 0, `${name} ${mode}: primary actions are included in the contrast check`);
       for (const theme of ['dark', 'light']) {
         for (const width of [390, 1280]) {
           document.documentElement.dataset.theme = theme;
@@ -259,6 +279,11 @@ for (const [name, file, props, opener] of [
           focusedField.focus();
           act(() => window.dispatchEvent(new Event('resize')));
           assert.equal(document.activeElement, focusedField);
+          for (const primary of primaryButtons) {
+            const computed = getComputedStyle(primary);
+            assert.ok(contrastRatio(computed.color, computed.backgroundColor) >= 4.5,
+              `${name} ${mode}: ${primary.textContent} must remain legible in ${theme} mode at ${width}px`);
+          }
         }
       }
       key('Escape');

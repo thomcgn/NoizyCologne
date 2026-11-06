@@ -232,7 +232,19 @@ verändert. Weitere Tests schützen vorhandene Hook-Konfigurationen und erkennen
 einen nur im Index versteckten Token. Diese Simulationen verändern keine
 Produktionsdaten und gelten nicht als Ersatz für die echten Projektprüfungen.
 
-`.github/workflows/ghcr.yml` ruft nach dem unveränderten Java-/Node-Setup und `npm ci`
-dieselbe vollständige Routine auf. Die zusätzliche vorhandene Caddy-Validierung
-bleibt bestehen. Publish/Deploy bleiben vom erfolgreichen Verify-Job abhängig;
-bei dieser Einrichtung werden weder Workflow noch Deployment ausgelöst.
+Die temporären Test-Repositories erhalten eine eigene Git-Umgebung. Insbesondere
+darf der bei einem Teilcommit gesetzte `GIT_INDEX_FILE` nicht in fremde
+Test-Repositories gelangen. Der echte Hook prüft weiterhin den vom Commit
+bereitgestellten Index; Teilcommits müssen fremde gestagte Dateien erhalten.
+
+`.github/workflows/ci.yml` prüft jeden Branch-Push und Pull Requests nach `main`:
+Projektstruktur, vollständiges Quality Gate und Caddy-Konfiguration. Java 21,
+Node 24 und `npm ci` entsprechen dem Setup des Deployment-Workflows. Diese CI
+veröffentlicht keine Images und führt kein Deployment aus.
+Die vorhandene Caddyfile-Formatwarnung wurde mit dem offiziellen Formatter
+bereinigt; die daraus adaptierte JSON-Konfiguration bleibt identisch.
+
+`.github/workflows/ghcr.yml` ruft dieselbe vollständige Routine vor dem
+Publish/Deploy auf. Dieser separate Workflow startet weiterhin bei Push auf
+`main` beziehungsweise durch ausdrücklichen manuellen Aufruf. Publish/Deploy
+bleiben vom erfolgreichen Verify-Job abhängig.

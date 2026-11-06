@@ -21,6 +21,10 @@ Geprüft werden:
   eingeklappte Details und leere Dialoge.
 - Theme-Attribute dark/light und Resize-Ereignisse bei 390 und 1280 Pixeln in den
   tatsächlichen Anlegen-/Bearbeiten-Formularen verändern den Fokus nicht.
+- Die primären Formularbuttons für Genres, Partyreihen, Locations, Akteure und
+  Kalender behalten beim Anlegen/Bearbeiten in beiden Themes mindestens 4,5:1
+  Textkontrast. Dafür werden die echten globalen Theme-Regeln auf zwei im Test
+  bereitgestellte Tailwind-Farbbaselines angewendet; jsdom kompiliert kein Tailwind.
 
 Katalogdaten und HTTP-Antworten sind Testdaten; es werden keine echten Daten
 verändert. Speichern/Validierung wird am zentralen Testformular geprüft, nicht
