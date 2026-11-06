@@ -11,6 +11,7 @@ for (const name of ['window', 'document', 'HTMLElement', 'HTMLDetailsElement', '
 }
 globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+window.confirm = () => true;
 const require = createRequire(import.meta.url);
 const React = require('react');
 const { act, createElement: h, StrictMode } = React;
@@ -112,15 +113,15 @@ function change(element, value) {
     element.dispatchEvent(new Event(element.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
   });
 }
-async function openReview() { await settle(() => { const trigger = [...document.querySelectorAll('article button')].find(item => /Veranstaltung prüfen|Ins Portfolio übernehmen|Übernahme öffnen/.test(item.textContent)); assert.ok(trigger); trigger.click(); }); }
+async function openReview() { await settle(() => { const trigger = [...document.querySelectorAll('[data-record-id] button')].find(item => /Veranstaltung prüfen|Ins Portfolio übernehmen|Übernahme öffnen/.test(item.textContent)); assert.ok(trigger); trigger.click(); }); }
 afterEach(() => {
   if (root) act(() => root.unmount());
-  root = null; poll = null; document.body.replaceChildren(); globalThis.fetch = originalFetch;
+  root = null; poll = null; document.body.replaceChildren(); window.localStorage.clear(); window.confirm = () => true; globalThis.fetch = originalFetch;
 });
 
 test('cooperation shows both known series and requires an explicit single manual assignment', async () => {
   await mount(candidate());
-  const card = document.querySelector('article');
+  const card = document.querySelector('[data-record-id]');
   assert.match(card.textContent, /Blue Shell07. November 2026/);
   assert.match(card.textContent, /Kooperation erkannt/);
   assert.deepEqual([...card.querySelectorAll('li')].map(item => item.textContent), ['NEON PARADISE', 'NEON KULT']);
@@ -144,10 +145,10 @@ test('READY is visible and benign UNCONFIRMED detail metadata does not become an
   const single = { status: 'SINGLE', parties: recognition.parties.slice(0, 1) };
   await mount(candidate({ title: 'NEON PARADISE Special', party_id: 'paradise', status: 'READY',
     reason: 'Bekannte Party; UNCONFIRMED Details nicht auswertbar', assessment: assessment({ recognition: single, automaticImportEligible: true }) }));
-  assert.equal(document.querySelectorAll('.discovery-card').length, 0, 'Known ready parties do not become unnecessary review cases');
+  assert.equal(document.querySelectorAll('[data-record-id]').length, 0, 'Known ready parties do not become unnecessary review cases');
   await settle(() => document.querySelector('.discovery-history > summary').click());
   assert.ok(calls.some(call => call.url.endsWith('?filter=READY')));
-  assert.ok(document.querySelector('article'));
+  assert.ok(document.querySelector('[data-record-id]'));
   await openReview();
   const details = dialog().querySelector('section');
   assert.match(details.textContent, /Terminprüfung: Termin belegt/);
@@ -243,11 +244,11 @@ test('Discovery separates eligible new series, protected decisions and imported 
   await mount([unknown, candidate({id: 'protected', title: 'Manuelle Rückfrage', inquiry_status: 'SENT', decision_origin: 'MANUAL'}), candidate({id: 'imported', title: 'Historischer Termin', status: 'IMPORTED', calendar_entry_id: 'entry'})]);
   const fresh = document.querySelector('section[aria-label="Neue Partyreihen"]');
   const review = document.querySelector('section[aria-label="Prüfbedarf"]');
-  assert.equal(fresh.querySelectorAll('article').length, 1);
+  assert.equal(fresh.querySelectorAll('[data-record-id]').length, 1);
   assert.match(fresh.textContent, /Neue Indie-Nacht/);
-  assert.match(fresh.textContent, /50 % Genre-Match/);
+  assert.match(fresh.textContent, /50 %/);
   assert.match(fresh.textContent, /EmoIndie/);
-  assert.equal(review.querySelectorAll('article').length, 1);
+  assert.equal(review.querySelectorAll('[data-record-id]').length, 1);
   assert.match(review.textContent, /Rückfrage ist noch offen/);
   assert.doesNotMatch(document.querySelector('main').textContent, /Historischer Termin|party-rules-3|POSSIBLE_MATCH/);
   assert.equal(document.querySelector('.discovery-history').open, false);
@@ -257,7 +258,7 @@ test('Discovery separates eligible new series, protected decisions and imported 
 test('empty Discovery has explicit empty states and keeps the existing scan endpoint', async () => {
   await mount([]);
   assert.match(document.querySelector('h1').textContent, /^Discovery$/);
-  assert.match(document.body.textContent, /Alles auf dem aktuellen Stand/);
+  assert.match(document.body.textContent, /Keine neuen passenden Partyreihen/);
   assert.match(document.body.textContent, /Keine offenen Ausnahmefälle/);
   await settle(() => button('Jetzt suchen').click());
   assert.equal(calls.filter(call => call.method === 'POST' && call.url.endsWith('/scan')).length, 1);
@@ -265,9 +266,9 @@ test('empty Discovery has explicit empty states and keeps the existing scan endp
 
 test('long review lists reveal another page without mounting the historical archive', async () => {
   await mount(Array.from({length: 35}, (_, index) => candidate({id: `review-${index}`})));
-  assert.equal(document.querySelectorAll('.discovery-card').length, 12);
-  await settle(() => button('Weitere 12 anzeigen').click());
-  assert.equal(document.querySelectorAll('.discovery-card').length, 24);
+  assert.equal(document.querySelectorAll('[data-record-id]').length, 25);
+  await settle(() => button('Weiter').click());
+  assert.equal(document.querySelectorAll('[data-record-id]').length, 10);
   assert.ok(!calls.some(call => call.url.endsWith('?filter=ARCHIVE')));
 });
 
@@ -287,7 +288,7 @@ test('portfolio confirmation prevents duplicate submissions and removes the appr
   const confirm = button('Ins Portfolio übernehmen', dialog());
   await settle(() => { confirm.click(); confirm.click(); });
   assert.equal(calls.filter(call => call.url.endsWith('/portfolio') && call.method === 'POST').length, 1);
-  assert.equal(document.querySelectorAll('.discovery-card').length, 0);
+  assert.equal(document.querySelectorAll('[data-record-id]').length, 0);
   assert.equal(reloadedEntries, 1); assert.equal(reloadedDrafts, 1);
 });
 
@@ -295,5 +296,57 @@ test('failed initial requests do not claim that Discovery is empty or up to date
   await mount([], true);
   assert.match(document.querySelector('[role="alert"]').textContent, /Quelle nicht erreichbar/);
   assert.match(document.body.textContent, /Ergebnisse derzeit nicht verfügbar/);
-  assert.doesNotMatch(document.body.textContent, /Alles auf dem aktuellen Stand|Keine offenen Ausnahmefälle/);
+  assert.doesNotMatch(document.body.textContent, /Keine neuen passenden Partyreihen|Keine offenen Ausnahmefälle/);
+});
+
+
+test('Discovery search, sorting, genre filter and persisted card view preserve the candidate set', async () => {
+  await mount([
+    candidate({id: 'z', title: 'Zulu', genreCoverage: {percent: 50, matched: 1, total: 2, names: ['Indie']}}),
+    candidate({id: 'a', title: 'Alpha', venue_name: 'Andere Location', genreCoverage: {percent: 100, matched: 2, total: 2, names: ['Indie', 'Emo']}}),
+  ]);
+  const section = document.querySelector('section[aria-label="Prüfbedarf"]');
+  const ids = () => [...section.querySelectorAll('[data-record-id]')].map(row => row.dataset.recordId);
+  assert.deepEqual(ids(), ['a', 'z']);
+  await settle(() => section.querySelector('th button').click());
+  assert.deepEqual(ids(), ['z', 'a']);
+  const search = section.querySelector('input[type="search"]');
+  change(search, 'Andere Location');
+  assert.deepEqual(ids(), ['a']);
+  assert.equal(document.activeElement, search);
+  change(search, 'unbekannt');
+  assert.match(section.textContent, /Keine Treffer für diese Auswahl/);
+  change(search, '');
+  change(section.querySelector('select'), '75');
+  assert.deepEqual(ids(), ['a']);
+  await settle(() => button('Karten', section).click());
+  assert.equal(section.querySelectorAll('article').length, 1);
+  assert.equal(window.localStorage.getItem('noizy-view-discovery-review'), 'cards');
+  await settle(() => { root.unmount(); root = null; });
+  await mount(candidate());
+  assert.ok(document.querySelector('section[aria-label="Prüfbedarf"] article'));
+  assert.equal(calls.filter(call => call.method === 'PUT' || call.method === 'POST').length, 0);
+});
+
+test('Discovery drawer protects unsaved input on Escape and close, then restores its trigger', async () => {
+  await mount(candidate());
+  const trigger = document.querySelector('[data-record-open]');
+  trigger.focus();
+  await settle(() => trigger.click());
+  assert.ok(dialog().classList.contains('cc-drawer'));
+  change(dialog().querySelector('input[type="date"]'), '2026-11-14');
+  let prompts = 0;
+  window.confirm = () => { prompts++; return false; };
+  await settle(() => document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true})));
+  assert.equal(dialog().querySelector('input[type="date"]').value, '2026-11-14');
+  await settle(() => dialog().querySelector('[data-modal-close]').click());
+  assert.equal(prompts, 2);
+  const unload = new Event('beforeunload', {cancelable: true});
+  window.dispatchEvent(unload);
+  assert.equal(unload.defaultPrevented, true);
+  window.confirm = () => true;
+  await settle(() => dialog().querySelector('[data-modal-close]').click());
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.equal(document.activeElement, trigger);
+  assert.equal(calls.filter(call => call.method === 'PUT' || call.method === 'POST').length, 0);
 });

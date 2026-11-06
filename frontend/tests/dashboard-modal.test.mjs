@@ -11,6 +11,7 @@ for (const name of ['window', 'document', 'HTMLElement', 'HTMLDetailsElement', '
 }
 globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+window.confirm = () => true;
 // Browser code uses window.setInterval and the global clearInterval interchangeably.
 window.setInterval = globalThis.setInterval;
 window.clearInterval = globalThis.clearInterval;

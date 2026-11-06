@@ -10,6 +10,7 @@ import SourceEditorDialog from "./SourceEditorDialog";
 import DiscoveryCandidates from "./DiscoveryCandidates";
 import DiscoveryHistory from "./DiscoveryHistory";
 import { discoveryApi as api } from "./discoveryApi";
+import { useWorkspaceAction } from "../workspaceActions";
 import { isNewSeries, isOpen } from "./discoveryPresentation";
 import type { Candidate, Source, Overview } from "./discoveryTypes";
 
@@ -65,6 +66,18 @@ export default function DiscoveryPage() {
   const readyIds = new Set(ready.map(item => item.id));
   const review = data?.candidates.filter(item => isOpen(item) && !isNewSeries(item) && !readyIds.has(item.id)) ?? [];
   const sourceProblems = data?.sources.filter(item => item.enabled !== false && (["PARTIAL", "BLOCKED", "FAILED"].includes(item.quality ?? "") || !["EVENTS_FOUND", "NO_EVENTS", "NOT_CHECKED", "SOURCE_LINKS_FOUND", "EXCLUDED_CONCERTS"].includes(item.status))) ?? [];
+  function requestScan() {void action(async () => {await api("/scan", "POST"); setNotice("Suchlauf angefordert. Ergebnisse werden automatisch aktualisiert.");});}
+  useWorkspaceAction(running ? "Suche läuft …" : "Jetzt suchen", requestScan, busy || running || !data);
+  useEffect(() => {
+    function openSection() {
+      const hash = window.location.hash;
+      if (hash === "#discovery-tools") setToolsOpen(true);
+      if (hash === "#discovery-history") setHistoryOpen(true);
+    }
+    const timer = window.setTimeout(openSection, 0);
+    window.addEventListener("hashchange", openSection);
+    return () => {clearTimeout(timer); window.removeEventListener("hashchange", openSection);};
+  }, []);
   const lastRun = data?.runs[0];
   const operation = data?.operations?.[0];
   return <main className="discovery-page">
@@ -72,7 +85,7 @@ export default function DiscoveryPage() {
       <div><p className="discovery-eyebrow">Arbeitsbereich / Entdecken</p><h1>Discovery</h1><p className="discovery-muted">Passende Partys entdecken. Neue Reihen ins Portfolio aufnehmen.</p>
         <div className="discovery-run-status" role="status"><span className={`discovery-status-dot ${running ? "is-running" : ""}`} /><span>{running ? "Suchlauf läuft – Ergebnisse werden aktualisiert" : lastRun ? discoveryStatusLabel(lastRun.status) : "Noch kein Suchlauf"}</span><span className="discovery-muted">Letzter Suchlauf: {lastRun ? new Date(lastRun.started_at).toLocaleString("de-DE", { timeZone: "Europe/Berlin", dateStyle: "medium", timeStyle: "short" }) : "–"}</span></div>
       </div>
-      <div className="discovery-header-actions"><button className="discovery-button discovery-button-primary" disabled={busy || running || !data} onClick={() => void action(async () => { await api("/scan", "POST"); setNotice("Suchlauf angefordert. Ergebnisse werden automatisch aktualisiert."); })}>{running ? "Suche läuft …" : "Jetzt suchen"}</button>
+      <div className="discovery-header-actions"><button className="discovery-button discovery-button-primary cc-page-primary" disabled={busy || running || !data} onClick={requestScan}>{running ? "Suche läuft …" : "Jetzt suchen"}</button>
         <details className="discovery-actions"><summary className="discovery-button">Weitere Aktionen</summary><div className="discovery-action-menu"><button disabled={busy || running} onClick={() => setResetMode("ALL")}>Neu bewerten</button><button disabled={busy || running} onClick={() => setResetMode("IGNORED")}>Suchlauf zurücksetzen</button><button onClick={() => {setToolsOpen(true); window.setTimeout(() => document.getElementById("discovery-tools")?.scrollIntoView({ behavior: "smooth" }), 0);}}>Quellen &amp; Konfiguration</button></div></details>
       </div>
     </header>
@@ -83,8 +96,8 @@ export default function DiscoveryPage() {
     {sourceProblems.length > 0 && <p className="discovery-source-notice">{sourceProblems.length} {sourceProblems.length === 1 ? "Quelle konnte" : "Quellen konnten"} nicht vollständig ausgewertet werden. Weitere Quellen werden unabhängig verarbeitet. <button onClick={() => {setToolsOpen(true); window.setTimeout(() => document.getElementById("discovery-tools")?.scrollIntoView({ behavior: "smooth" }), 0);}}>Quellen ansehen</button></p>}
     <DiscoveryCandidates title="Neue Partyreihen" description="Neue passende Reihen mit belegtem Termin und mindestens 50 % Genre-Match." candidates={newSeries} kind="new" loading={!data && !error} unavailable={!data && !!error} busy={busy} onReview={edit} />
     <DiscoveryCandidates title="Prüfbedarf" description="Nur offene Fragen zu Terminen, Quellen oder der Zuordnung. Deine manuellen Entscheidungen bleiben geschützt." candidates={review} kind="review" loading={!data && !error} unavailable={!data && !!error} busy={busy} onReview={edit} />
-    <details className="discovery-section discovery-history" open={historyOpen} onToggle={event => setHistoryOpen(event.currentTarget.open)}><summary><span>Verlauf</span><span className="discovery-muted">Übernahmen, ignorierte Konzerte, Dubletten und Suchläufe</span></summary>
-      {historyOpen && data && <><DiscoveryCandidates title="Bereit zur Übernahme" description="Eindeutig erkannte bekannte Reihen. Keine erneute Portfoliofreigabe erforderlich." candidates={ready} kind="ready" loading={false} busy={busy} onReview={edit} /><DiscoveryHistory data={data} onReview={edit} onReviewId={id => void action(async () => edit(await api<Candidate>(`/candidates/${id}`)))} /></>}
+    <details id="discovery-history" className="discovery-section discovery-history" open={historyOpen} onToggle={event => setHistoryOpen(event.currentTarget.open)}><summary><span>Verlauf</span><span className="discovery-muted">Übernahmen, ignorierte Konzerte, Dubletten und Suchläufe</span></summary>
+      {historyOpen && data && <>{ready.length > 0 && <DiscoveryCandidates title="Bereit zur Übernahme" description="Eindeutig erkannte bekannte Reihen. Keine erneute Portfoliofreigabe erforderlich." candidates={ready} kind="ready" loading={false} busy={busy} onReview={edit} />}<DiscoveryHistory data={data} onReview={edit} onReviewId={id => void action(async () => edit(await api<Candidate>(`/candidates/${id}`)))} /></>}
     </details>
     <details id="discovery-tools" className="discovery-section discovery-tools" open={toolsOpen} onToggle={event => setToolsOpen(event.currentTarget.open)}><summary>Quellen &amp; Konfiguration <span className="discovery-muted">{data?.sources.length ?? 0} Quellen</span></summary>
       <section className="mt-5 space-y-4"><h2 className="font-semibold">Location-Quellen</h2><button className="discovery-button" disabled={busy} onClick={() => setSource({ id: "", venue_id: venues[0]?.id ?? "", venue_name: "", url: "", source_type: "EXTERNAL", approved: false, status: "NOT_CHECKED", item_selector: "", title_selector: "", date_selector: "", source_kind: "CUSTOM", enabled: true, priority: 100 })}>Quelle hinzufügen</button><SourceOverview sources={data?.sources ?? []} onEdit={item => setSource({ ...item })} /></section>

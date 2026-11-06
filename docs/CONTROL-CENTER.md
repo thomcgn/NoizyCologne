@@ -8,7 +8,7 @@ Bestehende APIs, Authentifizierung, Redaktion und Absageabläufe bleiben erhalte
 ## Phasen und Status
 
 1. Designsystem und Desktop-Shell – umgesetzt und lokal geprüft.
-2. Discovery als kompakte Arbeitsliste – ausstehend.
+2. Discovery als kompakte Arbeitsliste – umgesetzt und lokal geprüft.
 3. Portfolio/Kalender, Tabellen und Detailbereiche – ausstehend.
 4. Globale Suche und Command-Palette – ausstehend.
 5. Redaktion und mobile PWA – ausstehend.
@@ -53,3 +53,33 @@ Chrome-Szenarien mit drei Themes, zwei Dichten, 1440/768/390/320 px, gefüllten,
 leeren und fehlerhaften Antworten erfolgreich. Einklappen, mobile Navigation und
 Escape geprüft; Screenshots unter `.quality/control-center/phase-1/` tatsächlich
 geöffnet. Regulärer QUICK-Hook ist der Commitcheck.
+
+
+## Phase 2
+
+Discovery verwendet standardmäßig kompakte Tabellen mit Titel, Location, Termin,
+Genres, Genre-Match, Quelle und Freigabe-/Klärungsstatus. Suche über Titel,
+Location und Genres, sortierbare Spalten, Genre-Match-Filter und Seiten mit
+25 Einträgen laufen auf den bereits geladenen Ergebnissen. Die Kartenansicht
+bleibt optional und wird je Bereich lokal gespeichert. Die gemeinsame
+`DataCollection` wird für weitere Portfolioansichten wiederverwendbar angelegt.
+Filter ohne Treffer behaupten keine vollständig abgearbeitete Discovery.
+
+Prüfen und Portfoliofreigabe öffnen einen seitlichen Dialog mit bestehender
+Fokusführung und Rückkehr zum Auslöser. Escape und Schließen fragen beim
+Verwerfen geänderter Eingaben nach; beim Verlassen der Seite greift der
+Browserhinweis. Erfolgreiches Speichern schließt weiterhin direkt. Historie und
+Quellen bleiben nachgeordnet, ihre direkten Fragmentlinks öffnen den jeweiligen
+Bereich. Desktop-Suchlauf bleibt im Arbeitsbereichsheader, mobil auf der Seite.
+
+Prüfungen: STANDARD-Frontend einschließlich TypeScript, ESLint, 55 DOM-Tests und
+Produktionsbuild erfolgreich. Nach Ergänzung der gesperrten Zeilenaktion erneut
+gebaut; der reguläre QUICK-Hook prüft den finalen Commitstand. Neun erfolgreiche
+Chrome-Szenarien bei 1440/768/390/320 px, drei Themes, beiden Dichten sowie leeren
+und fehlerhaften Antworten. Suche, Seitenwechsel, Kartenansicht, Drawer,
+Tab-/Shift-Tab-Fokusgrenzen, Escape und Fragmentlinks tatsächlich geprüft.
+Kein horizontaler Seitenüberlauf und keine Browser-JavaScriptfehler. Screenshots
+unter `.quality/control-center/phase-2/`, Desktopliste und mobiler Light-Drawer
+geöffnet und gesichtet. Ausschließlich synthetische Daten, keine API-Schreibaufrufe.
+Live-IDE-/echte Mobilgeräteprüfung und CI-FULL sind damit nicht nachgewiesen.
+Phasen 3–5 bleiben offen; der Aufgaben-PR bleibt ein Entwurf.

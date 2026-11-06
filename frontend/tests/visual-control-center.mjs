@@ -53,10 +53,50 @@ try {
     await page.screenshot({path: `${out}/${name}.png`, fullPage: true});
     for (const route of ['/dashboard/vorschlaege', '/dashboard/partys', '/dashboard/djs', '/dashboard/locations', '/dashboard/kalender', '/dashboard/redaktion', '/dashboard/settings', '/dashboard/automatisierung']) {
       if (phase === 1 && !['/dashboard/settings', '/dashboard/automatisierung'].includes(route)) continue;
+      if (phase === 2 && route !== '/dashboard/vorschlaege') continue;
       await page.goto(`${origin}${route}`);
       await page.locator('main h1').waitFor();
       await page.waitForTimeout(180);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} ${route}: horizontal overflow`);
+      if (phase === 2 && route === '/dashboard/vorschlaege') {
+        const fresh = page.getByRole('region', {name: 'Neue Partyreihen', exact: true});
+        await fresh.waitFor();
+        await page.screenshot({path: `${out}/${name}-discovery.png`, fullPage: true});
+        if (state === 'populated') {
+          await fresh.locator('[data-record-id]').first().waitFor();
+          assert.equal(await fresh.locator('[data-record-id]').count(), 25);
+          await fresh.getByRole('button', {name: 'Weiter', exact: true}).click();
+          assert.equal(await fresh.locator('[data-record-id]').count(), 23);
+          await fresh.getByRole('searchbox').fill('MIDNIGHT');
+          assert.equal(await fresh.locator('[data-record-id]').count(), 1);
+          await fresh.getByRole('button', {name: 'Karten', exact: true}).click();
+          assert.equal(await fresh.locator('article').count(), 1);
+          await fresh.getByRole('button', {name: 'Ins Portfolio übernehmen', exact: true}).click();
+          const drawer = page.getByRole('dialog');
+          await drawer.waitFor();
+          assert.equal(await drawer.evaluate(element => element.contains(document.activeElement)), true);
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name}: drawer overflow`);
+          await page.screenshot({path: `${out}/${name}-drawer.png`, fullPage: false});
+          const close = drawer.getByRole('button', {name: 'Dialog schließen', exact: true});
+          const last = drawer.getByRole('button', {name: 'Speichern', exact: true});
+          await last.focus();
+          await page.keyboard.press('Tab');
+          assert.equal(await close.evaluate(element => element === document.activeElement), true);
+          await page.keyboard.press('Shift+Tab');
+          assert.equal(await last.evaluate(element => element === document.activeElement), true);
+          await page.keyboard.press('Escape');
+          await drawer.waitFor({state: 'detached'});
+          await page.goto(`${origin}/dashboard/vorschlaege#discovery-tools`);
+          await page.waitForFunction(() => document.getElementById('discovery-tools')?.open);
+          await page.goto(`${origin}/dashboard/vorschlaege#discovery-history`);
+          await page.waitForFunction(() => document.getElementById('discovery-history')?.open);
+        } else if (state === 'error') {
+          await page.getByRole('alert').first().waitFor();
+          assert.ok(await page.getByText('Ergebnisse derzeit nicht verfügbar.', {exact: false}).count());
+        } else {
+          await page.getByText('Keine neuen passenden Partyreihen', {exact: true}).waitFor();
+        }
+      }
     }
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name}: overflow`);
     assert.deepEqual(errors, [], `${name}: browser errors`);

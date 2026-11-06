@@ -25,7 +25,7 @@ export default function CandidateReviewDialog({ candidate, currentCandidate, bus
  function setCandidate(value: Candidate | null) { if (value === null) onClose(); }
  async function save() { await api(`/candidates/${candidate.id}`,"PUT",{partyId: party || null,date: date || null,status,inquiryStatus: inquiry,dmText: dm}); }
  return (
-    <DashboardModal open={!!candidate} onClose={() => setCandidate(null)} title={candidate?.title ?? "Discovery prüfen"}>
+    <DashboardModal variant="drawer" protectChanges open={!!candidate} onClose={() => setCandidate(null)} title={candidate?.title ?? "Discovery prüfen"}>
       {candidate && <div className="space-y-4">
         {error && <p role="alert" className="text-red-400">{error}</p>}
         <p>{candidate.venue_name} · {candidate.reason}</p>

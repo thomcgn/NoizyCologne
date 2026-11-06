@@ -8,6 +8,8 @@ type DashboardModalProps = {
   open: boolean;
   onClose: () => void;
   children: ReactNode;
+  variant?: "dialog" | "drawer";
+  protectChanges?: boolean;
 };
 
 // Shared by standard modals and the calendar's custom dialog layouts.
@@ -86,18 +88,36 @@ export default function DashboardModal({
   open,
   onClose,
   children,
+  variant = "dialog",
+  protectChanges = false,
 }: DashboardModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
-  useModalFocus(open, dialogRef, onClose);
+  const dirty = useRef(false);
+  useEffect(() => {dirty.current = false;}, [open]);
+  useEffect(() => {
+    if (!open || !protectChanges) return;
+    function beforeUnload(event: BeforeUnloadEvent) {
+      if (dirty.current) {event.preventDefault(); event.returnValue = "";}
+    }
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [open, protectChanges]);
+  function requestClose() {
+    if (protectChanges && dirty.current && !window.confirm("Ungespeicherte Änderungen verwerfen?")) return;
+    dirty.current = false;
+    onClose();
+  }
+  useModalFocus(open, dialogRef, requestClose);
 
   if (!open) return null;
 
   return (
-    <div className="dashboard-modal-backdrop" role="presentation">
+    <div className={`dashboard-modal-backdrop ${variant === "drawer" ? "cc-drawer-backdrop" : ""}`} role="presentation">
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className="dashboard-modal"
+        className={`dashboard-modal ${variant === "drawer" ? "cc-drawer" : ""}`}
+        onChangeCapture={() => {dirty.current = true;}}
         role="dialog"
         aria-modal="true"
         aria-labelledby="dashboard-modal-title"
@@ -118,7 +138,7 @@ export default function DashboardModal({
             type="button"
             data-modal-close
             className="icon-button"
-            onClick={onClose}
+            onClick={requestClose}
             aria-label="Dialog schließen"
           >
             ×
