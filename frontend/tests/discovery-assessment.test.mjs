@@ -410,3 +410,87 @@ test('the review shows the standards of the locally selected party instead of a 
     assert.match(dialog().querySelector('[aria-label="Genregrundlage"]').textContent,/Standardgenres der bekannten Partyreihe: Rock/);
   } finally {catalogue.parties=previous;}
 });
+
+test('instant rejection saves only a durable decision without opening or overwriting the editor', async () => {
+  await mount(candidate({inquiry_status:'SENT',dm_text:'Geprüfter Text'}));
+  const fallback=globalThis.fetch;
+  globalThis.fetch=async (url,options={})=>{
+    if(url.endsWith('/reject')) {
+      calls.push({url,...options});
+      candidates=candidates.map(item=>({...item,status:'REJECTED',decision_origin:'MANUAL'}));
+      return new Response(null,{status:204});
+    }
+    return fallback(url,options);
+  };
+  const reject=button('Sofort ablehnen');
+  await settle(()=>{reject.click();reject.click();});
+  assert.equal(calls.filter(call=>call.url.endsWith('/reject')).length,1);
+  assert.equal(document.querySelector('[role="dialog"]'),null);
+  assert.equal(document.querySelectorAll('[data-record-id]').length,0);
+  assert.equal(calls.some(call=>call.method==='PUT'||call.url.endsWith('/confirm')),false);
+  assert.equal(candidates[0].dm_text,'Geprüfter Text');
+  assert.match(document.body.textContent,/manuelle Entscheidung bleibt/);
+  await settle(()=>poll());
+  assert.equal(document.querySelectorAll('[data-record-id]').length,0);
+});
+
+test('failed instant rejection keeps the proposal visible with an actionable error', async () => {
+  await mount(candidate());
+  globalThis.fetch=async()=>new Response(JSON.stringify({message:'Bereits übernommen'}),{status:409});
+  await settle(()=>button('Sofort ablehnen').click());
+  assert.ok(document.querySelector('[data-record-id]'));
+  assert.match(document.querySelector('[role="alert"]').textContent,/Bereits übernommen/);
+  assert.equal(button('Sofort ablehnen').disabled,false);
+});
+
+test('special-source proposals require an explicit venue without a default and confirm it atomically', async () => {
+  await mount(candidate({special_source:true,venue_id:null,venue_name:'Veranstaltungsort offen',reported_location:'Blue Shell'}));
+  await openReview();
+  assert.equal(control('Veranstaltungsort zuordnen').value,'');
+  change(control('Partyreihe zuordnen'),'kult');
+  assert.equal(button('Bestätigen & übernehmen',dialog()).disabled,true);
+  change(control('Veranstaltungsort zuordnen'),'blue-shell');
+  await settle(()=>button('Bestätigen & übernehmen',dialog()).click());
+  const confirmed=calls.find(call=>call.url.endsWith('/confirm'));
+  assert.equal(JSON.parse(confirmed.body).venueId,'blue-shell');
+  assert.equal(calls.some(call=>call.method==='PUT'),false);
+});
+
+test('special sources can be added without a location and removed without deleting proposals', async () => {
+  await mount(candidate());
+  await settle(()=>document.querySelector('.discovery-tools > summary').click());
+  await settle(()=>button('Sonderquelle hinzufügen').click());
+  assert.match(dialog().textContent,/keine Location/);
+  assert.equal([...dialog().querySelectorAll('label')].some(item=>item.textContent.startsWith('Location')),false);
+  change(control('Name der Sonderquelle'),'QRUSH');change(control('Quell-URL'),'https://qrushapp.de/');
+  const fallback=globalThis.fetch;
+  globalThis.fetch=async(url,options={})=>{
+    if(url==='/api/v1/discovery/special-sources'&&options.method==='POST') {
+      calls.push({url,...options});
+      sourceRows=[{id:'qrush',name:'QRUSH',venue_id:null,venue_name:'',special_source:true,url:'https://qrushapp.de/',source_type:'EXTERNAL',source_kind:'PLATFORM',approved:false,status:'NOT_CHECKED'}];
+      return new Response(JSON.stringify({id:'qrush'}));
+    }
+    if(options.method==='DELETE') {calls.push({url,...options});sourceRows=[];return new Response(null,{status:204});}
+    return fallback(url,options);
+  };
+  await settle(()=>dialog().querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  assert.equal(document.querySelector('[role="dialog"]'),null);
+  const added=calls.find(call=>call.method==='POST');
+  assert.deepEqual(JSON.parse(added.body),{name:'QRUSH',url:'https://qrushapp.de/',itemSelector:'',titleSelector:'',dateSelector:''});
+  assert.match(document.querySelector('[aria-label="Sonderquellen"]').textContent,/QRUSH/);
+  await settle(()=>button('Sonderquelle löschen').click());
+  assert.ok(calls.some(call=>call.method==='DELETE'&&call.url==='/api/v1/discovery/special-sources/qrush'));
+  assert.match(document.querySelector('[aria-label="Sonderquellen"]').textContent,/Noch keine Sonderquellen/);
+  assert.equal(candidates.length,1);
+});
+
+test('failed special-source addition preserves the entered configuration', async () => {
+  await mount(candidate());
+  await settle(()=>document.querySelector('.discovery-tools > summary').click());
+  await settle(()=>button('Sonderquelle hinzufügen').click());
+  change(control('Name der Sonderquelle'),'QRUSH');change(control('Quell-URL'),'https://qrushapp.de/');
+  globalThis.fetch=async()=>new Response(JSON.stringify({message:'Diese Sonderquelle ist bereits vorhanden'}),{status:409});
+  await settle(()=>dialog().querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  assert.equal(control('Quell-URL').value,'https://qrushapp.de/');
+  assert.match(dialog().textContent,/bereits vorhanden/);
+});

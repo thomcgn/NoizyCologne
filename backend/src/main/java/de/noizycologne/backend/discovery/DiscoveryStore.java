@@ -7,9 +7,9 @@ import java.util.*;
 @Repository
 public class DiscoveryStore {
     private static final String CANDIDATE_SELECT="""
-        SELECT c.*,v.name AS venue_name,v.instagram,s.approved,s.source_type,
+        SELECT c.*,COALESCE(v.name,'Veranstaltungsort offen') AS venue_name,COALESCE(v.instagram,'') AS instagram,s.approved,s.source_type,s.name AS source_name,s.venue_id IS NULL AS special_source,
          EXISTS(SELECT 1 FROM event_changes x WHERE x.candidate_id=c.id AND x.blocks_publication) AS has_blocking_change
-        FROM discovery_candidates c JOIN venues v ON v.id=c.venue_id JOIN discovery_sources s ON s.id=c.source_id
+        FROM discovery_candidates c LEFT JOIN venues v ON v.id=c.venue_id JOIN discovery_sources s ON s.id=c.source_id
         """;
     private final JdbcTemplate db;
     public JdbcTemplate jdbc() { return db; }
@@ -21,7 +21,7 @@ public class DiscoveryStore {
             case "MANUAL_REJECTED" -> "c.status='REJECTED' AND c.decision_origin='MANUAL'";
             case "UNVERIFIED", "POSSIBLE_MATCH" -> "c.matching_class='"+filter+"' AND c.status NOT IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED')";
             case "REEVALUATED" -> "EXISTS (SELECT 1 FROM discovery_decisions d JOIN discovery_operations o ON o.id=d.operation_id WHERE d.candidate_id=c.id AND o.kind<>'SCAN' AND d.old_status IS NOT NULL)";
-            case "OPEN" -> "c.inquiry_status IN ('PREPARED','SENT')";
+            case "OPEN" -> "c.inquiry_status IN ('PREPARED','SENT') AND c.status NOT IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED')";
             case "ARCHIVE" -> "c.status IN ('REJECTED','DUPLICATE','IGNORED')";
             case "NEEDS_REVIEW", "NEEDS_INQUIRY", "READY", "IMPORTED" -> "c.status='"+filter+"'";
             case "ALL" -> "true";
@@ -31,7 +31,7 @@ public class DiscoveryStore {
             .stream().map(DiscoveryStore::forApi).toList();
     }
     public List<Map<String,Object>> sources() {
-        return db.queryForList("SELECT s.*, v.name AS venue_name FROM discovery_sources s JOIN venues v ON v.id=s.venue_id ORDER BY v.name,s.url").stream().map(DiscoveryStore::forApi).toList();
+        return db.queryForList("SELECT s.*,COALESCE(v.name,'') AS venue_name,s.venue_id IS NULL AS special_source FROM discovery_sources s LEFT JOIN venues v ON v.id=s.venue_id WHERE s.deleted_at IS NULL ORDER BY v.name,s.name,s.url").stream().map(DiscoveryStore::forApi).toList();
     }
     /** SQL DATE is a calendar day, never a timestamp shifted by the JSON timezone. */
     public static Map<String,Object> forApi(Map<String,Object> row) {
@@ -63,7 +63,7 @@ public class DiscoveryStore {
         String diagnostics=String.join("; ",found.diagnostics());
         db.update("""
             UPDATE discovery_sources SET status=?,last_fetched_at=now(),fetch_method=?,scan_complete=?,fetch_diagnostics=?,quality=?,event_count=?,
-            last_success_at=CASE WHEN ? OR ?='NO_EVENTS_CONFIRMED' THEN now() ELSE last_success_at END WHERE id=?
+            last_success_at=CASE WHEN ? OR ?='NO_EVENTS_CONFIRMED' THEN now() ELSE last_success_at END WHERE id=? AND deleted_at IS NULL
             """,found.extraction().status(),found.fetchMethod(),found.extraction().complete(),
             diagnostics.substring(0,Math.min(2000,diagnostics.length())),SourceQuality.assess(found),found.extraction().events().size(),
             !found.extraction().events().isEmpty(),SourceQuality.assess(found),id);

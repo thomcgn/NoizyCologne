@@ -34,6 +34,13 @@ public class VenueSourceDiscoveryService {
     }
     /** Calendar navigation before details, one host, depth <= 2, at most 8 pages and 200 inspected links/page. */
     public List<@NonNull Found> discover(String input, EventExtractor.Profile profile) throws IOException {
+        return discover(input,profile,false);
+    }
+    /** Independent portals may expose labelled event links before any dates can be extracted. */
+    public List<@NonNull Found> discoverSpecial(String input,EventExtractor.Profile profile) throws IOException {
+        return discover(input,profile,true);
+    }
+    private List<@NonNull Found> discover(String input,EventExtractor.Profile profile,boolean independent) throws IOException {
         URI root = SafeUrls.parse(input);
         record Step(URI url, int depth, boolean detail) { }
         var queue = new ArrayDeque<Step>(); queue.add(new Step(root, 0, false));
@@ -59,8 +66,13 @@ public class VenueSourceDiscoveryService {
                 if (!fetcher.robotsAllowed(step.url(), robots)) throw new EventPageFetcher.FetchFailure("ROBOTS_BLOCKED");
                 var page = fetcher.fetch(step.url());
                 var extraction = extractor.extract(page, profile);
+                var portalLinks=independent && !step.detail() && step.depth()<2 ? portalLinks(page,root) : List.<URI>of();
+                if (!portalLinks.isEmpty() && extraction.events().isEmpty())
+                    extraction=new EventExtractor.Extraction(List.of(),"SOURCE_LINKS_FOUND");
+                for (var detail:portalLinks) if (!seen.contains(detail) && queue.size()<16 && queue.stream().noneMatch(s -> s.url().equals(detail)))
+                    queue.add(new Step(detail,step.depth()+1,true));
                 String method="HTTP";List<@NonNull String> diagnostics=List.of();
-                if (browser!=null && extractor.needsRendering(page,extraction) && !hasStaticProgrammeLink(page)) {
+                if (browser!=null && portalLinks.isEmpty() && extractor.needsRendering(page,extraction) && !hasStaticProgrammeLink(page)) {
                     var rendered=browserJobs++<2 ? browser.render(step.url())
                         : new BrowserPageRenderer.Result("BROWSER_LIMIT",List.of(),List.of("BROWSER_LIMIT"),false);
                     diagnostics=rendered.warnings();
@@ -135,6 +147,17 @@ public class VenueSourceDiscoveryService {
             }
         }
         return enrich(found, eligibleDetails);
+    }
+    private List<URI> portalLinks(EventPageFetcher.Page page,URI root) {
+        var result=new LinkedHashSet<URI>();
+        for (var link:Jsoup.parse(page.body(),Objects.requireNonNull(page.url().toString())).select("a[href]").stream().limit(200).toList()) {
+            try {
+                URI next=SafeUrls.parse(link.absUrl("href").split("#",2)[0]);
+                if (!next.getHost().equalsIgnoreCase(root.getHost()) || next.equals(page.url()) || PartyOnlyPolicy.concertLink(link.text(),next)) continue;
+                if (link.attr("title").matches("(?i)^event:.*") || next.getPath().matches("(?i).*/events/[^/]+/?")) result.add(next);
+            } catch (IllegalArgumentException ignored) { /* No private, foreign or malformed event targets. */ }
+        }
+        return List.copyOf(result);
     }
     private boolean hasStaticProgrammeLink(EventPageFetcher.Page page) {
         for (var link:Jsoup.parse(page.body(),Objects.requireNonNull(page.url().toString())).select("a[href]").stream().limit(200).toList()) {

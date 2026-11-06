@@ -23,6 +23,42 @@ public class EventCandidateProcessor {
             Map<String,List<String>> aliases,List<String> genres,boolean approved) {
         process(venue,sourceId,event,known,aliases,genres,approved,null);
     }
+    /** Unassigned portal events remain reviewable without inventing a venue. */
+    public void processSpecial(String sourceId,EventExtractor.Event sourceEvent,String operation) {
+        store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
+        if (!Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM discovery_sources WHERE id=? AND venue_id IS NULL AND enabled AND deleted_at IS NULL)",Boolean.class,sourceId))) return;
+        var event=EventPrivacy.safe(sourceEvent);
+        String identity=EventChangeMonitor.identity(event),fingerprint=EventChangeMonitor.fingerprint(event);
+        var previous=store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE source_id=? AND identity_key=?",sourceId,identity);
+        var old=previous.isEmpty() ? null : previous.getFirst();
+        String venueId=old==null ? null : (String)old.get("venue_id");
+        String venueName=old!=null && venueId!=null ? (String)store.candidate((String)old.get("id")).get("venue_name") : "";
+        var result=evaluator.evaluate(event,venueId,venueName,false,evaluator.rules());
+        if (old!=null && !"AUTOMATIC".equals(old.get("decision_origin"))) {
+            if (!fingerprint.equals(old.get("fingerprint")) || !EventMatcher.VERSION.equals(old.get("matcher_version"))) {
+                store.jdbc().update("UPDATE discovery_candidates SET raw_event=?,fingerprint=?,evidence=?,source_url=?,automatic_reason=?,matching_class=?,matcher_version=?,evaluated_at=now(),last_evaluation_id=?,updated_at=now() WHERE id=?",
+                    evaluator.raw(event),fingerprint,event.evidence(),SafeUrls.parse(event.url()).toString(),result.reason(),result.classification(),EventMatcher.VERSION,operation,old.get("id"));
+                store.technicalAudit((String)old.get("id"),(String)old.get("matching_class"),operation);
+            }
+            return;
+        }
+        if (old!=null && (old.get("venue_id")!=null || old.get("calendar_entry_id")!=null)) return;
+        if (PartyOnlyPolicy.concert(event) && old==null) return;
+        if (old!=null && fingerprint.equals(old.get("fingerprint")) && EventMatcher.VERSION.equals(old.get("matcher_version")) && result.reason().equals(old.get("reason"))) return;
+        var days=event.starts().stream().map(EventNormalizer::date).distinct().toList();
+        var times=event.starts().stream().map(EventNormalizer::time).distinct().toList();
+        String id=old==null ? UUID.randomUUID().toString() : (String)old.get("id");
+        store.jdbc().update("""
+            INSERT INTO discovery_candidates(id,venue_id,source_id,identity_key,fingerprint,title,source_url,event_date,start_time,evidence,status,reason,party_id,matching_class,automatic_reason,matcher_version,evaluated_at,last_evaluation_id,raw_event)
+            VALUES (?,NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,?,now(),?,?)
+            ON CONFLICT(source_id,identity_key) WHERE venue_id IS NULL DO UPDATE SET
+             fingerprint=excluded.fingerprint,title=excluded.title,source_url=excluded.source_url,event_date=excluded.event_date,start_time=excluded.start_time,
+             evidence=excluded.evidence,status=excluded.status,reason=excluded.reason,party_id=excluded.party_id,matching_class=excluded.matching_class,
+             automatic_reason=excluded.automatic_reason,matcher_version=excluded.matcher_version,evaluated_at=now(),last_evaluation_id=excluded.last_evaluation_id,raw_event=excluded.raw_event,updated_at=now()
+            """,id,sourceId,identity,fingerprint,event.title(),SafeUrls.parse(event.url()).toString(),days.size()==1 ? days.getFirst() : null,times.size()==1 ? times.getFirst() : null,event.evidence(),result.status(),result.reason(),result.partyId(),result.classification(),result.reason(),EventMatcher.VERSION,operation,evaluator.raw(event));
+        store.audit(id,old==null ? null : (String)old.get("status"),operation);
+        monitor.rememberOrigin(id,sourceId,event,operation);
+    }
     private static boolean compatibleFallback(EventExtractor.Event before,EventExtractor.Event current,String venue) {
         if (!EventNormalizer.text(before.title()).equals(EventNormalizer.text(current.title()))
                 || EventChangeMonitor.date(before)==null || !Objects.equals(EventChangeMonitor.date(before),EventChangeMonitor.date(current))

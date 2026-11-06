@@ -76,4 +76,28 @@ class SourceNavigationTests {
         verify(fetcher,never()).fetch(root.resolve("/level3"));
         verify(fetcher,never()).fetch(URI.create("https://other.example/about"));
     }
+    @Test void independentPortalFollowsPublicEventCardsWithoutInventingOverviewDatesOrVenues() throws Exception {
+        var service=service();var detail=root.resolve("/eventfinder/koeln/events/indie-night");
+        page(root,"<a title='Event: Indie Night' href='/eventfinder/koeln/events/indie-night'><div>SA, 09 JAN</div><div>Indie Night</div></a><a title='Event: Fremdes Event' href='https://other.example/events/one'>Fremd</a><a title='Event: Konzert' href='/konzerte/live-band'>Konzert</a>");
+        page(detail,"<script type='application/ld+json'>{\"@type\":\"Event\",\"name\":\"Indie Night\",\"startDate\":\"2027-01-09T22:00:00+01:00\",\"location\":{\"@type\":\"Place\",\"name\":\"Blue Shell\"}}</script>");
+        var found=service.discoverSpecial(root.toString(),EventExtractor.Profile.defaults());
+        assertThat(found).hasSize(2);
+        assertThat(requireNonNull(found.getFirst()).extraction().status()).isEqualTo("SOURCE_LINKS_FOUND");
+        var event=requireNonNull(requireNonNull(found.getLast()).extraction().events().getFirst());
+        assertThat(event.location()).isEqualTo("Blue Shell");assertThat(event.starts()).containsExactly("2027-01-09T22:00:00+01:00");
+        verify(fetcher,never()).fetch(URI.create("https://other.example/events/one"));
+        verify(fetcher,never()).fetch(root.resolve("/konzerte/live-band"));
+    }
+    @Test void independentPortalEventLinksRespectTheExistingPageBudgetAndRobotsChecks() throws Exception {
+        var service=service();StringBuilder html=new StringBuilder();
+        for(int i=0;i<20;i++) {
+            html.append("<a href='/events/").append(i).append("'>Öffentliche Veranstaltung</a>");
+            page(root.resolve("/events/"+i),"<h1>Indie Party</h1><time datetime='2027-01-09'>Samstag</time>");
+        }
+        page(root,requireNonNull(html.toString()));
+        var blocked=root.resolve("/events/0");when(fetcher.robotsAllowed(eq(blocked),any())).thenReturn(false);
+        assertThat(service.discoverSpecial(root.toString(),EventExtractor.Profile.defaults())).hasSize(8);
+        verify(fetcher,never()).fetch(blocked);verify(fetcher,times(8)).robotsAllowed(any(),any());
+    }
+
 }

@@ -46,11 +46,11 @@ public class DiscoveryController {
                     count(*) FILTER (WHERE EXISTS (SELECT 1 FROM discovery_decisions d JOIN discovery_operations o ON o.id=d.operation_id WHERE d.candidate_id=discovery_candidates.id AND o.kind<>'SCAN' AND d.old_status IS NOT NULL)) AS reevaluated,
                     count(*) FILTER (WHERE matching_class='UNVERIFIED' AND status NOT IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED')) AS unverified,
                     count(*) FILTER (WHERE matching_class='POSSIBLE_MATCH' AND status NOT IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED')) AS possible,
-                    count(*) FILTER (WHERE inquiry_status IN ('PREPARED','SENT')) AS open,
+                    count(*) FILTER (WHERE inquiry_status IN ('PREPARED','SENT') AND status NOT IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED')) AS open,
                     count(*) FILTER (WHERE status IN ('REJECTED','DUPLICATE','IGNORED')) AS archive FROM discovery_candidates
                     """),
                 "operations",store.jdbc().queryForList("SELECT * FROM discovery_operations ORDER BY started_at DESC LIMIT 10").stream().map(DiscoveryStore::forApi).toList(),
-                "diagnoses",store.jdbc().queryForList("SELECT d.*,c.title,v.name AS venue_name FROM discovery_decisions d JOIN discovery_candidates c ON c.id=d.candidate_id JOIN venues v ON v.id=c.venue_id ORDER BY d.id DESC LIMIT 500").stream().map(DiscoveryStore::forApi).toList(),
+                "diagnoses",store.jdbc().queryForList("SELECT d.*,c.title,v.name AS venue_name FROM discovery_decisions d JOIN discovery_candidates c ON c.id=d.candidate_id LEFT JOIN venues v ON v.id=c.venue_id ORDER BY d.id DESC LIMIT 500").stream().map(DiscoveryStore::forApi).toList(),
                 "runs",store.jdbc().queryForList("SELECT * FROM discovery_runs ORDER BY started_at DESC LIMIT 10").stream().map(DiscoveryStore::forApi).toList());
     }
     @PostMapping("/scan") @ResponseStatus(HttpStatus.ACCEPTED)
@@ -92,19 +92,22 @@ public class DiscoveryController {
         finally { probeLock.release(); }
     }
     public record Review(@Size(max=100) String partyId, LocalDate date, @NotBlank String status,
-                         @NotBlank String inquiryStatus, @Size(max=12000) String dmText) { }
+                         @NotBlank String inquiryStatus, @Size(max=12000) String dmText,@Size(max=100) String venueId) {
+        public Review(String partyId,LocalDate date,String status,String inquiryStatus,String dmText) {this(partyId,date,status,inquiryStatus,dmText,null);}
+    }
     @PutMapping("/candidates/{id}") public void review(@PathVariable String id,@Valid @RequestBody Review r) {
-        importer.review(id,r.partyId(),r.date(),r.status(),r.inquiryStatus(),Objects.toString(r.dmText(),""));
+        importer.review(id,r.partyId(),r.date(),r.status(),r.inquiryStatus(),Objects.toString(r.dmText(),""),r.venueId());
     }
     public record Import(@NotBlank String partyId,@NotNull LocalDate date) { }
     @PostMapping("/candidates/{id}/import") public void importEvent(@PathVariable String id,@Valid @RequestBody Import r) {
         importer.importCandidate(id,r.partyId(),r.date(),true);
     }
     public record Confirmation(@NotBlank @Size(max=100) String partyId,@NotNull LocalDate date,
-                               @NotBlank String inquiryStatus,@Size(max=12000) String dmText,@Size(max=200) String seriesAlias) { }
+                               @NotBlank String inquiryStatus,@Size(max=12000) String dmText,@Size(max=200) String seriesAlias,@Size(max=100) String venueId) { }
     @PostMapping("/candidates/{id}/confirm") public Map<String,String> confirm(@PathVariable String id,@Valid @RequestBody Confirmation r) {
-        return Map.of("calendarEntryId",importer.confirm(id,r.partyId(),r.date(),r.inquiryStatus(),Objects.toString(r.dmText(),""),r.seriesAlias()));
+        return Map.of("calendarEntryId",importer.confirm(id,r.partyId(),r.date(),r.inquiryStatus(),Objects.toString(r.dmText(),""),r.seriesAlias(),r.venueId()));
     }
+    @PostMapping("/candidates/{id}/reject") public void reject(@PathVariable String id) { importer.reject(id); }
     @GetMapping("/candidates/{id}/dm") public Map<String,String> dm(@PathVariable String id) { return Map.of("text",importer.dm(id)); }
     public record PortfolioApproval(@NotBlank @Size(max=200) String name,@Size(max=200) String seriesAlias) { }
     @PostMapping("/candidates/{id}/portfolio") public Map<String,String> portfolio(@PathVariable String id,@Valid @RequestBody PortfolioApproval request) {

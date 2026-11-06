@@ -1,6 +1,6 @@
 # NoizyCologne: Handbuch für das Team
 
-Stand: 05.11.2026. Diese Anleitung beschreibt die vorhandene Bedienung. Sie richtet sich an alle, die Partys pflegen, Quellen prüfen und Beiträge vorbereiten.
+Stand: 06.11.2026. Diese Anleitung beschreibt die vorhandene Bedienung. Sie richtet sich an alle, die Partys pflegen, Quellen prüfen und Beiträge vorbereiten.
 
 **Das Wichtigste:** NoizyCologne speichert Termine und redaktionelle Entwürfe. Die Anwendung veröffentlicht derzeit keine Instagram-Beiträge und versendet keine Instagram-Nachrichten. Auch „Freigegeben“ bedeutet noch nicht „veröffentlicht“.
 
@@ -139,7 +139,7 @@ vornehmen. Der Theme-Schnellschalter bleibt ebenfalls verfügbar.
 
 ## Discovery: Website-Funde kontrollieren
 
-Mit **Discovery → Jetzt suchen** forderst du eine neue Suche für aktivierte Locations an. Ergebnisse erscheinen nach Abschluss; während eines laufenden Vorgangs warten.
+Mit **Discovery → Jetzt suchen** forderst du eine neue Suche für aktivierte Locations und Sonderquellen an. Ergebnisse erscheinen nach Abschluss; während eines laufenden Vorgangs warten.
 
 Die Navigation ist in **Arbeitsbereich**, **Portfolio** und **Verwaltung** gegliedert.
 Die Discovery-Seite hat drei Bereiche:
@@ -153,13 +153,20 @@ Die Discovery-Seite hat drei Bereiche:
   abgeschlossene Suchläufe. Bekannte eindeutig erkannte Reihen, die noch bereit
   zur Übernahme sind, stehen hier ohne erneute Portfoliofreigabe.
 
+Passt ein Fund schon anhand des Titels erkennbar nicht ins Portfolio, wähle
+**Sofort ablehnen** direkt neben **Veranstaltung prüfen**. Die manuelle Ablehnung
+bleibt bei späteren Suchläufen erhalten. Sie betrifft nur diesen Fund und löscht
+keine gespeicherten Rückfragen. Übernommene Termine werden im Kalender bzw.
+Änderungsworkflow bearbeitet.
+
 Öffne einen Ausnahmefall über **Veranstaltung prüfen**:
 
 1. **Quellseite öffnen** und die Angaben mit der offiziellen Ankündigung vergleichen.
 2. **Partyreihe zuordnen** und **Korrigiertes / bestätigtes Datum** prüfen. Eine passende neue Reihe kann im Dialog ausdrücklich ins Portfolio übernommen werden; andernfalls unter **Partyreihen** anlegen.
 3. Bei fehlenden oder widersprüchlichen Angaben eine Rückfrage vorbereiten.
 4. Prüfentscheidung mit **Speichern** sichern. **Abgelehnt** oder **Dublette** im **Prüfstatus** nur mit entsprechend geprüftem Sachverhalt wählen.
-5. Bei vollständig bestätigten Angaben **Manuell übernehmen** wählen und den Kalender kontrollieren.
+5. Bei Funden aus Sonderquellen den **Veranstaltungsort zuordnen**. Die Plattform selbst ist keine Location; den tatsächlichen Ort anhand der Quelle prüfen.
+6. Bei vollständig bestätigten Angaben **Bestätigen & übernehmen** wählen und den Kalender kontrollieren.
 
 **Übernommen** bedeutet „im Kalender“. Ein Genre-Treffer allein reicht nicht zur automatischen Übernahme und erzeugt auch keinen Beitragsentwurf.
 
@@ -306,3 +313,20 @@ Aliasse erhöhen die Zahl nicht. Bei belegtem Datum und freigegebener Quelle kan
 der Termin mit dieser ausdrücklichen Freigabe übernommen werden; andere Fälle
 bleiben zur Prüfung offen. Ein relativer Beginn wie „nach dem Konzert“ bleibt
 Text, keine geratene Uhrzeit. Instagram wird dadurch nicht bedient.
+
+
+## Sonderquellen verwalten
+
+Unter **Discovery → Quellen & Konfiguration → Sonderquellen → Sonderquelle hinzufügen**
+trägst du den Namen und die öffentliche HTTPS-Adresse einer Veranstaltungsplattform
+wie `https://qrushapp.de/` ein. Es ist keine Location erforderlich. Eine gezielte
+regionale Eventübersicht hilft, passende Funde zu erhalten; die Suche liest nur
+eine begrenzte Anzahl Seiten. Optionale HTML-Profile sind für technische Anpassungen.
+Anschließend **Jetzt suchen** starten. Neue Funde bleiben zur Prüfung; vor der
+Kalenderübernahme muss der tatsächliche Veranstaltungsort ausdrücklich gewählt werden.
+QRUSH ist unabhängig vom MTC und weist keinem Fund automatisch das MTC zu.
+
+**Sonderquelle löschen** entfernt die Quelle aus der Konfiguration und weiteren
+Suchläufen. Bereits gefundene Veranstaltungen, manuelle Ablehnungen und
+Kalendereinträge bleiben erhalten. Beim erneuten Hinzufügen derselben URL werden
+die bisherigen Entscheidungen weiter berücksichtigt.

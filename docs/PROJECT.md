@@ -1,6 +1,6 @@
 # NoizyCologne – Lastenheft, Pflichtenheft & Entwicklungs-/Lernhandbuch
 
-> **Version:** 1.9 · **Stand:** 6. November 2026 · **Status:** Persistente Team-Anwendung mit Redaktion, Party-Discovery und Änderungsprüfung; Instagram-Publishing nicht implementiert
+> **Version:** 1.9.2 · **Stand:** 6. November 2026 · **Status:** Persistente Team-Anwendung mit Redaktion, Party-Discovery und Änderungsprüfung; Instagram-Publishing nicht implementiert
 > **Zielgruppe:** NoizyCologne-Team und Entwickler  
 > **Source of Truth:** Diese Version ersetzt v1.6 und frühere Projektdokumente fachlich. Für das tatsächlich implementierte Verhalten gilt zusätzlich der aktuelle Codezustand; nur dokumentierte Features sind noch nicht automatisch umgesetzt.  
 > **Wichtig:** Dieses Handbuch enthält Lastenheft, Pflichtenheft, technische Lern-/Agenten-Referenzen **und einen Ist-/Soll-Abgleich**. Die früheren Beispielskripte sind nicht automatisch identisch mit der aktuellen Codebasis. Die Entwicklung erfolgt auf Arch Linux; der Benutzer hat den lokalen Kalender-Prototyp erfolgreich getestet. Plattform-Funktionen werden vor Produktivstart im realen Meta-Konto verifiziert.  
@@ -2120,6 +2120,8 @@ Bei jeder Ergänzung gleichzeitig **Kapitel 3 (Lastenheft), 4 (Pflichtenheft), 5
 
 | Version | Datum | Änderungen |
 |---|---|---|
+| v1.9.2 Sonderquellen und Sofort-Ablehnung | 06.11.2026 | Unabhängige Sonderquellen hinzufügen/löschen, begrenzter Discovery-Scan ohne Standardlocation, explizite Ortszuordnung und dauerhafte Sofort-Ablehnung durch das Team. Migration V17; Details und Prüfbelege in [SPECIAL-SOURCES.md](SPECIAL-SOURCES.md). |
+| v1.9.1 QRUSH-Sonderquelle | 06.11.2026 | QRUSH als eigenständige, locationunabhängige Sonderquelle festgelegt, ohne fachliche Verbindung zum MTC. Veranstaltungsorte müssen je Termin belegt werden; keine MTC-Standardzuordnung oder Verwendung als MTC-Fallback. Anforderung und technische Umsetzungslücke getrennt dokumentiert, siehe 24.17. |
 | v1.9 Quality-Gate-Optimierung | 06.11.2026 | QUICK für Entwicklung/lokale Commits und Feature-Pushes; FULL vor PR-Merge und für main. GHCR verwendet nur streng nachgewiesene identische Commit-SHAs statt parallel erneut FULL. Fehlender Live-IDE-Zugriff blockiert Codex Cloud bei grünen CLI-Prüfungen nicht. Branch-Protection-Konfiguration vorbereitet, Aktivierung noch offen; Details und Messungen in QUALITY.md. |
 | v1.9 Heller Modus und Branch-CI | 06.11.2026 | Primäre Buttons mit weißem Hintergrund und schwarzer Schrift erhalten im hellen Modus gemeinsam eine dunkle Fläche und weiße Schrift; Location-Übernehmen und gleich gestaltete Formularaktionen bleiben lesbar, weiße Logo-Flächen bleiben erhalten. Anlegen-/Bearbeiten-Regressionen prüfen mindestens 4,5:1 Textkontrast. Damals prüfte CI jeden Arbeitsbranch mit FULL; seit der Quality-Gate-Optimierung gilt QUICK für Feature-Pushes und FULL für PR/main, siehe Kapitel 25. |
 | v1.9 Team und Qualität | 05.11.2026 | Verständliches Team-Handbuch ergänzt; veraltete Prototyp-/Reload-Angaben korrigiert, gespeicherte Freigabe von Instagram-Publishing und noch fehlender Bildversion-Fixierung getrennt. Conversion-/Null-Diagnosen einschließlich INFO blockieren; vier Feldinjektionen auf Konstruktoren umgestellt. Damals vollständiges Quality Gate und aktueller IDE-Nachweis vor jedem Commit; diese Ablaufregel ist seit 06.11. durch Kapitel 25 ersetzt. |
@@ -3538,6 +3540,57 @@ Der optionale Test `ReadOnlyDiscoveryDiagnosisTests` verarbeitet nur eine per `N
 
 Validierung der Reset-Korrektur: **100 Backend-Tests erfolgreich**, einschließlich des ausdrücklich aktivierten Offline-Replays der 94 kopierten Datensätze; Maven-Paket erfolgreich. **16 Frontend-Tests**, TypeScript (`tsc --noEmit`), ESLint und Next.js-Produktionsbuild erfolgreich. PostgreSQL-Schreibtests ausschließlich im kurzlebigen Testcontainer auf Port 55434. Die Bestandsdatenbank blieb auf Migration V12 und wurde nur lesend untersucht. Keine produktiven Datenänderungen, kein Push und kein Deployment. DOM-Tests ersetzen keine visuelle Browser-/Mobilabnahme.
 
+
+## 24.17 QRUSH als eigenständige Sonderquelle (Anforderung vom 06.11.2026)
+
+**Verbindliche fachliche Einordnung:** QRUSH wird als eigenständige,
+locationunabhängige Sonderquelle behandelt. QRUSH hat keine fachliche Verbindung
+zum MTC als Location. QRUSH ist weder eine MTC-Unterquelle noch ein MTC-Fallback;
+QRUSH-Funde dürfen nicht allein aufgrund ihrer Herkunft dem MTC zugeordnet werden.
+Diese Festlegung ersetzt jede frühere angenommene QRUSH-/MTC-Verknüpfung.
+
+Quelle und Veranstaltungsort werden getrennt behandelt: Der tatsächliche Ort
+jedes QRUSH-Termins muss aus dessen Veranstaltungsangaben belegt und einer
+passenden Location zugeordnet werden. Fehlt eine eindeutige Ortsangabe, bleibt
+sie offen und erfordert redaktionelle Prüfung; MTC wird nicht als Standardort
+oder Ersatzwert eingesetzt. Ein einzelner tatsächlich für das MTC belegter Termin
+würde nur dessen Veranstaltungsort bestätigen, keine allgemeine Quellenbindung.
+Die vorhandenen Party-, Genre-, Quellenfreigabe-, Dubletten- und Absageregeln gelten
+auch für QRUSH-Funde.
+
+**Implementierung (06.11.2026):** Gemeint ist `https://qrushapp.de/`.
+Unter **Discovery → Quellen & Konfiguration → Sonderquellen** kann das Team
+beliebige öffentliche HTTPS-Sonderquellen mit Namen und optionalem HTML-Profil
+hinzufügen und löschen. Die API `/api/v1/discovery/special-sources` bietet GET,
+POST und DELETE `/{id}`. Migration V17 erlaubt Quellen und noch ungeklärte Funde
+ohne `venue_id`; es wird keine Platzhalter-Location angelegt.
+
+Aktive Sonderquellen nehmen an Suchläufen teil und verwenden die vorhandenen
+Abruf-, robots.txt-, Sicherheits- und Extraktionsregeln. Pro Quelle gelten die
+bestehenden Crawlgrenzen und maximal 300 Ereignisse. Das ist keine vollständige
+Portalindizierung; eine gezielte regionale Eventübersicht eignet sich als URL.
+Fehler und Teilauswertungen bleiben sichtbar. Neue Funde benötigen redaktionelle
+Prüfung und eine ausdrückliche Auswahl des Veranstaltungsorts vor dem Import.
+Eine Portalquelle wird dadurch nicht zur offiziellen Location-Quelle; Abweichungen
+bereits zugeordneter Termine werden als nicht-offizielle Hinweise behandelt.
+
+Löschen deaktiviert und archiviert die Quellenkonfiguration. Vorhandene Funde,
+Teamentscheidungen und Kalendereinträge bleiben erhalten. Erneutes Hinzufügen
+derselben normalisierten URL verwendet dieselbe Quellenidentität. Bestehende
+Produktionskonfigurationen werden nicht automatisch umgeschrieben; QRUSH wird
+auch nicht automatisch in einer bestehenden Datenbank angelegt.
+
+Neben **Veranstaltung prüfen** bietet jede offene Vorschlagszeile/-karte
+**Sofort ablehnen**. POST `/api/v1/discovery/candidates/{id}/reject` speichert
+idempotent eine protokollierte manuelle Ablehnung, ohne Party, Datum oder
+Rückfragetext zu überschreiben. Sie gilt für diesen Fund, erzeugt keine globale
+Genre-/Karnevalregel und bleibt bei späteren Suchläufen geschützt. Übernommene
+Termine erfordern weiterhin den Kalender-/Änderungsworkflow. Eine bewusste
+Wiederöffnung folgt dem vorhandenen Reset mit zusätzlicher Bestätigung.
+
+Prüfungen und verbleibende Abnahmegrenzen: [SPECIAL-SOURCES.md](SPECIAL-SOURCES.md).
+
+---
 
 # 25. Permanente Code-Quality-Routine (aktualisiert 06.11.2026)
 
