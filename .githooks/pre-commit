@@ -1,4 +1,4 @@
 #!/bin/sh
 set -eu
 root=$(git rev-parse --show-toplevel)
-exec "$root/scripts/check-quality.sh" --full
+exec "$root/scripts/check-quality.sh" --quick

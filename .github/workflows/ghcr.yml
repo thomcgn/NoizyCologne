@@ -1,58 +1,117 @@
-
 name: NoizyCologne Auto Deploy
 
 on:
-  push:
+  # CI owns the expensive FULL run. Never deploy a branch tip from this event:
+  # github.sha belongs to the default branch, not necessarily the tested commit.
+  workflow_run:
+    workflows: [NoizyCologne CI]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
 
 concurrency:
   group: noizycologne-production
   cancel-in-progress: false
 
 jobs:
-  verify:
+  resolve:
+    name: Resolve exact qualified commit
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.proof.outputs.sha }}
+      kind: ${{ steps.proof.outputs.kind }}
+      run_id: ${{ steps.proof.outputs.run_id }}
+      attempt: ${{ steps.proof.outputs.attempt }}
+      reuse: ${{ steps.proof.outputs.reuse }}
+      automatic: ${{ steps.proof.outputs.automatic }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Java
-        uses: actions/setup-java@v4
+      - name: Checkout trusted workflow helpers
+        uses: actions/checkout@v4
         with:
-          distribution: temurin
-          java-version: '21'
-          cache: maven
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Verify triggering run and resolve immutable SHA
+        id: proof
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/quality-deployment.py plan
+
+  full:
+    name: Full validation
+    needs: resolve
+    if: needs.resolve.outputs.reuse == 'false'
+    uses: ./.github/workflows/quality-full.yml
+    with:
+      target-sha: ${{ needs.resolve.outputs.sha }}
+
+  authorize:
+    name: Require exact successful FULL proof
+    needs: [resolve, full]
+    if: always() && needs.resolve.result == 'success' && (needs.resolve.outputs.reuse == 'true' || needs.full.result == 'success')
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ needs.resolve.outputs.sha }}
+      kind: ${{ needs.resolve.outputs.kind }}
+      run_id: ${{ needs.resolve.outputs.run_id }}
+      attempt: ${{ needs.resolve.outputs.attempt }}
+      automatic: ${{ needs.resolve.outputs.automatic }}
+    steps:
+      - name: Checkout trusted workflow helpers
+        uses: actions/checkout@v4
         with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
 
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm ci
-
-      - name: Full quality gate
-        run: scripts/check-quality.sh --full
-
-      - name: Validate Caddy configuration
-        run: |
-          docker run --rm \
-            -e ACME_EMAIL=ci@example.invalid \
-            -v "$PWD/deploy/server/Caddyfile:/etc/caddy/Caddyfile:ro" \
-            caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - name: Recheck exact FULL proof
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          QUALITY_TARGET_SHA: ${{ needs.resolve.outputs.sha }}
+          QUALITY_PROOF_KIND: ${{ needs.resolve.outputs.kind }}
+          QUALITY_PROOF_RUN_ID: ${{ needs.resolve.outputs.run_id }}
+          QUALITY_PROOF_ATTEMPT: ${{ needs.resolve.outputs.attempt }}
+          QUALITY_AUTOMATIC: ${{ needs.resolve.outputs.automatic }}
+        run: python3 scripts/quality-deployment.py verify
 
   publish:
-    needs: verify
+    needs: authorize
+    if: ${{ !cancelled() && needs.authorize.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
       packages: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout qualified commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.authorize.outputs.sha }}
+          persist-credentials: false
+
+      - name: Checkout trusted workflow helpers
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .quality-control
+          persist-credentials: false
+
+      - name: Verify exact commit before publishing
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          QUALITY_TARGET_SHA: ${{ needs.authorize.outputs.sha }}
+          QUALITY_PROOF_KIND: ${{ needs.authorize.outputs.kind }}
+          QUALITY_PROOF_RUN_ID: ${{ needs.authorize.outputs.run_id }}
+          QUALITY_PROOF_ATTEMPT: ${{ needs.authorize.outputs.attempt }}
+          QUALITY_AUTOMATIC: ${{ needs.authorize.outputs.automatic }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$QUALITY_TARGET_SHA"
+          python3 .quality-control/scripts/quality-deployment.py verify
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -61,44 +120,80 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and push backend
         uses: docker/build-push-action@v6
         with:
           context: ./backend
           push: true
+          pull: true
+          cache-from: type=gha,scope=noizycologne-backend
+          cache-to: type=gha,scope=noizycologne-backend,mode=max
           tags: |
             ghcr.io/thomcgn/noizycologne-backend:latest
-            ghcr.io/thomcgn/noizycologne-backend:${{ github.sha }}
+            ghcr.io/thomcgn/noizycologne-backend:${{ needs.authorize.outputs.sha }}
 
       - name: Build and push frontend
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
           push: true
+          pull: true
+          cache-from: type=gha,scope=noizycologne-frontend
+          cache-to: type=gha,scope=noizycologne-frontend,mode=max
           tags: |
             ghcr.io/thomcgn/noizycologne-frontend:latest
-            ghcr.io/thomcgn/noizycologne-frontend:${{ github.sha }}
+            ghcr.io/thomcgn/noizycologne-frontend:${{ needs.authorize.outputs.sha }}
         
       - name: Build and push landing
         uses: docker/build-push-action@v6
         with:
           context: ./deploy/landing
           push: true
+          pull: true
+          cache-from: type=gha,scope=noizycologne-landing
+          cache-to: type=gha,scope=noizycologne-landing,mode=max
           tags: |
             ghcr.io/thomcgn/noizycologne-landing:latest
-            ghcr.io/thomcgn/noizycologne-landing:${{ github.sha }}
+            ghcr.io/thomcgn/noizycologne-landing:${{ needs.authorize.outputs.sha }}
 
 
   deploy:
-    needs: publish
+    needs: [authorize, publish]
+    if: ${{ !cancelled() && needs.authorize.result == 'success' && needs.publish.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
       packages: read
 
     steps:
-      - name: Checkout repository
+      - name: Checkout qualified commit
         uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.authorize.outputs.sha }}
+          persist-credentials: false
+
+      - name: Checkout trusted workflow helpers
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .quality-control
+          persist-credentials: false
+
+      - name: Verify exact commit before deployment
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          QUALITY_TARGET_SHA: ${{ needs.authorize.outputs.sha }}
+          QUALITY_PROOF_KIND: ${{ needs.authorize.outputs.kind }}
+          QUALITY_PROOF_RUN_ID: ${{ needs.authorize.outputs.run_id }}
+          QUALITY_PROOF_ATTEMPT: ${{ needs.authorize.outputs.attempt }}
+          QUALITY_AUTOMATIC: ${{ needs.authorize.outputs.automatic }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$QUALITY_TARGET_SHA"
+          python3 .quality-control/scripts/quality-deployment.py verify
 
       - name: Configure SSH
         env:
@@ -112,6 +207,7 @@ jobs:
           chmod 600 ~/.ssh/deploy_key ~/.ssh/known_hosts
 
       - name: Deploy Docker image
+        id: rollout
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -153,10 +249,11 @@ jobs:
              docker --config "$cfg" login ghcr.io \
                -u thomcgn --password-stdin >/dev/null
 
-             DOCKER_CONFIG="$cfg" ./deploy/server/deploy.sh '${{ github.sha }}'
+             DOCKER_CONFIG="$cfg" ./deploy/server/deploy.sh '${{ needs.authorize.outputs.sha }}'
             '
 
       - name: Verify live deployment
+        id: smoke
         env:
           TEAM_SMOKE_USER: ${{ secrets.TEAM_SMOKE_USER }}
           TEAM_SMOKE_PASSWORD: ${{ secrets.TEAM_SMOKE_PASSWORD }}
@@ -209,6 +306,7 @@ jobs:
           test "$unauthenticated_status" = 401
 
       - name: Remove legacy smoke service after successful cutover
+        id: cutover
         if: success()
         run: |
           ssh \
@@ -220,7 +318,7 @@ jobs:
             'docker compose -p noizycologne -f /opt/noizycologne/compose.yaml rm -sf smoke'
 
       - name: Restore legacy stack after failed deployment
-        if: failure()
+        if: failure() && (steps.rollout.outcome == 'failure' || steps.smoke.outcome == 'failure' || steps.cutover.outcome == 'failure')
         run: |
           ssh \
             -i ~/.ssh/deploy_key \

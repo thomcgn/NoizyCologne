@@ -19,7 +19,8 @@ def foreign_repository_env():
     # cleared only when entering another repository, never in the active gate.
     local_names = set(subprocess.check_output(['git', 'rev-parse', '--local-env-vars'], text=True).splitlines())
     return {name: value for name, value in os.environ.items()
-            if name not in local_names and not name.startswith(('GIT_CONFIG_KEY_', 'GIT_CONFIG_VALUE_'))}
+            if name not in local_names and name != 'QUALITY_BASE_REF'
+            and not name.startswith(('GIT_CONFIG_KEY_', 'GIT_CONFIG_VALUE_'))}
 
 
 class RepositoryTests(unittest.TestCase):
@@ -47,20 +48,24 @@ class RepositoryTests(unittest.TestCase):
             self.assertNotIn('b' * 36, result.stderr)
 
 
-class WorkflowTests(unittest.TestCase):
+class WorkflowFixture:
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name)
         for directory in ['scripts/tests', '.githooks', 'backend/src/main/java', 'frontend/node_modules/.bin', 'config', 'bin']:
             (self.root / directory).mkdir(parents=True)
-        for file in ['scripts/check-quality.sh', 'scripts/check-repository.py', 'scripts/install-hooks.sh', '.githooks/pre-commit']:
+        for file in ['scripts/check-quality.sh', 'scripts/check-repository.py', 'scripts/install-hooks.sh',
+                     'scripts/quality-scope.py', 'scripts/quality-report.py', '.githooks/pre-commit']:
             shutil.copy2(ROOT / file, self.root / file)
         (self.root / 'scripts/check-java.py').write_text('from pathlib import Path\nimport sys\nprint("Simulated Java analysis fixture")\nsys.exit(1 if Path("fail-stage").read_text() == "java-null-warning" else 0)\n')
         # Do not recursively invoke this workflow suite inside its miniature fixture repository.
         (self.root / 'scripts/tests/test_quality_fixture.py').write_text('import unittest\nclass Fixture(unittest.TestCase):\n def test_fixture(self): self.assertTrue(True)\n')
         (self.root / 'scripts/tests/test_java_analysis.py').write_text('import unittest\nclass Fixture(unittest.TestCase):\n def test_fixture(self): self.assertTrue(True)\n')
         (self.root / 'scripts/tests/test_frontend_analysis.py').write_text('import unittest\nclass Fixture(unittest.TestCase):\n def test_fixture(self): self.assertTrue(True)\n')
+        unit = self.root / 'backend/src/test/java/fixture/ProbeTests.java'
+        unit.parent.mkdir(parents=True)
+        unit.write_text('package fixture; class ProbeTests { Probe value; }\n')
         stub = '''#!/bin/sh
 set -eu
 name=$(basename "$0")
@@ -69,9 +74,10 @@ printf '%s %s\\n' "$name" "$*" >> "$FIXTURE_ROOT/calls"
 case "$name:$*" in
  docker:run*) printf '%s\\n' fixture-container; exit 0 ;;
  docker:port*) printf '%s\\n' 127.0.0.1:55435; exit 0 ;;
+ mvnw:*surefire:test*) printf '%s\\n' "$DB_URL" "$SPRING_DATASOURCE_URL" "$SPRING_FLYWAY_URL" > "$FIXTURE_ROOT/test-connection" ;;
 esac
 case "$name:$*:$fail" in
- mvnw:*test-compile*:java-error|mvnw:*test-compile*:java-warning|mvnw:*verify*:test-failure|tsc:*:typescript|npm:*lint*:eslint-warning|npm:*test*:frontend-test|npm:*build*:build) exit 1 ;;
+ mvnw:*test-compile*:java-error|mvnw:*test-compile*:java-warning|mvnw:*verify*:test-failure|mvnw:*surefire:test*:test-failure|tsc:*:typescript|npm:*lint*:eslint-warning|npm:*test*:frontend-test|npm:*build*:build|docker:rm*:cleanup) exit 1 ;;
 esac
 exit 0
 '''
@@ -84,8 +90,22 @@ exit 0
         self.git('init', '-q')
         self.git('config', 'user.name', 'Quality Fixture')
         self.git('config', 'user.email', 'quality@example.invalid')
+        (self.root / '.gitignore').write_text('.quality/\n__pycache__/\ncalls\nfail-stage\ntest-connection\nbin/\nfrontend/node_modules/\nbackend/target/\n')
+        (self.root / 'change.txt').write_text('fixture base\n')
+        # Infrastructure is a clean baseline: QUICK must not mistake the test's
+        # untracked tool stubs for changes to every application component.
+        self.git('add', '.')
+        self.git('commit', '-m', 'fixture infrastructure')
         (self.root / 'change.txt').write_text('fixture change\n')
         self.git('add', 'change.txt')
+
+    def change_code(self, kind):
+        name, content = {'backend': ('backend/src/main/java/fixture/Probe.java', 'package fixture; class Probe {}\n'),
+                         'frontend': ('frontend/src/app/Probe.tsx', 'export const value = "valid";\n')}[kind]
+        path = self.root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        self.git('add', name)
 
     def git(self, *args):
         return subprocess.run(['git', *args], cwd=self.root, env=self.env, capture_output=True, text=True, check=True)
@@ -94,6 +114,8 @@ exit 0
         (self.root / 'fail-stage').write_text(failure)
         return subprocess.run([str(self.root / 'scripts/check-quality.sh'), mode], cwd=self.root, env=self.env, capture_output=True, text=True)
 
+
+class WorkflowTests(WorkflowFixture, unittest.TestCase):
     def test_success_runs_all_required_stages(self):
         result = self.run_gate()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -134,13 +156,16 @@ exit 0
         self.assertEqual(self.git('config', '--get', 'core.hooksPath').stdout.strip(), '.githooks')
 
     def test_hook_actually_blocks_and_then_allows_commit(self):
+        self.change_code('backend')
+        self.change_code('frontend')
         self.git('config', 'core.hooksPath', '.githooks')
+        original_head = self.git('rev-parse', 'HEAD').stdout
         for failure in ('java-null-warning', 'typescript'):
             with self.subTest(failure=failure):
                 (self.root / 'fail-stage').write_text(failure)
                 failed = subprocess.run(['git', 'commit', '-m', 'blocked fixture'], cwd=self.root, env=self.env, capture_output=True, text=True)
                 self.assertNotEqual(failed.returncode, 0)
-                self.assertNotEqual(subprocess.run(['git', 'rev-parse', '--verify', 'HEAD'], cwd=self.root, env=self.env, capture_output=True).returncode, 0)
+                self.assertEqual(self.git('rev-parse', 'HEAD').stdout, original_head)
         before = self.git('write-tree').stdout
         (self.root / 'fail-stage').write_text('')
         passed = self.git('commit', '-m', 'allowed fixture')
@@ -165,8 +190,10 @@ exit 0
 
         committed = self.git('commit', '--only', '-m', 'partial fixture', '--', 'change.txt', 'new-task.txt')
 
-        self.assertIn('[quality] PASSED --full', committed.stdout + committed.stderr)
-        self.assertIn('npm run build', (self.root / 'calls').read_text())
+        self.assertIn('[quality] PASSED --quick', committed.stdout + committed.stderr)
+        calls = (self.root / 'calls').read_text() if (self.root / 'calls').exists() else ''
+        self.assertNotIn('npm run build', calls)
+        self.assertNotIn('docker run', calls)
         self.assertEqual(self.git('ls-files', '--stage', '--', 'unrelated.txt').stdout, before)
         self.assertEqual(unrelated.read_bytes(), original_contents)
         self.assertEqual(self.git('diff', '--cached', '--name-only').stdout.splitlines(), ['unrelated.txt'])
@@ -192,7 +219,8 @@ class EnvironmentIsolationTests(unittest.TestCase):
                          'GIT_PREFIX': 'foreign-parent/',
                          'GIT_CONFIG_COUNT': '1',
                          'GIT_CONFIG_KEY_0': 'core.hooksPath',
-                         'GIT_CONFIG_VALUE_0': str(parent / 'foreign-hooks')}
+                         'GIT_CONFIG_VALUE_0': str(parent / 'foreign-hooks'),
+                         'QUALITY_BASE_REF': 'f' * 40}
             result = subprocess.run([sys.executable, str(Path(__file__).resolve()),
                                      'RepositoryTests.test_staged_secret_cannot_be_hidden_by_a_clean_worktree',
                                      'WorkflowTests.test_success_runs_all_required_stages',

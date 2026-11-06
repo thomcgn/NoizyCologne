@@ -93,7 +93,7 @@
 4. Keine erfundenen Veranstaltungsdaten. Unklare Flyer-Felder bleiben offen und blockieren nötigenfalls die Freigabe.
 5. Secrets niemals in Git, Screenshots, Tickets oder Browser-Logs.
 6. Jede Workflow-Regel wird über `PublishEligibilityService` **serverseitig** erzwungen. Ein Frontend-Schalter allein ist keine Sicherheit.
-7. **Git-Konvention:** Lokal entwickeln → vollständiges Quality Gate und null IDE-Fehler/-Warnungen nachweisen → committen → freigegebenen Arbeitsbranch pushen. Ein Push auf `main` startet automatisch Tests, Docker-Build, GHCR, Deploy und Smoke-Test und erfordert deshalb einen entsprechenden Deployment-Auftrag. Andere Branches gehen nicht direkt live; die Referenzkonfiguration in Kapitel 19 ist kein zusätzliches Approval-Gate des tatsächlich vorhandenen Workflows.
+7. **Git-Konvention:** Lokal entwickeln → betroffene Prüfungen und QUICK erfolgreich ausführen → committen → freigegebenen Arbeitsbranch pushen. Vor Merge und Deployment ist FULL für den exakten Commit verpflichtend; siehe Kapitel 25. Ein Push auf `main` startet automatisch Tests, Docker-Build, GHCR, Deploy und Smoke-Test und erfordert deshalb einen entsprechenden Deployment-Auftrag. Andere Branches gehen nicht direkt live; die Referenzkonfiguration in Kapitel 19 ist kein zusätzliches Approval-Gate des tatsächlich vorhandenen Workflows.
 8. Kein Live-Deploy überspringt Tests; technische Bereitstellung ≠ Freigabe zum Instagram-Posting (`NOIZY_PUBLISH_ENABLED=false`).
 9. Das Dokument bei jeder Anforderungsänderung mit einer Zeile im Änderungsprotokoll aktualisieren.
 
@@ -2120,8 +2120,9 @@ Bei jeder Ergänzung gleichzeitig **Kapitel 3 (Lastenheft), 4 (Pflichtenheft), 5
 
 | Version | Datum | Änderungen |
 |---|---|---|
-| v1.9 Heller Modus und Branch-CI | 06.11.2026 | Primäre Buttons mit weißem Hintergrund und schwarzer Schrift erhalten im hellen Modus gemeinsam eine dunkle Fläche und weiße Schrift; Location-Übernehmen und gleich gestaltete Formularaktionen bleiben lesbar, weiße Logo-Flächen bleiben erhalten. Anlegen-/Bearbeiten-Regressionen prüfen mindestens 4,5:1 Textkontrast. Die CI prüft jeden Arbeitsbranch mit dem vollständigen Quality Gate; Deployment bleibt an den separaten bestehenden Workflow gebunden. |
-| v1.9 Team und Qualität | 05.11.2026 | Verständliches Team-Handbuch ergänzt; veraltete Prototyp-/Reload-Angaben korrigiert, gespeicherte Freigabe von Instagram-Publishing und noch fehlender Bildversion-Fixierung getrennt. Conversion-/Null-Diagnosen einschließlich INFO blockieren; vier Feldinjektionen auf Konstruktoren umgestellt. Vollständiges Quality Gate und aktueller IDE-Nachweis vor jedem Commit verpflichtend. |
+| v1.9 Quality-Gate-Optimierung | 06.11.2026 | QUICK für Entwicklung/lokale Commits und Feature-Pushes; FULL vor PR-Merge und für main. GHCR verwendet nur streng nachgewiesene identische Commit-SHAs statt parallel erneut FULL. Fehlender Live-IDE-Zugriff blockiert Codex Cloud bei grünen CLI-Prüfungen nicht. Branch-Protection-Konfiguration vorbereitet, Aktivierung noch offen; Details und Messungen in QUALITY.md. |
+| v1.9 Heller Modus und Branch-CI | 06.11.2026 | Primäre Buttons mit weißem Hintergrund und schwarzer Schrift erhalten im hellen Modus gemeinsam eine dunkle Fläche und weiße Schrift; Location-Übernehmen und gleich gestaltete Formularaktionen bleiben lesbar, weiße Logo-Flächen bleiben erhalten. Anlegen-/Bearbeiten-Regressionen prüfen mindestens 4,5:1 Textkontrast. Damals prüfte CI jeden Arbeitsbranch mit FULL; seit der Quality-Gate-Optimierung gilt QUICK für Feature-Pushes und FULL für PR/main, siehe Kapitel 25. |
+| v1.9 Team und Qualität | 05.11.2026 | Verständliches Team-Handbuch ergänzt; veraltete Prototyp-/Reload-Angaben korrigiert, gespeicherte Freigabe von Instagram-Publishing und noch fehlender Bildversion-Fixierung getrennt. Conversion-/Null-Diagnosen einschließlich INFO blockieren; vier Feldinjektionen auf Konstruktoren umgestellt. Damals vollständiges Quality Gate und aktueller IDE-Nachweis vor jedem Commit; diese Ablaufregel ist seit 06.11. durch Kapitel 25 ersetzt. |
 | v1.8 Nur Partys | 05.11.2026 | Konzerte ausdrücklich aus dem Projektumfang ausgeschlossen; Konzertnavigation, Extraktion, Detailabrufe, Matching und manuelle Discovery-Übernahme abgesichert. |
 | v1.8 Abrufbudget | 05.11.2026 | Konfigurierbares 2-MiB-Response-Limit mit 4-MiB-Hardcap; Größen- und Zeitlimit getrennt; beide aktuellen Live-Music-Hall-Listen lesend geprüft. |
 | v1.8 Quellennavigation | 05.11.2026 | PARTY-/LIVE-Navigation und zugängliche Linkbeschriftungen erkennen, Programmseiten vor Detailabrufen priorisieren, leere Wix-HTML-Einbettungen korrekt diagnostizieren. |
@@ -3237,7 +3238,7 @@ flowchart TD
 
 ## 23.10 Festhaltepunkt für den nächsten Commit
 
-Vor jedem Commit gelten das vollständige Quality Gate und der aktuelle IDE-Nachweis aus Kapitel 25. Commit- und Pushstatus werden aus Git geprüft und im Abschluss gemeldet; diese Spezifikation behauptet keinen bereits erfolgten Push oder eine Produktionsabnahme. Das [Team-Handbuch](TEAM-HANDBUCH.md) ergänzt diese Referenz um verständliche Bedienabläufe und ändert keine fachlichen Anforderungen.
+Vor lokalen Commits gelten die gezielten CLI-Prüfungen und QUICK aus Kapitel 25; vor Merge und Deployment FULL für den exakten Commit. Nicht erreichbare Live-IDE-Diagnosen werden ausdrücklich benannt. Commit- und Pushstatus werden aus Git geprüft und im Abschluss gemeldet; diese Spezifikation behauptet keinen bereits erfolgten Push oder eine Produktionsabnahme. Das [Team-Handbuch](TEAM-HANDBUCH.md) ergänzt diese Referenz um verständliche Bedienabläufe und ändert keine fachlichen Anforderungen.
 
 ## 23.11 Offline-OCR 2.0 – verbindliche Betriebsgrenzen
 
@@ -3538,15 +3539,57 @@ Der optionale Test `ReadOnlyDiscoveryDiagnosisTests` verarbeitet nur eine per `N
 Validierung der Reset-Korrektur: **100 Backend-Tests erfolgreich**, einschließlich des ausdrücklich aktivierten Offline-Replays der 94 kopierten Datensätze; Maven-Paket erfolgreich. **16 Frontend-Tests**, TypeScript (`tsc --noEmit`), ESLint und Next.js-Produktionsbuild erfolgreich. PostgreSQL-Schreibtests ausschließlich im kurzlebigen Testcontainer auf Port 55434. Die Bestandsdatenbank blieb auf Migration V12 und wurde nur lesend untersucht. Keine produktiven Datenänderungen, kein Push und kein Deployment. DOM-Tests ersetzen keine visuelle Browser-/Mobilabnahme.
 
 
-# 25. Permanente Code-Quality-Routine (05.11.2026)
+# 25. Permanente Code-Quality-Routine (aktualisiert 06.11.2026)
 
-Die Root-`AGENTS.md` enthält das verbindliche **Mandatory Quality Gate** für alle zukünftigen Codex-Aufträge. Nach zusammenhängenden Änderungen gelten passende Tests/Analysen; vor jedem lokalen Commit ist `scripts/check-quality.sh --full` erfolgreich auszuführen. Zusätzlich muss VS Code vor jedem Commit **null projektbezogene Fehler und Warnungen** anzeigen, einschließlich bestehender Conversion-, Unchecked-Conversion- und Null-Type-Safety-Warnungen. Auch entsprechende ECJ-Informationshinweise blockieren. Ohne aktuellen IDE-Diagnosenachweis kein Commit; ein grüner CLI-Lauf ersetzt diesen Nachweis nicht. Keine still übersprungenen Checks, globalen Suppressions, Regelabschwächungen oder `--no-verify`-Umgehungen.
+Die Root-`AGENTS.md` enthält die verbindliche **Mandatory Quality Strategy**.
+Nach zusammenhängenden Änderungen laufen passende Tests/Analysen; vor lokalen
+Commits QUICK oder geeignete Modulprüfungen. Der installierte Hook führt
+`scripts/check-quality.sh --quick` aus und blockiert bei Fehlern. Keine
+Hook-Umgehung, pauschalen Suppressions, abgeschwächten Compiler-/Null-Regeln oder
+still übersprungenen Pflichtchecks. Codex Cloud darf bei erfolgreichen erforderlichen
+CLI-Prüfungen ohne Zugriff auf die Live-IDE committen, muss diesen fehlenden Zugriff
+aber ausdrücklich von tatsächlich geprüften Diagnosen unterscheiden.
 
-Versionierte Hooks liegen in `.githooks`; `scripts/install-hooks.sh` aktiviert sie nach Prüfung vorhandener Konfigurationen, ohne andere Hooks unbemerkt zu ersetzen. Neue Klone müssen den Installer einmal ausführen. Der Hook prüft ausschließlich und verändert weder Index noch Commit-/Push-Zustand automatisch.
+QUICK bestimmt betroffene Bereiche aus Index, Arbeitsbaum, neuen Dateien und in CI
+dem Push-Commitbereich. Dokumentation startet keine Komponentenbuilds oder Docker.
+Frontend: Typegen, TypeScript, relevante ESLint-Dateien und Regressionstests ohne
+Produktionsbuild. Backend: inkrementelles javac, vollständige ECJ-Analyse der
+aktuellen Haupt-/Testquellen und gezielte Tests; PostgreSQL nur bei ausgewählten
+Integrationstests. Löschungen/gemeinsame Konfigurationen erzwingen saubere
+Backend-Ausgaben. Abweichende gleichzeitig gestagte/ungestagte Codeversionen
+werden abgelehnt, statt den falschen Stand freizugeben.
 
-Die gemeinsame lokale/CI-Routine umfasst javac mit `-Xlint:all`/Warnungsfehlern, Tests und Maven-Paket, eine gepinnte zusätzliche ECJ-Analyse einschließlich Testcode, Next-Typegen, TypeScript, ESLint mit `--max-warnings=0`, Frontend-Tests und Produktionsbuild. Die ECJ-XML-Berichte werden unabhängig vom Exitcode ausgewertet: Jeder Problemeintrag einschließlich INFO verhindert einen Erfolg; fehlende oder beschädigte Berichte ebenso. `.vscode/settings.json` bindet dasselbe Java-Profil mit JSpecify-Defaults und den sekundären älteren Spring-Annotationen ein. Diff, Konfliktmarker und konfigurierte Secret-Muster werden auch im tatsächlichen Index geprüft. Backend-Schreibtests laufen stets in einem eigenen kurzlebigen PostgreSQL-Container mit zufälligem Loopback-Port, niemals gegen bestehende Datenbanken.
+`--backend` und `--frontend` bleiben umfassende Modulprüfungen. `--full` enthält
+striktes javac mit `-Xlint:all`, ECJ, negative Compiler-Fixtures, Maven Verify/Paket,
+isolierte PostgreSQL-Tests, TypeScript, ESLint, Frontend-Tests/Produktionsbuild und
+Gate-Selbsttests. ECJ-XML wird unabhängig vom Exitcode ausgewertet: Jeder
+Problemeintrag einschließlich INFO blockiert; fehlende/kaputte Berichte ebenso.
+Testdatenbanken sind kurzlebige Container mit zufälligem Loopback-Port ohne
+Bestandsvolumes. Entwicklung und Produktion bleiben unangetastet.
 
-Die erste Bereinigung behob 44 Java-Warnungen. Die dabei tolerierten zunächst 98, nach Event Change Monitoring 109 Conversion-/Null-Informationshinweise waren eine Lücke des Gates und sind keine zulässige Ausnahme mehr. Die Korrektur erhält generische NonNull-Verträge durchgängig und prüft Werte an Bibliotheksgrenzen tatsächlich. `JsonValues` weist unerwartetes JSON `null` zurück, bevor erforderliche API-/Eventobjekte verwendet werden. Es gibt keine pauschalen Suppressions oder externen Teilmodelle, die unannotierte Bibliotheksmethoden fälschlich als sicher deklarieren. Der optionale historische Offline-Discovery-Test wird ohne privaten Export ausdrücklich als nicht ausgeführt gemeldet. Voraussetzungen, Diagnosegrenzen, Fehlerbehandlung und getestete Fehler-/Hook-Szenarien sind in [QUALITY.md](QUALITY.md) dokumentiert.
+Feature-Pushes laufen über QUICK, PRs und main-Pushes über FULL. Der eindeutige
+Pflichtcheck **Full quality gate** verlangt ausdrücklich den Erfolg der gesamten
+wiederverwendbaren Validierung einschließlich Caddy. GHCR startet automatisch nach
+einem erfolgreichen main-CI-Push-Lauf und übernimmt dessen nachgeprüfte exakte SHA.
+Ein anderer, laufender, fehlgeschlagener oder übersprungener Lauf reicht nicht.
+Manuell wird ein identischer vertrauenswürdiger Nachweis wiederverwendet oder FULL
+ausgeführt. PR-Merge-SHA und main-SHA sind getrennt zu behandeln. Smoke-Tests und
+Rollback bleiben erhalten; es gibt keinen zweiten parallelen FULL-Lauf in GHCR
+für bereits erfolgreich geprüftes main.
+
+**Noch zu aktivieren:** Bei der lesenden Bestandsaufnahme war GitHub-`main` ohne
+Branch Protection/Rulesets. Konfiguration und lesender Prüfer sind vorbereitet,
+aber im Feature-Branch-Auftrag nicht auf GitHub angewandt. Ohne diesen Schutz ist
+ein Merge ohne FULL weiterhin technisch möglich. Siehe
+[QUALITY.md](QUALITY.md) für Aktivierung, Verantwortlichkeiten und Analysegrenzen,
+[QUALITY-BENCHMARK.md](QUALITY-BENCHMARK.md) für Messungen und verbliebene Kosten.
+
+Die frühere Bereinigung von 44 Java-Warnungen und später 109 Conversion-/Null-
+Informationshinweisen bleibt wirksam. Es gibt keine zulässige Ausnahme dafür.
+JSpecify-Verträge werden erhalten, unannotierte Bibliotheksrückgaben tatsächlich
+geprüft. Das Profil ist kein vollständiger JSpecify-Verifier. Der optionale
+historische Offline-Discovery-Test ohne privaten Export bleibt ausdrücklich
+als nicht ausgeführt erkennbar.
 
 # 26. Event Change Monitoring und zentraler Cancellation-Prozess (05.11.2026)
 
@@ -3617,7 +3660,7 @@ Neue APIs folgen der bestehenden lokalen/staging-API- und Caddy-Sessionabsicheru
 
 Regressionen prüfen stabile Identität trotz Datum-/Titelwechsel, echte kanonische Detail-URLs, Uhrzeit/Location/Beschreibung, offizielle Absage versus Gerücht und DJ-Ausfall, vollständige versus beschädigte ICS-Quellen, Quellenverlust nach wiederholter vollständiger Prüfung, widersprüchliche Quellen ohne doppelte Meldung, bestehende manuelle Kalendertermine, wiederverwendete Identitäten, eigenständige Ersatzkandidaten und deren ausdrücklich geprüfte Übernahme nach bestätigter Absage. Getestet sind unveränderte Originalcaptions/-genres/-freigabestatus und Originalflyerbytes, serverseitig blockierte Originalfreigaben, separate Grafik-/Absagefreigabe, veraltete Revisionen und das 21-Tage-Fenster.
 
-Frontend-DOM-Regressionen prüfen Vergleichstabelle, editierbaren Rückfragetext ohne Fokusverlust, manuelle Versandmarkierung, Konfliktmeldung ohne Verlust der Eingaben, zentrale manuelle Absage und separates Grafikvorbereiten ohne Publishing-/Instagram-Aufruf. Sie ersetzen keine visuelle Abnahme in realen mobilen Browsern oder einen realen Instagram-/Publishing-Test. Vor dem lokalen Commit laufen TypeScript, ESLint, Production-Build, Maven-Paket, Java-Analysen und sämtliche Tests über das verbindliche vollständige Quality Gate. Datenbankschreibtests und Flyway V14 laufen ausschließlich im kurzlebigen Testcontainer; die bestehende Entwicklungs-/Produktionsdatenbank wird nicht migriert. Diese Prüfungen lösen weder Deployment noch Instagram-Aktionen aus.
+Frontend-DOM-Regressionen prüfen Vergleichstabelle, editierbaren Rückfragetext ohne Fokusverlust, manuelle Versandmarkierung, Konfliktmeldung ohne Verlust der Eingaben, zentrale manuelle Absage und separates Grafikvorbereiten ohne Publishing-/Instagram-Aufruf. Sie ersetzen keine visuelle Abnahme in realen mobilen Browsern oder einen realen Instagram-/Publishing-Test. Für die damalige vollständige Validierung liefen TypeScript, ESLint, Production-Build, Maven-Paket, Java-Analysen und sämtliche Tests. Die aktuelle Commit-/CI-Strategie steht in Kapitel 25. Datenbankschreibtests und Flyway V14 laufen ausschließlich im kurzlebigen Testcontainer; die bestehende Entwicklungs-/Produktionsdatenbank wird nicht migriert. Diese Prüfungen lösen weder Deployment noch Instagram-Aktionen aus.
 
 Der zuletzt vollständig bestätigte Lauf nach der Qualitätskorrektur umfasst **127 Backend-Tests (126 erfolgreich, ein ausdrücklich optionaler historischer Offline-Test ohne Exportdatei übersprungen)** und **22 erfolgreiche Frontend-Tests**, zusätzlich **13 Gate-/Hook-Selbsttests**, **11 Java-Analysetestmethoden** und die Frontend-Negativprüfungen. javac sowie beide lokal geprüften ECJ-Versionen melden im Haupt- und Testcode **null Fehler, Warnungen und INFO-Diagnosen**. Die früher tolerierten 109 Informationshinweise sind behoben; es gibt keine entsprechende Ausnahme mehr, siehe [QUALITY.md](QUALITY.md). TypeScript, ESLint, Backend-Paket, Frontend-Build und `git diff --check` sind erfolgreich. Der Nutzer hat die aktuelle VS-Code-Problemliste mit null Fehlern und Warnungen bestätigt. Dies ist keine visuelle Mobil- oder Instagram-Abnahme.
 

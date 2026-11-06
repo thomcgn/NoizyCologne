@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run the pinned ECJ independently of javac, against main AND test sources."""
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -37,6 +38,10 @@ def main():
         raise RuntimeError('Missing ECJ/classpath; run scripts/check-quality.sh --backend')
     for source in ('main', 'test'):
         output = ROOT / f'backend/target/quality-{source}'
+        # ECJ always analyzes current sources. Removed/renamed classes from a
+        # prior invocation must not satisfy dependencies in the next one.
+        if output.exists():
+            shutil.rmtree(output)
         output.mkdir(parents=True, exist_ok=True)
         report = ROOT / f'backend/target/quality-{source}.xml'
         report.unlink(missing_ok=True)

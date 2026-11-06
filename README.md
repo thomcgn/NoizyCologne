@@ -37,21 +37,28 @@ cd frontend
 npm ci
 cd ..
 scripts/install-hooks.sh
-scripts/check-quality.sh --full
+scripts/check-quality.sh --quick
 ```
 
-Vor jedem Commit müssen das vollständige Quality Gate erfolgreich und die
-VS-Code-Problemliste ohne projektbezogene Fehler oder Warnungen sein.
-Conversion- und Null-Type-Safety-Diagnosen werden immer behoben.
-Backend-Tests verwenden eine eigene kurzlebige Datenbank.
-Voraussetzungen und Analysegrenzen: [Qualitätsregeln](docs/QUALITY.md).
+Während der Entwicklung und vor lokalen Commits laufen gezielte Prüfungen und
+QUICK; der Commit-Hook führt QUICK aus. `--backend` und `--frontend` prüfen eine
+ganze Komponente, `--full` beide einschließlich Produktionsbuilds. Fehler,
+Conversion- und Null-Type-Safety-Diagnosen bleiben blockierend. Codex Cloud nutzt
+reproduzierbare CLI-Prüfungen und benennt fehlenden Zugriff auf Live-IDE-Diagnosen.
+Backend-Integrationstests verwenden eine eigene kurzlebige Datenbank.
+Voraussetzungen, erforderlicher Branch-Schutz und Analysegrenzen:
+[Qualitätsregeln](docs/QUALITY.md), [Laufzeitvergleich](docs/QUALITY-BENCHMARK.md).
 
 ## Auslieferung
 
-Ein Push auf `main` startet die GitHub-Actions-Prüfungen, veröffentlicht die
-Container in GHCR und löst anschließend automatisch das Serverdeployment aus.
-Der tatsächliche Workflow hat kein zusätzliches manuelles Freigabe-Gate.
-Arbeitsbranches können ohne diese Produktionsauslieferung gepusht werden.
+Feature-Pushes führen QUICK aus; Pull Requests nach `main` und main-Pushes FULL.
+GHCR und Serverdeployment starten automatisch erst nach erfolgreicher vollständiger
+CI-Prüfung der exakten main-SHA. Ein manueller Aufruf benötigt denselben Nachweis
+oder führt FULL selbst aus. Smoke-Tests und Rollback bleiben erhalten.
+Der erforderliche Check **Full quality gate** muss zusätzlich durch
+[Branch Protection](docs/QUALITY.md#erforderlicher-schutz-für-main) erzwungen werden;
+die vorbereitete Konfiguration ist noch nicht auf GitHub aktiviert.
+Arbeitsbranches können ohne automatische Produktionsauslieferung gepusht werden.
 Eine technische Auslieferung aktiviert kein Instagram-Publishing.
 
 ## Dokumentation
