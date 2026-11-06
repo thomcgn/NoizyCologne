@@ -3,7 +3,8 @@
 Auftrag vom 06.11.2026. Branch `feat/party-defaults-discovery-progress` auf
 `3086a6f` aus dem anfangs noch offenen PR #14. Kein neuer Worktree, keine
 Produktionsdatenänderung, kein eigener Merge oder Deployment. Die beiden
-fachlichen Bereiche erhalten getrennte Commits.
+fachlichen Bereiche erhalten getrennte Commits. PR #14 ist inzwischen außerhalb
+dieses Auftrags gemergt; der neue PR richtet sich gegen main.
 
 ## Phase A: Standardwerte
 
@@ -43,15 +44,49 @@ Bisherige gezielte Prüfungen:
 - `git diff --check` erfolgreich. Der reguläre QUICK-Hook ist die abschließende
   Commitprüfung; seine Details stehen im zugehörigen `.quality/run.*/`-Protokoll.
 
+Phase A ist als `d879dc4` abgeschlossen. Regulärer QUICK-Hook erfolgreich:
+javac, frische ECJ-Haupt-/Testanalyse, Next-Typegen, TypeScript, ESLint sowie
+86 Frontendtests; 121 Backendtests ohne Fehler, davon ausschließlich der
+optionale private Offline-Replay mangels Snapshot übersprungen. Der abschließende
+JDBC-Zeitvergleich wurde zusätzlich isoliert erfolgreich nachgeprüft und der
+zugehörige reguläre QUICK-Hook ebenfalls bestanden.
+
 ## Phase B: Discovery-Fortschritt
 
-Noch umzusetzen: tatsächliche Arbeitseinheiten am Laufbeginn bestimmen; Zahlen,
-Phase, aktuelle Quelle/Location und Aktualisierungszeit während des Laufs
-unabhängig persistieren. Abgeschlossene fehlerhafte Einheiten mitzählen,
-unterbrochene Einheiten nicht vorzeitig zählen. COMPLETED/PARTIAL sind verarbeitet,
-FAILED/INTERRUPTED behalten den echten erreichten Stand. Keine erfundenen
-Prozentwerte für Altvorgänge, Reset oder reine Neubewertung. Bestehendes Polling
-und persistierte API-Daten verwenden; kein WebSocket/neuer Hintergrunddienst.
+Implementiert: tatsächliche Arbeitseinheiten am Laufbeginn bestimmen; Zahlen,
+Phase, aktuelle Quelle/Location und Aktualisierungszeit während des Laufs in
+REQUIRES_NEW-Transaktionen persistieren. V21 ergänzt nullable Felder ohne Backfill
+und prüft 0 ≤ fehlgeschlagen ≤ abgeschlossen ≤ geplant. Abgeschlossene fehlerhafte
+Einheiten zählen mit; unterbrochene Einheiten werden nicht vorzeitig gezählt.
+COMPLETED/PARTIAL sind verarbeitet, FAILED/INTERRUPTED behalten den echten Stand.
+Keine erfundenen Prozentwerte für Altvorgänge, Reset oder Neubewertung. Bestehendes
+Polling und persistierte API-Daten versorgen die beschriftete Progressbar samt
+Prozent, Einheiten, aktueller Quelle/Location und Aktualisierungszeit. Kein neuer
+Hintergrunddienst/WebSocket.
+
+Tatsächlich durchgeführte Prüfungen für Phase B:
+
+- Inkrementelle javac-Kompilierung und zwei Prozent-/Status-Unit-Tests bestanden.
+  Ein zunächst beanstandeter überflüssiger Cast wurde entfernt.
+- Frische ECJ-Haupt-/Testanalyse ohne Fehler, Warnungen oder INFO-Diagnosen.
+- V21 auf synthetischen Altdaten: unbekannte Zähler bleiben NULL; ungültige
+  Abschluss-/Fehlerzahlen werden abgelehnt.
+- Fünf neue Datenbanktests: während eines blockierten Abrufs unabhängig lesbare
+  33 % mit Fehlerzählung und wiederholtem API-Abruf, danach PARTIAL mit 100 %;
+  Abbruch bei 33 %; Erhalt eines verwaisten Zwischenstands; leerer Lauf;
+  Monitoring nur relevanter aktiver Locations; Neubewertung ohne Scan-Prozente.
+- Zwei bestehende Discovery-Importregressionen nach Scheduleränderung bestanden,
+  einschließlich Partyreihen-Defaults und Schutz manueller Kalenderkorrekturen.
+  Alle sieben Tests in einer neuen isolierten Datenbank; anschließend entfernt.
+- Zwei gezielte Frontendtests bestanden: Polling erhöht 33 auf 67 %, erneutes
+  Einhängen der Seite liest 67 % aus dem Vorgang, PARTIAL zeigt 100 % mit Fehler;
+  FAILED/INTERRUPTED bleiben bei 33 %, Leerzustand und Reset bleiben unterscheidbar.
+  ARIA-Werte und Aktualisierungszeit geprüft.
+- Mindestens 7.819 MiB RAM während der bisherigen Phase-B-Prüfungen verfügbar;
+  keine Speichergrenze erreicht und kein automatischer Neustart.
+- Die Freigabe des zweiten Commits erfolgt ausschließlich über den regulären
+  QUICK-Hook, einschließlich TypeScript/ESLint und bestehender Regressionen.
+  Sein tatsächliches Ergebnis steht im Commitprotokoll unter `.quality/run.*/`.
 
 ## Ressourcen und Abnahmegrenzen
 

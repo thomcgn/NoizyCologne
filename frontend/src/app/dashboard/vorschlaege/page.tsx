@@ -9,6 +9,7 @@ import CandidateReviewDialog from "./CandidateReviewDialog";
 import SourceEditorDialog from "./SourceEditorDialog";
 import DiscoveryCandidates from "./DiscoveryCandidates";
 import DiscoveryHistory from "./DiscoveryHistory";
+import DiscoveryProgress from "./DiscoveryProgress";
 import DiscoveryGeography,{type GeographyData} from "./DiscoveryGeography";
 import { discoveryApi as api } from "./discoveryApi";
 import { useWorkspaceAction } from "../workspaceActions";
@@ -64,7 +65,10 @@ export default function DiscoveryPage() {
   function deleteSpecial(item: Source) {void action(async()=>{await api(`/special-sources/${item.id}`,"DELETE");setNotice(`Sonderquelle „${item.name || item.url}“ gelöscht. Vorhandene Termine und Entscheidungen bleiben erhalten.`);});}
   function edit(item: Candidate) { setCandidate(item); setError(""); }
   const currentCandidate = candidate ? data?.candidates.find(item => item.id === candidate.id) ?? candidate : null;
-  const running = !!data?.operations?.some(item => item.status === "RUNNING") || data?.runs[0]?.status === "RUNNING";
+  const activeOperation = data?.operations?.find(item => item.status === "RUNNING");
+  const running = !!activeOperation || data?.runs[0]?.status === "RUNNING";
+  const resetting = !!activeOperation && !["SCAN", "MONITOR"].includes(activeOperation.kind);
+  const runningLabel = resetting ? "Neubewertung läuft …" : "Suche läuft …";
   const newSeries = data?.candidates.filter(isNewSeries) ?? [];
   const ready = data?.candidates.filter(item => isOpen(item) && !isNewSeries(item) && item.assessment?.automaticImportEligible && !["PREPARED", "SENT"].includes(item.inquiry_status) && item.decision_origin !== "MANUAL") ?? [];
   const readyIds = new Set(ready.map(item => item.id));
@@ -72,7 +76,7 @@ export default function DiscoveryPage() {
   const specialSources = data?.sources.filter(item => item.special_source) ?? [];
   const sourceProblems = specialSources.filter(item => item.enabled !== false && (["PARTIAL", "BLOCKED", "FAILED"].includes(item.quality ?? "") || !["EVENTS_FOUND", "NO_EVENTS", "NOT_CHECKED", "SOURCE_LINKS_FOUND", "EXCLUDED_CONCERTS"].includes(item.status)));
   function requestScan() {void action(async () => {await api("/scan", "POST"); setNotice("Suchlauf angefordert. Ergebnisse werden automatisch aktualisiert.");});}
-  useWorkspaceAction(running ? "Suche läuft …" : "Jetzt suchen", requestScan, busy || running || !data);
+  useWorkspaceAction(running ? runningLabel : "Jetzt suchen", requestScan, busy || running || !data);
   useEffect(() => {
     function openSection() {
       const hash = window.location.hash;
@@ -88,12 +92,13 @@ export default function DiscoveryPage() {
   return <main className="discovery-page">
     <header className="discovery-header">
       <div><p className="discovery-eyebrow">Arbeitsbereich / Entdecken</p><h1>Discovery</h1><p className="discovery-muted">Passende Partys entdecken. Neue Reihen ins Portfolio aufnehmen.</p>
-        <div className="discovery-run-status" role="status"><span className={`discovery-status-dot ${running ? "is-running" : ""}`} /><span>{running ? "Suchlauf läuft – Ergebnisse werden aktualisiert" : lastRun ? discoveryStatusLabel(lastRun.status) : "Noch kein Suchlauf"}</span><span className="discovery-muted">Letzter Suchlauf: {lastRun ? new Date(lastRun.started_at).toLocaleString("de-DE", { timeZone: "Europe/Berlin", dateStyle: "medium", timeStyle: "short" }) : "–"}</span></div>
+        <div className="discovery-run-status" role="status"><span className={`discovery-status-dot ${running ? "is-running" : ""}`} /><span>{running ? resetting ? "Neubewertung läuft – Ergebnisse werden aktualisiert" : "Suchlauf läuft – Ergebnisse werden aktualisiert" : lastRun ? discoveryStatusLabel(lastRun.status) : "Noch kein Suchlauf"}</span><span className="discovery-muted">Letzter Suchlauf: {lastRun ? new Date(lastRun.started_at).toLocaleString("de-DE", { timeZone: "Europe/Berlin", dateStyle: "medium", timeStyle: "short" }) : "–"}</span></div>
       </div>
-      <div className="discovery-header-actions"><button className="discovery-button discovery-button-primary cc-page-primary" disabled={busy || running || !data} onClick={requestScan}>{running ? "Suche läuft …" : "Jetzt suchen"}</button>
+      <div className="discovery-header-actions"><button className="discovery-button discovery-button-primary cc-page-primary" disabled={busy || running || !data} onClick={requestScan}>{running ? runningLabel : "Jetzt suchen"}</button>
         <details className="discovery-actions"><summary className="discovery-button">Weitere Aktionen</summary><div className="discovery-action-menu"><button disabled={busy || running} onClick={() => setResetMode("ALL")}>Neu bewerten</button><button disabled={busy || running} onClick={() => setResetMode("IGNORED")}>Suchlauf zurücksetzen</button><button onClick={() => {setToolsOpen(true); window.setTimeout(() => document.getElementById("discovery-tools")?.scrollIntoView({ behavior: "smooth" }), 0);}}>Quellen &amp; Konfiguration</button></div></details>
       </div>
     </header>
+    <DiscoveryProgress operation={activeOperation ?? operation} />
     {error && <div className="discovery-message" role="alert">{error}<button className="discovery-button" disabled={busy} onClick={() => void reload()}>Erneut laden</button></div>}
     {notice && <p className="discovery-message" role="status">{notice}</p>}
     <div className="discovery-metrics" aria-label="Discovery-Kennzahlen">{[["Automatisch übernommen", data?.automaticallyImported], ["Neue Partyreihen", data ? newSeries.length : undefined], ["Prüfbedarf", data ? review.length : undefined]].map(([label, value]) => <div key={label} className="discovery-metric"><span>{label}</span><strong>{value ?? "–"}</strong></div>)}</div>

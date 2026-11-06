@@ -2120,7 +2120,7 @@ Bei jeder Ergänzung gleichzeitig **Kapitel 3 (Lastenheft), 4 (Pflichtenheft), 5
 
 | Version | Datum | Änderungen |
 |---|---|---|
-| v1.9.3 Partyreihen-Standardwerte | 06.11.2026 | Nullable Standard-Startzeit und ganzzahliger Eintritt 0–30 €, Pflichtzeit für neue Reihen, Snapshot-Übernahme nur für neue Kalendertermine; relative Beginnangaben bleiben ohne erfundene Uhrzeit. Fortschrittsanzeige als zweiter Arbeitsschritt; Arbeitsnachweis: [PARTY-DEFAULTS-DISCOVERY-PROGRESS.md](PARTY-DEFAULTS-DISCOVERY-PROGRESS.md). |
+| v1.9.3 Partyreihen-Standardwerte und Discovery-Fortschritt | 06.11.2026 | Nullable Standard-Startzeit und ganzzahliger Eintritt 0–30 €, Pflichtzeit für neue Reihen, Snapshot-Übernahme nur für neue Kalendertermine; relative Beginnangaben bleiben ohne erfundene Uhrzeit. Persistierter Quellen-/Location-Fortschritt mit Fehlerzählung und bestehendem Polling; Arbeitsnachweis: [PARTY-DEFAULTS-DISCOVERY-PROGRESS.md](PARTY-DEFAULTS-DISCOVERY-PROGRESS.md). |
 | v1.9.3 Location-Matching und Kalenderflyer | 06.11.2026 | Eindeutig bestätigte Location-Zuordnungen aus Sonderquellen verwenden den bestehenden Discovery-Import mit unabhängiger ausdrücklicher Quellenfreigabe; Kalenderdetails zeigen Event-Flyer vor Dauerflyer statt Veranstaltungsnotizen. Keine neue Medienverwaltung oder Migration. Arbeitsnachweis: [DISCOVERY-LOCATION-FLYER.md](DISCOVERY-LOCATION-FLYER.md). |
 | v1.9.3 Geografischer Sonderquellen-Filter | 06.11.2026 | Nur nachgewiesene Kölner Veranstaltungsorte gelangen in den normalen Discovery-Prozess. Eigener Standortbereich, bestätigte Ortsidentitäten/Aliase, bewusste Bestands-Neubewertung ohne Datenverlust, generische kanonische URLs ohne `_rsc`. Migration V18 und Prüfbelege: [DISCOVERY-GEOGRAPHY.md](DISCOVERY-GEOGRAPHY.md). |
 | v1.9.2 Sonderquellen und Sofort-Ablehnung | 06.11.2026 | Unabhängige Sonderquellen hinzufügen/löschen, begrenzter Discovery-Scan ohne Standardlocation, explizite Ortszuordnung und dauerhafte Sofort-Ablehnung durch das Team. Migration V17; Details und Prüfbelege in [SPECIAL-SOURCES.md](SPECIAL-SOURCES.md). |
@@ -3989,6 +3989,15 @@ vorhandenen Belegen; ohne belegten Eventpreis gilt der bekannte Reihenstandard,
 sonst bleibt der Preis unbekannt. Bestehende Termine und manuelle Änderungen
 werden durch Änderungen an Standardwerten oder erneute Scans nicht überschrieben.
 
-Der zweite Arbeitsschritt ergänzt echte serverseitige Fortschrittszahlen pro
-aktiver Sonderquelle und relevanter aktiver Location. Anforderungen und
-phasenweise Prüfbelege stehen in [PARTY-DEFAULTS-DISCOVERY-PROGRESS.md](PARTY-DEFAULTS-DISCOVERY-PROGRESS.md).
+V21 ergänzt nullable Fortschrittsfelder in den vorhandenen Discovery-Vorgängen,
+ohne historische Zähler zu erfinden. Zu Beginn wird die Liste aktivierter
+Sonderquellen und relevanter aktivierter Locations festgelegt. Unabhängige kurze
+Transaktionen speichern abgeschlossene Einheiten und Fehler sowie aktuelle
+Quelle/Location, Phase und Aktualisierungszeit bereits während des Laufs.
+Prozentwerte werden aus abgeschlossenen/geplanten Einheiten berechnet und gerundet.
+COMPLETED/PARTIAL zeigen 100 %, FAILED/INTERRUPTED den tatsächlich gespeicherten
+Stand. Ein leerer Lauf wird mit 0 von 0 abgeschlossen; Reset/Neubewertung erhalten
+keine regulären Suchlauf-Prozente. Seitenwechsel und erneutes Laden lesen den
+persistierten Vorgang über das bestehende Polling. Eine beschriftete Progressbar
+zeigt Prozent, Einheiten, aktuelle Quelle/Location und letzte Aktualisierung.
+Anforderungen und phasenweise Prüfbelege stehen in [PARTY-DEFAULTS-DISCOVERY-PROGRESS.md](PARTY-DEFAULTS-DISCOVERY-PROGRESS.md).

@@ -49,7 +49,7 @@ public class DiscoveryController {
                     count(*) FILTER (WHERE inquiry_status IN ('PREPARED','SENT') AND status NOT IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED') AND (geo_status='INSIDE' OR source_id IN (SELECT id FROM discovery_sources WHERE venue_id IS NOT NULL))) AS open,
                     count(*) FILTER (WHERE status IN ('REJECTED','DUPLICATE','IGNORED')) AS archive FROM discovery_candidates
                     """),
-                "operations",store.jdbc().queryForList("SELECT * FROM discovery_operations ORDER BY started_at DESC LIMIT 10").stream().map(DiscoveryStore::forApi).toList(),
+                "operations",store.jdbc().queryForList("SELECT * FROM discovery_operations ORDER BY started_at DESC LIMIT 10").stream().map(DiscoveryProgress::forApi).toList(),
                 "diagnoses",store.jdbc().queryForList("SELECT d.*,c.title,v.name AS venue_name FROM discovery_decisions d JOIN discovery_candidates c ON c.id=d.candidate_id LEFT JOIN venues v ON v.id=c.venue_id ORDER BY d.id DESC LIMIT 500").stream().map(DiscoveryStore::forApi).toList(),
                 "runs",store.jdbc().queryForList("SELECT * FROM discovery_runs ORDER BY started_at DESC LIMIT 10").stream().map(DiscoveryStore::forApi).toList());
     }
@@ -71,7 +71,7 @@ public class DiscoveryController {
     @GetMapping("/operations/{id}") public Map<String,Object> operation(@PathVariable String id) {
         var rows=store.jdbc().queryForList("SELECT * FROM discovery_operations WHERE id=?",id);
         if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Vorgang fehlt");
-        return DiscoveryStore.forApi(rows.getFirst());
+        return DiscoveryProgress.forApi(rows.getFirst());
     }
     @PostMapping("/onboard") public DiscoveryOnboardingService.Report onboard(@Valid @RequestBody Probe request) throws java.io.IOException {
         return onboarding.preview(request.url());

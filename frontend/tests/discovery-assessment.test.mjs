@@ -25,6 +25,7 @@ const calls = [];
 let candidates;
 let sourceRows=[];
 let geoRows=[];
+let operationRows=[];
 let reloadedEntries;
 let reloadedParties;
 let reloadedDrafts;
@@ -78,13 +79,13 @@ function candidate(overrides = {}) {
   };
 }
 function overview() {
-  return { candidates, sources: sourceRows, counts: candidates.map(item => ({ status: item.status, count: 1 })), runs: [], automaticallyImported: 0, operations: [], diagnoses: [] };
+  return { candidates, sources: sourceRows, counts: candidates.map(item => ({ status: item.status, count: 1 })), runs: [], automaticallyImported: 0, operations: operationRows, diagnoses: [] };
 }
 async function settle(work = () => {}) {
   await act(async () => { await work(); await new Promise(resolve => setTimeout(resolve, 20)); });
 }
 async function mount(item, failInitial = false) {
-  candidates = Array.isArray(item) ? item : [item]; sourceRows=[]; geoRows=[]; calls.length = 0; reloadedEntries = 0; reloadedParties = 0; reloadedDrafts = 0;
+  candidates = Array.isArray(item) ? item : [item]; sourceRows=[]; geoRows=[]; operationRows=[]; calls.length = 0; reloadedEntries = 0; reloadedParties = 0; reloadedDrafts = 0;
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url, ...options });
     if (url.endsWith('/geography') && !failInitial) return new Response(JSON.stringify({items:geoRows}));
@@ -585,4 +586,57 @@ test('successful confirmation exposes the exact calendar target and prevents dup
  assert.equal(link.textContent,'Im Kalender anzeigen');assert.equal(link.getAttribute('href'),'/dashboard/kalender?entry=new%2Fimport');
  assert.equal(button('Bestätigen & übernehmen',dialog()).disabled,true);
  assert.ok(reloadedEntries>0);
+});
+
+
+test('persisted Discovery progress updates by polling and remains visible after a page reload', async () => {
+  await mount([]);
+  const running = { id: 'persisted-scan', kind: 'SCAN', status: 'RUNNING', report: '', summary: '{}', totalUnits: 3, completedUnits: 1, failedUnits: 1, progressPercent: 33, currentLabel: 'Quelle B', phase: 'SPECIAL_SOURCES', updatedAt: '2026-11-06T21:00:00Z' };
+  operationRows = [running];
+  await settle(() => poll());
+  let bar = document.querySelector('[role="progressbar"]');
+  assert.ok(bar);
+  assert.equal(bar.getAttribute('aria-valuenow'), '33');
+  assert.equal(bar.getAttribute('aria-valuemin'), '0');
+  assert.equal(bar.getAttribute('aria-valuemax'), '100');
+  assert.match(document.body.textContent, /1 von 3 Quellen\/Locations verarbeitet/);
+  assert.match(document.body.textContent, /Aktuelle Quelle: Quelle B/);
+  assert.equal(document.querySelector('time').dateTime, running.updatedAt);
+  operationRows = [{ ...running, completedUnits: 2, progressPercent: 67, currentLabel: 'Location C', phase: 'LOCATIONS' }];
+  await settle(() => poll());
+  assert.equal(document.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '67');
+  assert.match(document.body.textContent, /Aktuelle Location: Location C/);
+  act(() => root.unmount());
+  document.body.replaceChildren();
+  const container = document.createElement('div'); document.body.append(container);
+  root = createRoot(container);
+  act(() => root.render(h(StrictMode, null, h(Page))));
+  await settle();
+  bar = document.querySelector('[role="progressbar"]');
+  assert.equal(bar.getAttribute('aria-valuenow'), '67', 'Reload reads the persisted operation instead of restarting at zero');
+  operationRows = [{ ...operationRows[0], status: 'PARTIAL', completedUnits: 3, progressPercent: 100, phase: 'PARTIAL', currentLabel: null }];
+  await settle(() => poll());
+  assert.equal(document.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '100');
+  assert.match(document.body.textContent, /1 Arbeitseinheit mit Fehler. Alle vorgesehenen Einheiten wurden verarbeitet/);
+});
+
+test('failed and interrupted scans keep real progress; empty and reset states stay distinct', async () => {
+  await mount([]);
+  for (const status of ['FAILED', 'INTERRUPTED']) {
+    operationRows = [{ id: 'stopped', kind: 'SCAN', status, totalUnits: 3, completedUnits: 1, failedUnits: 0, progressPercent: 33 }];
+    await settle(() => poll());
+    assert.equal(document.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '33');
+    assert.match(document.body.textContent, /zuletzt gespeicherte Fortschritt/);
+  }
+  operationRows = [{ id: 'empty', kind: 'SCAN', status: 'COMPLETED', totalUnits: 0, completedUnits: 0, progressPercent: 100 }];
+  await settle(() => poll());
+  assert.match(document.body.textContent, /Keine Quellen oder Locations für diesen Lauf vorgesehen/);
+  operationRows = [{ id: 'reset', kind: 'ALL', status: 'RUNNING', progressPercent: null }];
+  await settle(() => poll());
+  assert.equal(document.querySelector('[role="progressbar"]'), null);
+  assert.match(document.body.textContent, /Neubewertung läuft/);
+  assert.doesNotMatch(document.body.textContent, /Suchlauf läuft/);
+  operationRows = [{ id: 'legacy', kind: 'SCAN', status: 'COMPLETED' }];
+  await settle(() => poll());
+  assert.equal(document.querySelector('[role="progressbar"]'), null);
 });
