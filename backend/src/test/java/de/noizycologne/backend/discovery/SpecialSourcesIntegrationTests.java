@@ -100,6 +100,18 @@ class SpecialSourcesIntegrationTests {
             .containsEntry("venue_id",blue.getId()).containsEntry("status","IMPORTED");
         assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,blue.getId())).isEqualTo(1);
     }
+    @Test void aConfirmedVenueAliasAlsoPassesTermVerificationWithoutChangingSourceEvidence() throws Exception {
+        String alias="Bestätigter Clubalias "+UUID.randomUUID();
+        var observation=event("alias",party.getName(),alias,"");
+        geography.remember(blue.getId(),observation,root);approveSource(true);
+        found(observation);scheduler.scan();scheduler.scan();
+        var row=store.candidate(candidate());
+        assertThat(row).containsEntry("venue_id",blue.getId()).containsEntry("status","IMPORTED");
+        assertThat(geography.event(row).location()).isEqualTo(alias);
+        mvc.perform(get("/api/v1/discovery/candidates/"+row.get("id"))).andExpect(status().isOk())
+            .andExpect(jsonPath("$.assessment.verification.status").value("VERIFIED"));
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,blue.getId())).isEqualTo(1);
+    }
     @Test void approvingAPortalDoesNotInventOrGuessUnknownVenues() throws Exception {
         long count=venues.count();approveSource(true);
         found(event("unknown",party.getName(),"Unbekannter Club",""));scheduler.scan();

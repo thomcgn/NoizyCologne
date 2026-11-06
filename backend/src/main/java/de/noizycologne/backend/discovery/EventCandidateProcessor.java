@@ -109,7 +109,7 @@ public class EventCandidateProcessor {
         var dates=event.starts().stream().map(EventNormalizer::date).distinct().toList();
         LocalDate date=dates.size()==1 ? dates.getFirst() : null;
         // The same event can be exposed as JSON-LD, a text list and a detail URL.
-        if (previous.isEmpty() && date!=null && !EventVerification.assess(event,venue.getName()).conflicting()) {
+        if (previous.isEmpty() && date!=null && !evaluator.verification(event,venue.getId(),venue.getName()).conflicting()) {
             var sameOccurrence=store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE venue_id=? AND event_date=?",venue.getId(),date)
                 .stream().filter(c -> !EventNormalizer.distinctTimedOccurrences(evaluator.event(c),event)
                     && (EventMatcher.nameMatches(event.title(),(String)c.get("title")) || EventMatcher.nameMatches((String)c.get("title"),event.title()))).toList();

@@ -42,7 +42,7 @@ public class DiscoveryEvaluationService {
             }
         }
         var recognition=PartySeriesRecognition.recognize(event.title(),rules.parties(),rules.aliases());
-        var verification=EventVerification.assess(event,row.get("venue_id")==null ? "" : (String)row.get("venue_name"));
+        var verification=verification(event,(String)row.get("venue_id"),row.get("venue_id")==null ? "" : (String)row.get("venue_name"));
         String lifecycle=EventLifecycle.signal(event);
         List<@NonNull String> blockers=new ArrayList<>();
         if (!List.of("ACTIVE","LINEUP_CHANGE").contains(lifecycle))
@@ -73,8 +73,18 @@ public class DiscoveryEvaluationService {
             start.isBlank() ? List.of() : List.of(start),Objects.toString(row.get("evidence"),""),
             "UNCONFIRMED Rohdaten unvollständig; erneuter Abruf erforderlich","");
     }
+    private String verifiedVenueName(EventExtractor.Event event,String venueId,String venueName) {
+        if (venueId!=null) {
+            var place=geography.assess(event);
+            if (place.inside() && venueId.equals(place.venueId())) return event.location();
+        }
+        return venueName;
+    }
+    public EventVerification.Result verification(EventExtractor.Event event,String venueId,String venueName) {
+        return EventVerification.assess(event,verifiedVenueName(event,venueId,venueName));
+    }
     public EventMatcher.Match evaluate(EventExtractor.Event event,String venueId,String venueName,boolean approved,Rules rules) {
-        var result=matcher.match(event,venueId==null ? "" : venueName,rules.parties(),rules.aliases(),rules.genres(),venueId!=null && approved);
+        var result=matcher.match(event,venueId==null ? "" : verifiedVenueName(event,venueId,venueName),rules.parties(),rules.aliases(),rules.genres(),venueId!=null && approved);
         if (venueId==null && !result.status().equals("IGNORED")) return new EventMatcher.Match("NEEDS_REVIEW",result.partyId(),"Veranstaltungsort aus der Sonderquelle redaktionell zuordnen; "+result.reason(),result.classification());
         if (!result.status().equals("READY")) return result;
         var date=EventNormalizer.date(event.starts().getFirst());

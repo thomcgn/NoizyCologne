@@ -40,7 +40,7 @@ public class DiscoveryPortfolioService {
         importer.rememberAlias(candidate,party.id(),seriesAlias);
         store.jdbc().update("UPDATE discovery_candidates SET party_id=?,decision_origin='MANUAL',reason='Partyreihe ausdrücklich ins Portfolio aufgenommen',updated_at=now() WHERE id=?",party.id(),candidateId);
         store.audit(candidateId,(String)candidate.get("status"),null);
-        var verification=EventVerification.assess(event,(String)candidate.get("venue_name"));
+        var verification=evaluation.verification(event,(String)candidate.get("venue_id"),(String)candidate.get("venue_name"));
         if ("AUTOMATIC".equals(candidate.get("decision_origin")) && Boolean.TRUE.equals(candidate.get("approved"))
                 && verification.sufficient() && candidate.get("calendar_entry_id")==null)
             importer.importCandidate(candidateId,party.id(),verification.date(),true);

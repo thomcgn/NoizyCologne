@@ -63,6 +63,26 @@ Medienfelder: Kalendertermine besitzen `eventFlyer`, Partyreihen `defaultFlyer`.
 Alle ressourcenintensiven Prozesse laufen nacheinander unter Speicherüberwachung,
 mit begrenzten Java-/Node-Heaps, einem Node-Testworker und einer Abbruchgrenze
 von 2 GB RSS für die Prozessgruppe beziehungsweise 4 GB verfügbarem RAM.
+Der erste reguläre QUICK-Hook bestand mit 84 Frontendtests sowie 120
+Backendtests (119 erfolgreich, ausschließlich der dokumentierte optionale
+Offline-Test ohne private Exportdatei übersprungen). javac, ECJ, Next-Typegen,
+TypeScript und ESLint waren erfolgreich; mindestens 9063 MiB RAM verfügbar.
+
+Die abschließende Codeprüfung fand danach eine weitere Alias-Grenze: Die bisherige
+Terminprüfung verglich Ortsnamen unabhängig von der bereits bestätigten
+geografischen Identität. Sie akzeptiert jetzt einen abweichenden Namen nur dann
+als gleichwertig, wenn die geografische Prüfung dieselbe gespeicherte Location-ID
+eindeutig bestätigt. Kandidatenbewertung, API, Import und Portfolioübernahme
+verwenden diese gemeinsame Prüfung. Original-Ortsangabe und Quellenbelege bleiben
+erhalten; andere Widersprüche bleiben blockierend.
+
+Nach dieser Korrektur: frische ECJ-Analyse ohne Diagnosen und 30 gezielte
+Datenbanktests bestanden (27 Sonderquellen einschließlich neuer Alias-Regression
+sowie drei bestehende Prüfungen für Quellenfreigabe und Location-Sperren).
+Keine Fehler oder Skips; isolierter Testcontainer entfernt; mindestens 8733 MiB
+RAM verfügbar. Der abschließende Backend-/Dokumentationscommit läuft erneut
+regulär durch QUICK. Unveränderte Frontendchecks werden nicht manuell wiederholt.
+
 Datenbanktests verwenden ausschließlich einen neuen isolierten PostgreSQL-
 Container ohne bestehende Volumes. Keine Produktionsbuilds oder echten Browser.
 CLI-Ergebnisse sind kein Live-IDE-/visueller Nachweis; insbesondere die tatsächliche
