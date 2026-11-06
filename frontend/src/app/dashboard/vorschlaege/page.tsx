@@ -9,6 +9,7 @@ import CandidateReviewDialog from "./CandidateReviewDialog";
 import SourceEditorDialog from "./SourceEditorDialog";
 import DiscoveryCandidates from "./DiscoveryCandidates";
 import DiscoveryHistory from "./DiscoveryHistory";
+import DiscoveryGeography,{type GeographyData} from "./DiscoveryGeography";
 import { discoveryApi as api } from "./discoveryApi";
 import { useWorkspaceAction } from "../workspaceActions";
 import { isNewSeries, isOpen } from "./discoveryPresentation";
@@ -16,7 +17,7 @@ import type { Candidate, Source, Overview } from "./discoveryTypes";
 
 export default function DiscoveryPage() {
   const { reloadEntries, reloadParties, reloadDrafts } = useCatalog();
-  const [data, setData] = useState<Overview | null>(null);
+  const [data, setData] = useState<(Overview & {geography?:GeographyData}) | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [candidate, setCandidate] = useState<Candidate | null>(null);
@@ -31,10 +32,11 @@ export default function DiscoveryPage() {
   const reload = useCallback(async () => {
     const request = ++generation.current;
     try {
-      const [review, inquiry, ready] = await Promise.all(["NEEDS_REVIEW", "NEEDS_INQUIRY", "READY"].map(filter => api<Overview>(`?filter=${filter}`)));
+      const [overviews, geography] = await Promise.all([Promise.all(["NEEDS_REVIEW", "NEEDS_INQUIRY", "READY"].map(filter => api<Overview>(`?filter=${filter}`))),api<GeographyData>("/geography")]);
+      const [review,inquiry,ready]=overviews;
       if (request !== generation.current) return;
       const candidates = [...new Map([...review.candidates, ...inquiry.candidates, ...ready.candidates].map(item => [item.id, item])).values()];
-      setData({ ...review, candidates });
+      setData({ ...review, candidates, geography });
       setError("");
     } catch (error) { if (request === generation.current) setError(error instanceof Error ? error.message : "Discovery konnte nicht geladen werden."); }
   }, []);
@@ -99,6 +101,7 @@ export default function DiscoveryPage() {
     {sourceProblems.length > 0 && <p className="discovery-source-notice">{sourceProblems.length} {sourceProblems.length === 1 ? "Quelle konnte" : "Quellen konnten"} nicht vollständig ausgewertet werden. Weitere Quellen werden unabhängig verarbeitet. <button onClick={() => {setToolsOpen(true); window.setTimeout(() => document.getElementById("discovery-tools")?.scrollIntoView({ behavior: "smooth" }), 0);}}>Quellen ansehen</button></p>}
     <DiscoveryCandidates title="Neue Partyreihen" description="Neue passende Reihen mit belegtem Termin und mindestens 50 % Genre-Match." candidates={newSeries} kind="new" loading={!data && !error} unavailable={!data && !!error} busy={busy} onReview={edit} onReject={reject} />
     <DiscoveryCandidates title="Prüfbedarf" description="Nur offene Fragen zu Terminen, Quellen oder der Zuordnung. Deine manuellen Entscheidungen bleiben geschützt." candidates={review} kind="review" loading={!data && !error} unavailable={!data && !!error} busy={busy} onReview={edit} onReject={reject} />
+    <DiscoveryGeography data={data?.geography} busy={busy} error={error} action={action} onReevaluate={()=>setResetMode("ALL")} />
     <details id="discovery-history" className="discovery-section discovery-history" open={historyOpen} onToggle={event => setHistoryOpen(event.currentTarget.open)}><summary><span>Verlauf</span><span className="discovery-muted">Übernahmen, ignorierte Konzerte, Dubletten und Suchläufe</span></summary>
       {historyOpen && data && <>{ready.length > 0 && <DiscoveryCandidates title="Bereit zur Übernahme" description="Eindeutig erkannte bekannte Reihen. Keine erneute Portfoliofreigabe erforderlich." candidates={ready} kind="ready" loading={false} busy={busy} onReview={edit} onReject={reject} />}<DiscoveryHistory data={data} onReview={edit} onReviewId={id => void action(async () => edit(await api<Candidate>(`/candidates/${id}`)))} /></>}
     </details>

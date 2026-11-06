@@ -100,4 +100,13 @@ class SourceNavigationTests {
         verify(fetcher,never()).fetch(blocked);verify(fetcher,times(8)).robotsAllowed(any(),any());
     }
 
+    @Test void globalSourceCrawlingUsesCanonicalUrlsWithoutTransientRscParameters() throws Exception {
+        var service=service();var detail=root.resolve("/events/party");
+        page(root,"<a href='/events/party?_rsc=temporary'>Party</a>");
+        page(detail,"<h1>Indie Party</h1><time datetime='2027-01-09'>Samstag</time>");
+        var found=service.discoverSpecial(root+"?_rsc=temporary",EventExtractor.Profile.defaults());
+        assertThat(found).hasSize(2);verify(fetcher).fetch(root);verify(fetcher).fetch(detail);
+        verify(fetcher,never()).fetch(root.resolve("/events/party?_rsc=temporary"));
+    }
+
 }

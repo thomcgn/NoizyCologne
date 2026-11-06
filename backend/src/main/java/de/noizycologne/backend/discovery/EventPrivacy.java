@@ -8,7 +8,7 @@ public final class EventPrivacy {
         boolean privateTitle=health(event.title());
         if (!health(event.evidence()) && !privateTitle) return event;
         return new EventExtractor.Event(event.identity(),privateTitle ? "Veranstaltung – personenbezogene Titelangaben entfernt" : event.title(),event.url(),event.starts(),
-            "Personenbezogene Gesundheitsangaben aus dem Quelltext werden nicht gespeichert.",event.state(),event.location());
+            "Personenbezogene Gesundheitsangaben aus dem Quelltext werden nicht gespeichert.",event.state(),event.location(),event.place());
     }
     private static boolean health(String value) {
         return value.matches("(?is).*(krank|erkrank|diagnos|gesundheit|hospital|illness|medical|sick|verletz|cancer|covid|grippe|depress|burnout).*" );

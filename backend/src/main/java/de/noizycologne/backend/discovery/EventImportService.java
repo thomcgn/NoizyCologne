@@ -14,7 +14,8 @@ public class EventImportService {
     private final DiscoveryStore store;
     private final CalendarEntryService calendar;
     private final DiscoveryEvaluationService evaluator;
-    public EventImportService(DiscoveryStore store, CalendarEntryService calendar,DiscoveryEvaluationService evaluator) { this.store = store; this.calendar = calendar; this.evaluator=evaluator; }
+    private final DiscoveryGeographyService geography;
+    public EventImportService(DiscoveryStore store, CalendarEntryService calendar,DiscoveryEvaluationService evaluator,DiscoveryGeographyService geography) { this.store = store; this.calendar = calendar; this.evaluator=evaluator;this.geography=geography; }
     @Transactional
     public void importCandidate(String id, String party, LocalDate date, boolean manual) {
         // The same lock covers automatic and manual imports, including parallel JVMs.
@@ -31,6 +32,7 @@ public class EventImportService {
             if ("IMPORTED".equals(c.get("status"))) return;
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Bereits übernommen: Änderung im Kalender manuell prüfen");
         }
+        geography.requireInside(c);
         if (party == null || date == null) throw new IllegalArgumentException("Partyreihe und bestätigtes Datum sind erforderlich");
         if (!manual) {
             if (!"AUTOMATIC".equals(c.get("decision_origin")) || !Boolean.TRUE.equals(c.get("approved")) || !"READY".equals(c.get("status")))
@@ -70,6 +72,7 @@ public class EventImportService {
         }
         if (List.of("REJECTED","DUPLICATE","IGNORED").contains(candidate.get("status")))
             throw new ResponseStatusException(HttpStatus.CONFLICT,"Archivierten Vorschlag zuerst prüfen");
+        geography.requireInside(candidate);
         assignVenue(id,candidate,venueId,true);
         review(id,party,date,"NEEDS_REVIEW",inquiry,dm);
         importCandidate(id,party,date,true);
@@ -83,6 +86,7 @@ public class EventImportService {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,"Veranstaltungsort zuerst ausdrücklich zuordnen");
             if (Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM discovery_candidates WHERE venue_id=? AND identity_key=? AND id<>?)",Boolean.class,venueId,candidate.get("identity_key"),id)))
                 throw new ResponseStatusException(HttpStatus.CONFLICT,"Diese Veranstaltung ist der Location bereits zugeordnet; vorhandenen Vorschlag prüfen");
+            if(Boolean.TRUE.equals(candidate.get("special_source"))) geography.remember(venueId,evaluator.event(candidate),(String)candidate.get("source_url"));
             store.jdbc().update("UPDATE discovery_candidates SET venue_id=? WHERE id=?",venueId,id);
             store.jdbc().update("INSERT INTO discovery_candidate_identities(venue_id,identity_key,candidate_id) VALUES (?,?,?) ON CONFLICT DO NOTHING",venueId,candidate.get("identity_key"),id);
         } else if (venueId!=null && !venueId.equals(candidate.get("venue_id"))) {

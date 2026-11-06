@@ -15,8 +15,9 @@ public class DiscoveryPortfolioService {
     private final DiscoveryEvaluationService evaluation;
     private final PartySeriesService parties;
     private final EventImportService importer;
-    public DiscoveryPortfolioService(DiscoveryStore store,DiscoveryEvaluationService evaluation,PartySeriesService parties,EventImportService importer) {
-        this.store=store;this.evaluation=evaluation;this.parties=parties;this.importer=importer;
+    private final DiscoveryGeographyService geography;
+    public DiscoveryPortfolioService(DiscoveryStore store,DiscoveryEvaluationService evaluation,PartySeriesService parties,EventImportService importer,DiscoveryGeographyService geography) {
+        this.store=store;this.evaluation=evaluation;this.parties=parties;this.importer=importer;this.geography=geography;
     }
     @Transactional
     public String approve(String candidateId,String name) {
@@ -25,7 +26,7 @@ public class DiscoveryPortfolioService {
     @Transactional
     public String approve(String candidateId,String name,String seriesAlias) {
         store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
-        var candidate=store.candidate(candidateId);var event=evaluation.event(candidate);var rules=evaluation.rules();
+        var candidate=store.candidate(candidateId);geography.requireInside(candidate);var event=evaluation.event(candidate);var rules=evaluation.rules();
         if (List.of("REJECTED","DUPLICATE","IGNORED").contains(candidate.get("status"))) throw conflict("Geschützten Vorschlag zuerst prüfen");
         var recognized=PartySeriesRecognition.recognize(event.title(),rules.parties(),rules.aliases());
         if (recognized.parties().size()==1) return Objects.requireNonNull(recognized.parties().getFirst()).id();

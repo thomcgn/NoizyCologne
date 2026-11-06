@@ -22,14 +22,18 @@ public class DiscoveryResetService {
         }
     }
     public record Item(String id,String title,String venue,String oldStatus,String newStatus,String classification,String reason,String automaticReason,boolean manual,boolean missingRaw,String partyId) { }
-    public record Preview(String token,int affectedCount,int preservedManual,int missingRaw,int enabledLocations,List<@org.jspecify.annotations.NonNull Item> items) { }
-    public record Summary(int evaluated,int newPossibleMatches,int stillIgnored,int preservedManual,int reclassified,int failed) { }
+    public record GeographicItem(String id,String status,String reason,String venueId) { }
+    public record Preview(String token,int affectedCount,int preservedManual,int missingRaw,int enabledLocations,List<@org.jspecify.annotations.NonNull Item> items,List<@org.jspecify.annotations.NonNull GeographicItem> geography) { }
+    public record Summary(int evaluated,int newPossibleMatches,int stillIgnored,int preservedManual,int reclassified,int failed,int geographicallyClassified) {
+        public Summary(int evaluated,int newPossibleMatches,int stillIgnored,int preservedManual,int reclassified,int failed){this(evaluated,newPossibleMatches,stillIgnored,preservedManual,reclassified,failed,0);}
+    }
     private final DiscoveryStore store;
     private final DiscoveryEvaluationService evaluator;
     private final EventImportService importer;
+    private final DiscoveryGeographyService geography;
     private final JsonMapper json=JsonMapper.builder().build();
-    public DiscoveryResetService(DiscoveryStore store,DiscoveryEvaluationService evaluator,EventImportService importer) {
-        this.store=store;this.evaluator=evaluator;this.importer=importer;
+    public DiscoveryResetService(DiscoveryStore store,DiscoveryEvaluationService evaluator,EventImportService importer,DiscoveryGeographyService geography) {
+        this.store=store;this.evaluator=evaluator;this.importer=importer;this.geography=geography;
     }
     static boolean selected(Map<String,Object> row,Selection selection) {
         if (row.get("calendar_entry_id")!=null || "IMPORTED".equals(row.get("status"))) return false;
@@ -37,12 +41,19 @@ public class DiscoveryResetService {
             return selection.includeManualRejected() && "MANUAL".equals(row.get("decision_origin")) && "REJECTED".equals(row.get("status"));
         return selection.mode()!=Mode.IGNORED || List.of("IGNORED","REJECTED").contains(row.get("status"));
     }
-    private record Plan(Preview preview,List<@org.jspecify.annotations.NonNull Item> all) { }
+    private record Plan(Preview preview,List<@org.jspecify.annotations.NonNull Item> all,List<@org.jspecify.annotations.NonNull GeographicItem> geographical) { }
     private Plan plan(Selection selection) {
         var rows=store.evaluationRows();var rules=evaluator.rules();
         List<@org.jspecify.annotations.NonNull Item> items=new ArrayList<>();List<String> revisions=new ArrayList<>();
+        List<@org.jspecify.annotations.NonNull GeographicItem> geographical=new ArrayList<>();
         int preserved=0;
         for (var row:rows) {
+            if(Boolean.TRUE.equals(row.get("special_source")) && row.get("calendar_entry_id")==null && !"IMPORTED".equals(row.get("status"))) {
+                var geo=geography.assess(evaluator.event(row));
+                geographical.add(new GeographicItem((String)row.get("id"),geo.status(),geo.reason(),geo.venueId()));
+                revisions.add("geo|"+row.get("id")+"|"+row.get("updated_at")+"|"+row.get("raw_event"));
+                if(!geo.inside()){if(!"AUTOMATIC".equals(row.get("decision_origin")))preserved++;continue;}
+            }
             if (!selected(row,selection)) {
                 if (!"AUTOMATIC".equals(row.get("decision_origin"))) preserved++;
                 continue;
@@ -59,11 +70,11 @@ public class DiscoveryResetService {
                 (String)row.get("status"),status,result.classification(),reason,result.reason(),manual,row.get("raw_event")==null,manual ? (String)row.get("party_id") : result.partyId()));
             revisions.add(row.get("id")+"|"+row.get("updated_at")+"|"+row.get("fingerprint")+"|"+row.get("raw_event"));
         }
-        String token=EventNormalizer.hash(EventMatcher.VERSION+json.writeValueAsString(selection)+json.writeValueAsString(items)+json.writeValueAsString(revisions));
+        String token=EventNormalizer.hash(EventMatcher.VERSION+json.writeValueAsString(selection)+json.writeValueAsString(items)+json.writeValueAsString(geographical)+json.writeValueAsString(revisions));
         Integer count=store.jdbc().queryForObject("SELECT count(*) FROM venues WHERE discovery_enabled",Integer.class);
         if (count==null) throw new IllegalStateException("Location-Zählung lieferte kein Ergebnis");
         int enabled=count;
-        return new Plan(new Preview(token,items.size(),preserved,(int)items.stream().filter(Item::missingRaw).count(),enabled,items.stream().limit(500).toList()),items);
+        return new Plan(new Preview(token,items.size(),preserved,(int)items.stream().filter(Item::missingRaw).count(),enabled,items.stream().limit(500).toList(),List.copyOf(geographical)),items,geographical);
     }
     @Transactional(readOnly=true)
     public Preview preview(Selection selection) { return plan(selection).preview(); }
@@ -74,6 +85,7 @@ public class DiscoveryResetService {
         var plan=plan(request.selection());
         if (!plan.preview().token().equals(request.previewToken()))
             throw new ResponseStatusException(HttpStatus.CONFLICT,"Vorschau ist veraltet; bitte erneut prüfen");
+        for(var item:plan.geographical()){var row=store.candidate(item.id());geography.classifyCandidate(row);}
         int possible=0,ignored=0,changed=0;
         for (var item:plan.all()) {
             var before=store.candidate(item.id());
@@ -92,7 +104,7 @@ public class DiscoveryResetService {
                 importer.importCandidate(item.id(),item.partyId(),date,false);
             }
         }
-        return new Summary(plan.all().size(),possible,ignored,plan.preview().preservedManual(),changed,0);
+        return new Summary(plan.all().size(),possible,ignored,plan.preview().preservedManual(),changed,0,plan.geographical().size());
     }
     public String hash(Request request) { return EventNormalizer.hash(json.writeValueAsString(request)); }
     public String serialize(Object value) { return json.writeValueAsString(value); }

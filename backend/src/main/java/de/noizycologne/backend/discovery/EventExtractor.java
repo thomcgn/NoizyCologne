@@ -20,7 +20,12 @@ public class EventExtractor {
         public static Profile defaults() { return new Profile("", "", ""); }
     }
     public record Event(String identity, String title, String url, List<@NonNull String> starts,
-                        String evidence, String state, String location) { }
+                        String evidence, String state, String location, EventPlace place) {
+        public Event(String identity,String title,String url,List<@NonNull String> starts,String evidence,String state,String location) {
+            this(identity,title,url,starts,evidence,state,location,EventPlace.empty());
+        }
+        public Event {place=place==null?EventPlace.empty():place;}
+    }
     public record Extraction(List<@org.jspecify.annotations.NonNull Event> events, String status, boolean complete) {
         public Extraction(List<@org.jspecify.annotations.NonNull Event> events,String status) { this(events,status,false); }
     }
@@ -30,7 +35,7 @@ public class EventExtractor {
         boolean malformed = false;
         if (page.body().contains("BEGIN:VCALENDAR")) return ics(page);
         var doc = Jsoup.parse(page.body(), Objects.requireNonNull(page.url().toString()));
-        if (!PartyOnlyPolicy.separateAftershow(doc) && (PartyOnlyPolicy.concertPage(doc) || PartyOnlyPolicy.concertLink("",page.url()))) return new Extraction(List.of(), "EXCLUDED_CONCERTS");
+        boolean concertPage=!PartyOnlyPolicy.separateAftershow(doc) && (PartyOnlyPolicy.concertPage(doc) || PartyOnlyPolicy.concertLink("",page.url()));
         for (Element script : doc.select("script[type=application/ld+json]")) {
             try { collect(json.readTree(script.data()), events, page.url().toString(), 0); }
             catch (RuntimeException e) { malformed = true; }
@@ -39,6 +44,7 @@ public class EventExtractor {
             try { collect(json.readTree(page.body()), events, page.url().toString(), 0); }
             catch (RuntimeException e) { malformed = true; }
         }
+        if(concertPage && events.stream().noneMatch(event -> EventNormalizer.text(event.title()).matches(".*\\b(aftershow ?party|after ?party)\\b.*") && !PartyOnlyPolicy.concert(event))) return new Extraction(List.of(),"EXCLUDED_CONCERTS");
         if (events.isEmpty()) {
             @NonNull String selector = profile.itemSelector().isBlank()
                     ? "[data-hook=event-list-item], [itemscope][itemtype*=Event], article:has(time), article:has(a[href]), .event:has(time), .event:has(a[href]), .event-item, .event-list-item"
@@ -58,7 +64,7 @@ public class EventExtractor {
                 String url = anchor == null ? page.url().toString() : anchor.absUrl("href");
                 String state = riskyState(item.text());
                 events.add(new Event(!item.attr("data-event-id").isBlank() ? item.attr("data-event-id") : url.equals(page.url().toString()) ? "" : url, clip(title.text(), 500), url,
-                        dates, clip(item.text(), 8000), state, ""));
+                        dates, clip(item.text(), 8000), state, "",htmlPlace(item)));
             }
             // Generic detail pages with a semantic start date.
             var heading = doc.selectFirst("h1");
@@ -72,7 +78,7 @@ public class EventExtractor {
                 } catch(IllegalArgumentException ignored) { /* Untrusted canonical links cannot change event identity. */ }
                 events.add(new Event(detailUrl, clip(heading.text(), 500), detailUrl,
                         List.of(date.hasAttr("datetime") ? date.attr("datetime") : date.attr("content")),
-                        clip(doc.body().text(), 8000), riskyState(doc.body().text()), ""));
+                        clip(doc.body().text(), 8000), riskyState(doc.body().text()), "",htmlPlace(doc)));
             }
         }
         if (events.isEmpty() && profile.itemSelector().isBlank()) genericCards(doc,page.url().toString(),events);
@@ -111,7 +117,7 @@ public class EventExtractor {
                 var link=container.selectFirst("a[href]");
                 String url=link==null ? page : link.absUrl("href");
                 events.add(new Event(url.equals(page) ? "" : url,clip(heading.text(),500),url,
-                    starts.stream().distinct().toList(),clip(container.text(),8000),riskyState(container.text()),""));
+                    starts.stream().distinct().toList(),clip(container.text(),8000),riskyState(container.text()),"",htmlPlace(container)));
                 break;
             }
         }
@@ -151,11 +157,51 @@ public class EventExtractor {
                 String state = node.path("eventStatus").asString("") + " " + riskyState(title + ". " + node.path("description").asString(""));
                 if (node.has("previousStartDate")) state += " RESCHEDULED " + node.path("previousStartDate").asString();
                 events.add(new Event(node.path("@id").asString(url.equals(page) ? "" : url), clip(title, 500), url, starts,
-                        clip(node.toString(), 8000), state, node.path("location").path("name").asString("")));
+                        clip(node.toString(), 8000), state, node.path("location").path("name").asString(""),jsonPlace(node.path("location"),page)));
             }
         }
         for (String key : List.of("@graph", "itemListElement", "item", "subEvent", "events"))
             if (node.has(key)) collect(node.get(key), events, page, depth + 1);
+    }
+    public @NonNull Event recoverPlace(Event event) {
+        Objects.requireNonNull(event,"Eventdaten fehlen");
+        if(!event.place().equals(EventPlace.empty())) return event;
+        try {
+            var node=json.readTree(event.evidence());
+            if(node.isObject() && node.path("@type").toString().contains("Event") && node.path("name").asString("").equals(event.title()))
+                return new Event(event.identity(),event.title(),event.url(),event.starts(),event.evidence(),event.state(),event.location(),jsonPlace(node.path("location"),event.url()));
+        }catch(RuntimeException ignored){/* Legacy free text never proves a city. */}
+        return event;
+    }
+    private EventPlace jsonPlace(JsonNode node,String page) {
+        if(node.isArray()) {var place=EventPlace.empty();for(var item:node) place=place.merge(jsonPlace(item,page));return place;}
+        if(!node.isObject()) return node.isString()?icsPlace(node.asString(""),""):EventPlace.empty();
+        var address=node.path("address");var geo=node.path("geo");
+        var textAddress=address.isString()?icsPlace(address.asString(""),""):EventPlace.empty();
+        String reference=node.path("@id").asString(node.path("url").asString(""));
+        try {reference=reference.isBlank()?"":CanonicalSourceUrl.reference(java.net.URI.create(page).resolve(reference).toString());}
+        catch(IllegalArgumentException e){reference="";}
+        var country=address.path("addressCountry");
+        return new EventPlace(address.path("addressLocality").asString(textAddress.city()),country.isObject()?country.path("name").asString(""):country.asString(""),
+            address.path("streetAddress").asString(textAddress.street()),address.path("postalCode").asString(""),reference,number(geo.path("latitude")),number(geo.path("longitude")),false);
+    }
+    private EventPlace htmlPlace(Element scope) {
+        for(var location:scope.select("[itemprop=location]")) {
+            boolean organizer=location.parents().stream().takeWhile(parent->parent!=scope).anyMatch(parent->parent.attr("itemprop").matches("organizer|performer|sponsor|seller"));
+            if(organizer) continue;
+            return new EventPlace(property(location,"addressLocality"),property(location,"addressCountry"),property(location,"streetAddress"),property(location,"postalCode"),"",
+                number(property(location,"latitude")),number(property(location,"longitude")),false);
+        }
+        return EventPlace.empty();
+    }
+    private String property(Element scope,String property) {var node=scope.selectFirst("[itemprop="+property+"]");return node==null?"":node.hasAttr("content")?node.attr("content"):node.text();}
+    private @Nullable Double number(JsonNode node) {return node.isNumber()?number(node.toString()):number(node.asString(""));}
+    private @Nullable Double number(String value) {try {double result=Double.parseDouble(value);return Double.isFinite(result)?result:null;}catch(NumberFormatException e){return null;}}
+    private EventPlace icsPlace(String location,String geo) {
+        // LOCATION is scoped event-address evidence. A street/number and explicit terminal city are required.
+        var address=java.util.regex.Pattern.compile("(?s)(?:.*?,\\s*)?([^,]*\\d[^,]*),\\s*(?:[0-9]{5}\\s+)?([\\p{L} .-]+)$").matcher(location);
+        String[] point=geo.split(";",2);
+        return new EventPlace(address.matches()?address.group(2):"","",address.matches()?address.group(1):"","","",point.length==2?number(point[0]):null,point.length==2?number(point[1]):null,false);
     }
     private Extraction ics(EventPageFetcher.Page page) {
         List<@org.jspecify.annotations.NonNull Event> events = new ArrayList<>();
@@ -178,7 +224,7 @@ public class EventExtractor {
                     String state = first(fields, "STATUS") + " " + riskyState(title + ". " + first(fields, "DESCRIPTION"));
                     if (fields.containsKey("UNSUPPORTED_TZ")) state += " SPECULATIVE_TIMEZONE UNCONFIRMED";
                     events.add(new Event(first(fields, "UID"), clip(title, 500), fields.containsKey("URL") ? first(fields, "URL") : page.url().toString(),
-                            starts, clip(fields.toString(), 8000), state, first(fields, "LOCATION")));
+                            starts, clip(fields.toString(), 8000), state, first(fields, "LOCATION"),icsPlace(first(fields,"LOCATION"),first(fields,"GEO"))));
                 }
                 fields = null;
             } else if (fields != null && line.contains(":")) {

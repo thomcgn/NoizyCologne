@@ -41,7 +41,7 @@ final class DiscoveryBatchMerger {
             if (conflict) states.append(" SOURCE_CONFLICT");
             String location=event.location().isBlank() ? ordered.stream().map(i -> i.event().location()).filter(l -> !l.isBlank()).findFirst().orElse("") : event.location();
             String text=ordered.size()==1 ? event.evidence() : evidence.substring(0,Math.min(8000,evidence.length()));
-            result.add(new Merged(primary,new EventExtractor.Event(event.identity(),event.title(),event.url(),starts,text,Objects.requireNonNull(states.toString()),location),List.copyOf(ordered)));
+            result.add(new Merged(primary,new EventExtractor.Event(event.identity(),event.title(),event.url(),starts,text,Objects.requireNonNull(states.toString()),location,ordered.stream().map(i -> i.event().place()).reduce(EventPlace.empty(),(left,right)->Objects.requireNonNull(left).merge(right))),List.copyOf(ordered)));
         }
         return result;
     }

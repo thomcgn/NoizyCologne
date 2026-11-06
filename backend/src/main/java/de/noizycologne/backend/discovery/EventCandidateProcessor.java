@@ -16,8 +16,9 @@ public class EventCandidateProcessor {
     private final EventChangeMonitor monitor;
     private final DiscoveryEvaluationService evaluator;
     private final EventImportService importer;
-    public EventCandidateProcessor(DiscoveryStore store,DiscoveryEvaluationService evaluator,EventImportService importer,EventChangeMonitor monitor) {
-        this.store=store;this.evaluator=evaluator;this.importer=importer;this.monitor=monitor;
+    private final DiscoveryGeographyService geography;
+    public EventCandidateProcessor(DiscoveryStore store,DiscoveryEvaluationService evaluator,EventImportService importer,EventChangeMonitor monitor,DiscoveryGeographyService geography) {
+        this.store=store;this.evaluator=evaluator;this.importer=importer;this.monitor=monitor;this.geography=geography;
     }
     public void process(Venue venue,String sourceId,EventExtractor.Event event,List<@NonNull PartySeries> known,
             Map<String,List<String>> aliases,List<String> genres,boolean approved) {
@@ -27,11 +28,13 @@ public class EventCandidateProcessor {
     public void processSpecial(String sourceId,EventExtractor.Event sourceEvent,String operation) {
         store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
         if (!Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM discovery_sources WHERE id=? AND venue_id IS NULL AND enabled AND deleted_at IS NULL)",Boolean.class,sourceId))) return;
-        var event=EventPrivacy.safe(sourceEvent);
+        var finding=geography.record(sourceId,sourceEvent);
+        if(!finding.result().inside()) return;
+        var event=finding.event();
         String identity=EventChangeMonitor.identity(event),fingerprint=EventChangeMonitor.fingerprint(event);
-        var previous=store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE source_id=? AND identity_key=?",sourceId,identity);
+        var previous=store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE source_id=? AND (identity_key=? OR id=?)",sourceId,identity,finding.candidateId());
         var old=previous.isEmpty() ? null : previous.getFirst();
-        String venueId=old==null ? null : (String)old.get("venue_id");
+        String venueId=old==null ? finding.result().venueId() : (String)old.get("venue_id");
         String venueName=old!=null && venueId!=null ? (String)store.candidate((String)old.get("id")).get("venue_name") : "";
         var result=evaluator.evaluate(event,venueId,venueName,false,evaluator.rules());
         if (old!=null && !"AUTOMATIC".equals(old.get("decision_origin"))) {
@@ -48,6 +51,7 @@ public class EventCandidateProcessor {
         var days=event.starts().stream().map(EventNormalizer::date).distinct().toList();
         var times=event.starts().stream().map(EventNormalizer::time).distinct().toList();
         String id=old==null ? UUID.randomUUID().toString() : (String)old.get("id");
+        String stableIdentity=old==null?identity:(String)old.get("identity_key");
         store.jdbc().update("""
             INSERT INTO discovery_candidates(id,venue_id,source_id,identity_key,fingerprint,title,source_url,event_date,start_time,evidence,status,reason,party_id,matching_class,automatic_reason,matcher_version,evaluated_at,last_evaluation_id,raw_event)
             VALUES (?,NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,?,now(),?,?)
@@ -55,9 +59,12 @@ public class EventCandidateProcessor {
              fingerprint=excluded.fingerprint,title=excluded.title,source_url=excluded.source_url,event_date=excluded.event_date,start_time=excluded.start_time,
              evidence=excluded.evidence,status=excluded.status,reason=excluded.reason,party_id=excluded.party_id,matching_class=excluded.matching_class,
              automatic_reason=excluded.automatic_reason,matcher_version=excluded.matcher_version,evaluated_at=now(),last_evaluation_id=excluded.last_evaluation_id,raw_event=excluded.raw_event,updated_at=now()
-            """,id,sourceId,identity,fingerprint,event.title(),SafeUrls.parse(event.url()).toString(),days.size()==1 ? days.getFirst() : null,times.size()==1 ? times.getFirst() : null,event.evidence(),result.status(),result.reason(),result.partyId(),result.classification(),result.reason(),EventMatcher.VERSION,operation,evaluator.raw(event));
+            """,id,sourceId,stableIdentity,fingerprint,event.title(),SafeUrls.parse(event.url()).toString(),days.size()==1 ? days.getFirst() : null,times.size()==1 ? times.getFirst() : null,event.evidence(),result.status(),result.reason(),result.partyId(),result.classification(),result.reason(),EventMatcher.VERSION,operation,evaluator.raw(event));
+        store.jdbc().update("UPDATE discovery_geo_events SET candidate_id=COALESCE(candidate_id,?) WHERE id=?",id,finding.id());
+        store.jdbc().update("UPDATE discovery_candidates SET geo_status='INSIDE',geo_reason=? WHERE id=?",finding.result().reason(),id);
+        if(venueId!=null) store.jdbc().update("UPDATE discovery_candidates SET venue_id=? WHERE id=? AND venue_id IS NULL AND NOT EXISTS(SELECT 1 FROM discovery_candidates other WHERE other.venue_id=? AND other.identity_key=? AND other.id<>?)",venueId,id,venueId,identity,id);
         store.audit(id,old==null ? null : (String)old.get("status"),operation);
-        monitor.rememberOrigin(id,sourceId,event,operation);
+        if(operation!=null) monitor.rememberOrigin(id,sourceId,event,operation);
     }
     private static boolean compatibleFallback(EventExtractor.Event before,EventExtractor.Event current,String venue) {
         if (!EventNormalizer.text(before.title()).equals(EventNormalizer.text(current.title()))
