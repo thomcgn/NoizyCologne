@@ -102,8 +102,10 @@ Quellenkennung bleibt bei möglichen Verschiebungen bewusst prüfpflichtig.
 Endzeiten und stundenweise Sperren sind im bestehenden Modell nicht vorhanden;
 Sperren gelten ganztägig. Keine automatische Freigabe oder Veröffentlichung.
 
-Der Folge-PR basiert zur getrennten Prüfung auf `feat/control-center` (PR #6).
-Die bestehende CI startet FULL nur für PRs gegen main: nach Annahme von #6 muss
-sein Folge-PR auf main umgestellt werden und FULL für den dann exakt akzeptierten
-Commit bestehen. Ein grüner Lauf von #6 oder ein lokaler Modulcheck ersetzt das
-nicht. Kein eigenständiger Merge und kein Deployment.
+Der Folge-PR war zunächst gegen `feat/control-center` (PR #6) vorgesehen.
+Während des Abschlusses wurde #6 außerhalb dieses Agentenlaufs nach main gemergt
+(`0ecea4b`) und sein Quellbranch gelöscht. Deshalb zielt der Discovery-PR direkt
+auf main; der fachliche Diff enthält ausschließlich die Discovery-Folgeänderungen.
+FULL in CI muss für den dann exakt akzeptierten Commit bestehen. Ein grüner Lauf
+von #6 oder ein lokaler Modulcheck ersetzt das nicht. Kein eigenständiger Merge
+und kein Deployment durch diesen Agenten.
