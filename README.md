@@ -66,3 +66,7 @@ Eine technische Auslieferung aktiviert kein Instagram-Publishing.
 - [Team-Handbuch](docs/TEAM-HANDBUCH.md): verständliche Anleitung für den Alltag.
 - [PROJECT.md](docs/PROJECT.md): fachliche und technische Referenz mit Ist-/Soll-Abgleich.
 - [QUALITY.md](docs/QUALITY.md): verbindliche Prüfungen und Commit-Regeln.
+
+Der optionale JavaScript-Fallback der Location-Discovery und die automatische
+Website-Prüfung sind in [docs/BROWSER-CRAWLER.md](docs/BROWSER-CRAWLER.md)
+beschrieben, einschließlich Konfiguration, Sicherheitsgrenzen und isolierter Tests.

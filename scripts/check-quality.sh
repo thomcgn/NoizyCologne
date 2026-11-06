@@ -71,11 +71,12 @@ scope_list() {
 }
 backend=false
 frontend=false
+browser=false
 case "$mode" in
-  --full) backend=true; frontend=true ;;
+  --full) backend=true; frontend=true; browser=true ;;
   --backend) backend=true ;;
   --frontend) frontend=true ;;
-  --quick) backend=$(scope_value backend); frontend=$(scope_value frontend) ;;
+  --quick) backend=$(scope_value backend); frontend=$(scope_value frontend); browser=$(scope_value browser) ;;
 esac
 
 # Compilers read the worktree. Do not certify a different staged code version.
@@ -201,6 +202,11 @@ if [[ "$frontend" == true ]]; then
     cd "$root/frontend"
     run frontend-build npm run build
     cd "$root"
+  fi
+fi
+if [[ "$browser" == true ]]; then
+  if [[ "$mode" == --quick ]]; then run browser-tests scripts/check-browser.sh --unit
+  else run browser-tests scripts/check-browser.sh --full
   fi
 fi
 run final-diff-worktree git diff --check

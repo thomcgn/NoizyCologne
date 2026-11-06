@@ -82,3 +82,16 @@ curl --fail --silent https://api.noizycologne.de/ | grep -q 'Not found'
 ```
 
 Der Team-Host muss ohne Basic-Auth mit `401` antworten; `/api/v1/*` ist nur über denselben authentifizierten Team-Host erreichbar. Backend und PostgreSQL dürfen in `docker compose ps` keine veröffentlichten Host-Ports besitzen.
+
+## Optionaler JavaScript-Crawler (noch nicht im Deployment aktiviert)
+
+Der neue Browser-Fallback bleibt standardmäßig deaktiviert. Er benötigt zwei
+zusätzliche geprüfte Images (Worker und Egress-Gateway) und das optionale
+`compose.browser.yaml`-Overlay. Die normale GHCR-/SSH-Auslieferung veröffentlicht
+und startet diese Images bislang nicht. Keine einzelnen Workerports ins Internet
+freigeben; der Renderer darf nur das isolierte interne Browsernetz erreichen.
+Token, absolutes Seccomp-Profil, Ressourcenreserve, aktive Sandbox und
+Profil-/Scheduler-/Authentifizierungskonfiguration müssen auf dem Zielhost vor
+Aktivierung geprüft werden. Keine Schutzmechanismen bei Kernel-/AppArmor-
+Problemen abschalten. Ausführliche Konfiguration, Netztopologie, Tests und
+Ressourcenbudgets: [Browser-Crawler](../../docs/BROWSER-CRAWLER.md).

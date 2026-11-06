@@ -38,3 +38,14 @@ Der Quellcode-Audit umfasst sämtliche 28 TS/TSX-Dateien in `src`: keine weitere
 Renderfunktionen definierten Komponenten. Der Kalender-Key aus Datum und
 Datensatz-ID bleibt während normaler Eingaben stabil. Die zuvor eigenständigen
 Kalenderdialoge verwenden jetzt die zentrale Fokusverwaltung.
+
+Zusätzliche Discovery-Regressionen rendern die tatsächliche Vorschlagsseite:
+getrennte Reihen-/Termin-/Absagestatus, sichtbare Mehrfachzuordnung bei Kooperation,
+mehrdeutige Treffer, READY-Filter, gespeicherte manuelle Entscheidungen,
+Importblocker und erhaltene Eingaben bei aktualisierten Befunden. Die Onboarding-
+Tests bedienen das tatsächliche Location-Modal: Website allein genügt, Name bleibt
+bearbeitbar, Quellen werden erst beim Speichern übernommen, veraltete Antworten
+überschreiben keine neue Website und ein Quellenspeicherfehler erzeugt bei erneutem
+Versuch keine doppelte Location. Ein Abruffehler wird nicht als zuverlässige Null-
+Eventzahl ausgegeben. Das sind DOM-/API-Fixtures, keine Live-Websiteprüfung;
+echte Chromium-Renderingtests liegen separat unter `browser-worker/tests/browser`.

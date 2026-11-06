@@ -5,7 +5,6 @@ import de.noizycologne.backend.venue.*;
 import de.noizycologne.backend.party.*;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.*;
 import org.springframework.stereotype.Service;
 
@@ -15,7 +14,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.LoggerFactory;
 
 @Service
-@Profile({"local", "staging"})
 @EnableScheduling
 public class DiscoveryScheduler {
     private final DiscoveryStore store;
@@ -159,7 +157,7 @@ public class DiscoveryScheduler {
         var knownParties=parties.findAll(); var aliases=store.aliases();
         var knownGenres=List.copyOf(genres.terms());
         record Pending(String sourceId, EventExtractor.@org.jspecify.annotations.NonNull Event event, boolean approved,boolean official) { }
-        List<Pending> pending=new ArrayList<>();
+        List<@NonNull Pending> pending=new ArrayList<>();
         List<String> statuses=new ArrayList<>(); int count=0;
         record Checked(String sourceId,List<EventExtractor.@NonNull Event> events,boolean complete) { }
         List<Checked> checks=new ArrayList<>();
@@ -168,7 +166,7 @@ public class DiscoveryScheduler {
             try {
                 for (var found : discovery.discover(root.getKey(),root.getValue())) {
                     String sourceId=store.source(venue.getId(),found.url().toString(),official(venue,found.url().toString()) ? "OFFICIAL" : "EXTERNAL",official(venue,found.url().toString()));
-                    store.jdbc().update("UPDATE discovery_sources SET status=?,last_fetched_at=now() WHERE id=?", found.extraction().status(),sourceId);
+                    store.fetched(sourceId,found);
                     statuses.add(found.extraction().status());
                     if (official(venue,found.url().toString())) checks.add(new Checked(sourceId,found.extraction().events(),found.extraction().complete()));
                     boolean approved=Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT approved FROM discovery_sources WHERE id=?",Boolean.class,sourceId));
@@ -185,22 +183,20 @@ public class DiscoveryScheduler {
         // must not arrive after an already committed automatic import from the first source.
         monitor.batch(venue,pending.stream().map(item -> new EventChangeMonitor.Observation(item.sourceId(),item.event(),item.official())).toList(),operation,changesOnly);
         for (var check:checks) monitor.missing(venue,check.sourceId(),check.events(),operation,check.complete() && count<=300);
-        Map<String,List<@NonNull String>> startsByTitle=new HashMap<>();
-        Map<String,List<String>> statesByTitle=new HashMap<>();
-        for (var item:pending) {
-            var e=item.event();
-            String state=e.state();
-            if (!e.location().isBlank() && !EventNormalizer.text(e.location()).contains(EventNormalizer.text(venue.getName())))
-                state+=" UNCONFIRMED Abweichende Location";
-            statesByTitle.computeIfAbsent(EventNormalizer.text(e.title()),k -> new ArrayList<>()).add(state);
-        }
-        for (var item:pending) startsByTitle.computeIfAbsent(EventNormalizer.text(item.event().title()),k -> new ArrayList<>()).addAll(item.event().starts());
-        for (var item:pending) {
+        // Unapproved portals cannot add speculative data to an approved source.
+        // Distinct stable identities on different days are separate occurrences.
+        for (var item:pending.stream().sorted(Comparator.comparingInt(p -> p.approved() ? 1 : 0)).toList()) {
             var event=item.event();
-            var starts=startsByTitle.get(EventNormalizer.text(event.title())).stream().distinct().toList();
-            boolean conflictingDates=starts.stream().map(EventNormalizer::date).filter(Objects::nonNull).distinct().count()>1;
-            String states=String.join(" ",statesByTitle.get(EventNormalizer.text(event.title())));
-            event=new EventExtractor.Event(event.identity(),event.title(),event.url(),conflictingDates ? starts : event.starts(),event.evidence(),states,event.location());
+            var related=pending.stream().filter(p -> sameBatchEvent(item.event(),p.event())).toList();
+            var approvedRelated=related.stream().filter(Pending::approved).toList();
+            var authoritative=approvedRelated.isEmpty() ? related : approvedRelated;
+            var starts=authoritative.stream().flatMap(p -> p.event().starts().stream()).distinct().toList();
+            boolean conflicting=starts.stream().map(EventNormalizer::date).filter(Objects::nonNull).distinct().count()>1
+                || starts.stream().map(EventNormalizer::time).filter(Objects::nonNull).distinct().count()>1
+                || authoritative.stream().anyMatch(p -> EventVerification.assess(p.event(),venue.getName()).conflicting());
+            String states=authoritative.stream().map(p -> p.event().state()).distinct().collect(java.util.stream.Collectors.joining(" "));
+            if (conflicting) states+=" SOURCE_CONFLICT";
+            event=new EventExtractor.Event(event.identity(),event.title(),event.url(),conflicting ? starts : event.starts(),event.evidence(),states,event.location());
             processor.process(venue,item.sourceId(),event,knownParties,aliases,knownGenres,item.approved(),operation);
         }
         var outcomes=statuses.stream().filter(s -> !List.of("SOURCE_LINKS_FOUND","EXCLUDED_CONCERTS").contains(s)).toList();
@@ -215,5 +211,14 @@ public class DiscoveryScheduler {
     }
     private boolean official(Venue venue,String url) {
         return !venue.getWebsiteUrl().isBlank() && SafeUrls.parse(venue.getWebsiteUrl()).getHost().equalsIgnoreCase(SafeUrls.parse(url).getHost());
+    }
+    private static boolean sameBatchEvent(EventExtractor.Event left,EventExtractor.Event right) {
+        boolean leftStable=!left.identity().isBlank(),rightStable=!right.identity().isBlank();
+        if (leftStable && rightStable && left.identity().equals(right.identity())) return true;
+        if (!EventMatcher.nameMatches(left.title(),right.title()) && !EventMatcher.nameMatches(right.title(),left.title())) return false;
+        var leftDate=EventChangeMonitor.date(left);
+        var rightDate=EventChangeMonitor.date(right);
+        if (leftDate!=null && rightDate!=null && !leftDate.equals(rightDate) && leftStable && rightStable) return false;
+        return true;
     }
 }

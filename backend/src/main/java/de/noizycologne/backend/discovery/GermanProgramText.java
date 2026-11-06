@@ -20,8 +20,12 @@ final class GermanProgramText {
             Map.entry("apr",4), Map.entry("april",4), Map.entry("mai",5), Map.entry("jun",6), Map.entry("juni",6),
             Map.entry("jul",7), Map.entry("juli",7), Map.entry("aug",8), Map.entry("august",8),
             Map.entry("sep",9), Map.entry("sept",9), Map.entry("september",9), Map.entry("okt",10), Map.entry("oktober",10),
-            Map.entry("nov",11), Map.entry("november",11), Map.entry("dez",12), Map.entry("dezember",12));
+            Map.entry("nov",11), Map.entry("november",11), Map.entry("dez",12), Map.entry("dezember",12),
+            Map.entry("january",1), Map.entry("february",2), Map.entry("march",3), Map.entry("may",5),
+            Map.entry("june",6), Map.entry("july",7), Map.entry("oct",10), Map.entry("october",10), Map.entry("dec",12), Map.entry("december",12));
 
+    private static final Pattern ISO_DATE=Pattern.compile("(?<!\\d)(\\d{4}-\\d{2}-\\d{2}(?:[T ]\\d{2}:\\d{2}(?::\\d{2})?(?:Z|[+-]\\d{2}:\\d{2})?)?)(?!\\d)");
+    private static final Pattern ENGLISH_DATE=Pattern.compile("(?i)(?:([a-z]+)\\s+(\\d{1,2}),?\\s+(\\d{4})|(\\d{1,2})\\s+([a-z]+)\\s+(\\d{4}))(?:\\s+(?:at\\s+)?(\\d{1,2}):(\\d{2}))?");
     static List<@NonNull String> starts(@NonNull String text) {
         // An explicitly separated range supplies one start; the later date/time is the end.
         String start = clean(text).split("\\s+[–—-]\\s+", 2)[0];
@@ -35,6 +39,20 @@ final class GermanProgramText {
                 dates.add(matcher.group(4) == null ? Objects.requireNonNull(date.toString()) : Objects.requireNonNull(date.atTime(
                         LocalTime.of(Integer.parseInt(matcher.group(4)), Integer.parseInt(matcher.group(5)))).toString()));
             } catch (DateTimeException | NumberFormatException e) { dates.add(Objects.requireNonNull(matcher.group(), "Datumsbeleg fehlt")); }
+        }
+        if (dates.isEmpty()) {
+            var iso=ISO_DATE.matcher(start);
+            while (iso.find()) dates.add(Objects.requireNonNull(iso.group(1).replace(' ','T')));
+        }
+        if (dates.isEmpty()) {
+            var english=ENGLISH_DATE.matcher(start);
+            while (english.find()) try {
+                String month=english.group(1)==null ? english.group(5) : english.group(1);
+                String day=english.group(1)==null ? english.group(4) : english.group(2);
+                String year=english.group(1)==null ? english.group(6) : english.group(3);
+                var date=LocalDate.of(Integer.parseInt(year),MONTHS.getOrDefault(month.toLowerCase(Locale.ROOT),0),Integer.parseInt(day));
+                dates.add(Objects.requireNonNull(english.group(7)==null ? date.toString() : date.atTime(Integer.parseInt(english.group(7)),Integer.parseInt(english.group(8))).toString()));
+            } catch (DateTimeException | NumberFormatException ignored) { /* Unparseable dates never receive an invented year. */ }
         }
         return dates.isEmpty() ? List.of(text) : dates.stream().distinct().toList();
     }
@@ -68,6 +86,7 @@ final class GermanProgramText {
             String url = anchor == null ? page : anchor.absUrl("href");
             String identity = anchor == null ? page + "#text-event-" + EventNormalizer.hash(text + "|" + context) : url;
             String state = preview || explicitYear == null || starts.isEmpty() ? "UNCONFIRMED Textvorschau oder unvollständiges Datum" : "";
+            state = (state + " " + EventLifecycle.stateFromText(text)).trim();
             events.add(new EventExtractor.Event(identity, title.substring(0, Math.min(500,title.length())), url,
                     starts, "Jahreskontext: " + context + "; " + text, state, ""));
         }

@@ -75,6 +75,7 @@ public class EventExtractor {
                         clip(doc.body().text(), 8000), riskyState(doc.body().text()), ""));
             }
         }
+        if (events.isEmpty() && profile.itemSelector().isBlank()) genericCards(doc,page.url().toString(),events);
         if (profile.itemSelector().isBlank()) {
             for (var event : GermanProgramText.events(doc, page.url().toString())) {
                 if (events.size() >= 200) break;
@@ -84,11 +85,39 @@ public class EventExtractor {
         boolean concerts = events.stream().anyMatch(PartyOnlyPolicy::concert);
         events.removeIf(PartyOnlyPolicy::concert);
         String status = !events.isEmpty() ? "EVENTS_FOUND" : concerts ? "EXCLUDED_CONCERTS" : malformed ? "UNINTERPRETABLE"
-                : doc.body().text().matches("(?is).*(keine (veranstaltungen|events|termine)|no (upcoming )?events).*") ? "NO_EVENTS"
-                : requiresRendering(doc) ? "JAVASCRIPT_REQUIRED" : "UNINTERPRETABLE";
+                : requiresRendering(doc) ? "JAVASCRIPT_REQUIRED"
+                : doc.body().text().matches("(?is).*(keine (veranstaltungen|events|termine)|no (upcoming )?events).*") ? "NO_EVENTS" : "UNINTERPRETABLE";
         return new Extraction(events, status);
     }
+    boolean needsRendering(EventPageFetcher.Page page,Extraction extraction) {
+        return !List.of("EXCLUDED_CONCERTS","NO_EVENTS").contains(extraction.status())
+            && extraction.events().stream().noneMatch(event -> !event.title().isBlank()
+            && event.starts().stream().anyMatch(start -> EventNormalizer.date(start)!=null))
+            && requiresRendering(Jsoup.parse(page.body()));
+    }
+    private void genericCards(org.jsoup.nodes.Document doc,String page,List<@NonNull Event> events) {
+        doc=doc.clone();
+        doc.select("footer, nav, script, style, [hidden], [aria-hidden=true]").remove();
+        for (var heading:doc.select("h2, h3, h4").stream().limit(200).toList()) {
+            Element container=heading.parent();
+            for (int depth=0;container!=null && depth<3;depth++,container=container.parent()) {
+                if (container.select("h2, h3").size()>1) break;
+                List<@NonNull String> starts=new ArrayList<>();
+                for (var date:container.select("time[datetime], [itemprop=startDate][content]"))
+                    starts.add(date.hasAttr("datetime") ? date.attr("datetime") : date.attr("content"));
+                if (starts.isEmpty()) starts.addAll(GermanProgramText.starts(container.text()).stream()
+                    .filter(start -> EventNormalizer.date(start)!=null).toList());
+                if (starts.isEmpty() || heading.text().isBlank()) continue;
+                var link=container.selectFirst("a[href]");
+                String url=link==null ? page : link.absUrl("href");
+                events.add(new Event(url.equals(page) ? "" : url,clip(heading.text(),500),url,
+                    starts.stream().distinct().toList(),clip(container.text(),8000),riskyState(container.text()),""));
+                break;
+            }
+        }
+    }
     private boolean requiresRendering(org.jsoup.nodes.Document doc) {
+        if (doc.selectFirst("#root, #app, #__next, [data-reactroot], script#__NEXT_DATA__, script[src*='/_next/']")!=null) return true;
         if (doc.selectFirst("iframe[data-src], iframe:not([src])[data-widget], [data-requires-javascript]") != null) return true;
         // Wix publicly describes current page components as inert JSON. Check only components
         // actually present in the DOM, not its global catalogue of installed apps.
@@ -119,7 +148,7 @@ public class EventExtractor {
                 if (start.isArray()) for (var value : start) starts.add(Objects.requireNonNull(value.asString(), "Startdatumswert fehlt"));
                 else if (start.isString()) starts.add(Objects.requireNonNull(start.asString(), "Startdatumswert fehlt"));
                 String url = java.net.URI.create(page).resolve(node.path("url").asString(page)).toString();
-                String state = node.path("eventStatus").asString("") + " " + riskyState(node.path("description").asString(""));
+                String state = node.path("eventStatus").asString("") + " " + riskyState(title + ". " + node.path("description").asString(""));
                 if (node.has("previousStartDate")) state += " RESCHEDULED " + node.path("previousStartDate").asString();
                 events.add(new Event(node.path("@id").asString(url.equals(page) ? "" : url), clip(title, 500), url, starts,
                         clip(node.toString(), 8000), state, node.path("location").path("name").asString("")));
@@ -146,8 +175,8 @@ public class EventExtractor {
                             return value;
                         } catch (RuntimeException e) { return value; }
                     }).toList();
-                    String state = first(fields, "STATUS") + " " + riskyState(first(fields, "DESCRIPTION"));
-                    if (fields.containsKey("UNSUPPORTED_TZ")) state += " UNCONFIRMED";
+                    String state = first(fields, "STATUS") + " " + riskyState(title + ". " + first(fields, "DESCRIPTION"));
+                    if (fields.containsKey("UNSUPPORTED_TZ")) state += " SPECULATIVE_TIMEZONE UNCONFIRMED";
                     events.add(new Event(first(fields, "UID"), clip(title, 500), fields.containsKey("URL") ? first(fields, "URL") : page.url().toString(),
                             starts, clip(fields.toString(), 8000), state, first(fields, "LOCATION")));
                 }
@@ -168,13 +197,7 @@ public class EventExtractor {
     }
     private static String first(Map<String, List<@NonNull String>> map, String key) { return map.getOrDefault(key, List.of("")).get(0); }
     private static String riskyState(String text) {
-        String normalized=EventNormalizer.text(text);
-        if (normalized.matches(".*\\b(vielleicht|gerücht|geruecht|möglicherweise|moeglicherweise|nicht abgesagt)\\b.*")) return "CANCELLATION_HINT UNCONFIRMED";
-        if (normalized.matches(".*\\b(veranstaltung|event|party|termin)\\s+(wird |ist |leider |muss |heute |komplett |vollständig ){0,5}(abgesagt|fällt aus|faellt aus|cancelled|canceled)\\b.*")) return "EVENT_CANCELLED UNCONFIRMED";
-        if (normalized.matches(".*\\b(dj|act|line up|lineup)\\b.*\\b(fällt aus|faellt aus|abgesagt|cancelled)\\b.*")) return "LINEUP_CHANGE UNCONFIRMED";
-        if (normalized.matches(".*\\b(abgesagt|fällt aus|faellt aus|cancelled|canceled)\\b.*")) return "EVENT_CANCELLED UNCONFIRMED";
-
-        return java.util.regex.Pattern.compile("(?i)abgesagt|fällt aus|faellt aus|cancelled|canceled|verschoben|rescheduled|unbestätigt|tba|freitag\\s*(oder|/|und)\\s*samstag").matcher(text).find() ? "UNCONFIRMED" : "";
+        return EventLifecycle.stateFromText(text);
     }
     private static String clip(String value, int size) { return value.length() <= size ? value : value.substring(0, size); }
 }

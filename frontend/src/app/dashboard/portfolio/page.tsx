@@ -2,7 +2,7 @@
 
 import { discoveryStatusLabel } from "../discoveryLabels";
 import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import {
   useCatalog,
@@ -17,6 +17,7 @@ import DashboardModal from "../DashboardModal";
 export type Category = "parties" | "locations";
 type DjAssignment = "none" | "resident" | "other";
 type RecurrenceChoice = "none" | "weekly" | "monthly_weekday" | "other";
+type WebsiteReport = { previewToken: string; websiteUrl: string; suggestedName: string; checkedAt: string; eventCount: number; partyCount: number; knownSeriesCount: number; incomplete: boolean; problems: string[]; sources: { url: string; fetchMethod: string; diagnostics: string[]; extraction: { status: string; events: unknown[]; complete: boolean } }[] };
 type ActiveGenre = { id: string; displayName: string; active: boolean };
 
 const weekdayNames = [
@@ -85,15 +86,25 @@ export default function PortfolioPage({
   const [discoveryEnabled, setDiscoveryEnabled] = useState(false);
   const [probeResult, setProbeResult] = useState("");
   const [probing, setProbing] = useState(false);
+  const [websiteReport, setWebsiteReport] = useState<WebsiteReport | null>(null);
+  const probeSequence = useRef(0);
+  function changeWebsite(value: string) {
+    probeSequence.current++; setWebsiteUrl(value); setWebsiteReport(null); setProbeResult(""); setProbing(false);
+  }
   async function probeSource() {
-    setProbing(true); setProbeResult("");
+    const sequence = ++probeSequence.current;
+    setProbing(true); setProbeResult(""); setWebsiteReport(null);
     try {
-      const response = await fetch("/api/v1/discovery/probe", {method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({url: eventsUrl || websiteUrl})});
-      if (!response.ok) throw new Error(`Quellenprüfung: HTTP ${response.status}`);
-      const results: {url: string; extraction: {status: string; events: unknown[]}}[] = await response.json();
-      setProbeResult(results.map(r => `${discoveryStatusLabel(r.extraction.status)}${["EVENTS_FOUND", "NO_EVENTS"].includes(r.extraction.status) ? `: ${r.extraction.events.length} Events` : ""} (${r.url})`).join("\n"));
-    } catch (e) { setProbeResult(e instanceof Error ? e.message : "Prüfung fehlgeschlagen"); }
-    finally { setProbing(false); }
+      const response = await fetch("/api/v1/discovery/onboard", {method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({url: websiteUrl.trim()})});
+      if (!response.ok) throw new Error(`Website-Prüfung: HTTP ${response.status}`);
+      const report: WebsiteReport = await response.json();
+      if (sequence !== probeSequence.current) return;
+      setWebsiteReport(report);
+      setName(current => current.trim() ? current : report.suggestedName.slice(0, 200));
+      const countText = report.eventCount === 0 && report.problems.length ? "Keine verlässliche Veranstaltungszahl ermittelbar." : `${report.eventCount} Veranstaltungen gefunden, ${report.partyCount} mögliche Partys, ${report.knownSeriesCount} bekannte Partyreihen.`;
+      setProbeResult(`${countText}\nGeprüft: ${new Date(report.checkedAt).toLocaleString("de-DE")}\n${report.sources.map(source => `${source.fetchMethod === "BROWSER" ? "Browser" : "HTTP"}: ${discoveryStatusLabel(source.extraction.status)} (${source.url})`).join("\n")}${report.incomplete ? "\nVollständigkeit der Veranstaltungsliste nicht bestätigt." : ""}${report.problems.length ? `\nTechnische Hinweise: ${report.problems.map(discoveryStatusLabel).join("; ")}` : ""}`);
+    } catch (cause) { if (sequence === probeSequence.current) setProbeResult(cause instanceof Error ? cause.message : "Prüfung fehlgeschlagen"); }
+    finally { if (sequence === probeSequence.current) setProbing(false); }
   }
   const [discoveryAliases, setDiscoveryAliases] = useState("");
   const [aliasesLoading, setAliasesLoading] = useState(false);
@@ -203,6 +214,7 @@ export default function PortfolioPage({
     setEditingId(null);
     setName("");
     setInstagram("");
+    probeSequence.current++; setProbing(false); setWebsiteReport(null);
     setWebsiteUrl(""); setEventsUrl(""); setDiscoveryEnabled(false); setProbeResult("");
     setResidentDjIds([]);
     setOtherDjIds([]);
@@ -412,14 +424,22 @@ export default function PortfolioPage({
 
       setSaving(true);
       try {
+        let savedVenue: CatalogItem;
         if (editingId) {
-          await updateVenue(updatedVenue);
+          savedVenue = await updateVenue(updatedVenue);
         } else {
-          await createVenue({
+          savedVenue = await createVenue({
             name: updatedVenue.name,
             instagram: updatedVenue.instagram,
             websiteUrl, eventsUrl, discoveryEnabled,
           });
+          setEditingId(savedVenue.id);
+        }
+        if (websiteReport && new URL(websiteReport.websiteUrl).href === new URL(websiteUrl).href) {
+          const result = await fetch(`/api/v1/discovery/onboard/${encodeURIComponent(savedVenue.id)}/sources`, {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ previewToken: websiteReport.previewToken }),
+          });
+          if (!result.ok) throw new Error("Location ist gespeichert, Quellenprüfung bitte erneut ausführen und speichern.");
         }
       } catch (cause) {
         setError(
@@ -673,10 +693,10 @@ export default function PortfolioPage({
 
             {category === "locations" && <details className="mt-5 rounded-xl border border-white/10 p-4">
               <summary className="cursor-pointer font-semibold">Website &amp; Partysuche</summary>
-              <label className="mt-4 block">Offizielle Website<input type="url" maxLength={2048} className={inputStyle} value={websiteUrl} onChange={e => setWebsiteUrl(e.target.value)} placeholder="https://…" /></label>
+              <label className="mt-4 block">Offizielle Website<input type="url" maxLength={2048} className={inputStyle} value={websiteUrl} onChange={e => changeWebsite(e.target.value)} placeholder="https://…" /></label>
               <label className="mt-4 block">Eventübersicht (optional)<input type="url" maxLength={2048} className={inputStyle} value={eventsUrl} onChange={e => setEventsUrl(e.target.value)} placeholder="https://…/programm" /></label>
-              <button type="button" className="mt-4 rounded-lg border px-4 py-2" disabled={probing || !(websiteUrl || eventsUrl)} onClick={() => void probeSource()}>{probing ? "Quelle wird geprüft …" : "Quelle prüfen"}</button>
-              <p className="mt-2 whitespace-pre-wrap text-sm" role="status">{probeResult}</p>
+              <button type="button" className="mt-4 rounded-lg border px-4 py-2" disabled={probing || !websiteUrl.trim()} onClick={() => void probeSource()}>{probing ? "Website wird geprüft …" : "Website automatisch prüfen"}</button>
+              <p className="mt-2 whitespace-pre-wrap text-sm" role="status">{probeResult}</p><p className="mt-2 text-sm text-neutral-400">Gefundene Quellen werden mit der Location gespeichert. Die Probe legt keine Kalendertermine an; die automatische Suche bleibt separat einstellbar.</p>
               <label className="mt-4 flex gap-2"><input type="checkbox" checked={discoveryEnabled} onChange={e => setDiscoveryEnabled(e.target.checked)} />Automatische Suche aktivieren</label>
               <p className="mt-2 text-sm text-neutral-400">Offizielle Quellen dürfen eindeutige bekannte Partys in den Kalender übernehmen. Externe Quellen und unklare Termine werden geprüft.</p>
             </details>}

@@ -7,7 +7,7 @@ import java.util.*;
 
 @Component
 public class EventMatcher {
-    public static final String VERSION = "party-rules-2";
+    public static final String VERSION = "party-rules-4";
     public record Match(String status, String partyId, String reason, String classification) { }
     public static boolean nameMatches(String title, String name) {
         String t=EventNormalizer.text(title), n=EventNormalizer.text(name);
@@ -27,31 +27,33 @@ public class EventMatcher {
     public Match match(EventExtractor.Event event, String venueName, List<@NonNull PartySeries> parties,
                        Map<String,List<String>> aliases, Collection<String> genres, boolean approved) {
         if (PartyOnlyPolicy.concert(event)) return new Match("IGNORED",null,"Konzert statt Clubparty", "IGNORED");
-        var matched=parties.stream().filter(p -> {
-            var names=new ArrayList<>(aliases.getOrDefault(p.getId(),List.of())); names.add(p.getName());
-            return names.stream().anyMatch(n -> nameMatches(event.title(),n));
-        }).toList();
-        if (matched.size()>1) return new Match("NEEDS_REVIEW",null,"Mehrere Partyreihen passen; eindeutige Zuordnung fehlt","UNVERIFIED");
-        String party=matched.isEmpty() ? null : Objects.requireNonNull(matched.get(0), "Passende Partyreihe fehlt").getId();
+        var recognition=PartySeriesRecognition.recognize(event.title(),parties,aliases);
+        if (recognition.parties().size()>1) {
+            String names=String.join(", ",recognition.parties().stream().map(PartySeriesRecognition.DetectedParty::name).toList());
+            return new Match("NEEDS_REVIEW",null,
+                (recognition.status().equals("COOPERATION") ? "Kooperation erkannt: " : "Mehrere bekannte Partyreihen erkannt: ")+names
+                +"; der Kalender unterstützt eine Partyreihe pro Termin; manuelle Zuordnung erforderlich","UNVERIFIED");
+        }
+        String party=recognition.parties().isEmpty() ? null : Objects.requireNonNull(recognition.parties().getFirst(),"Partytreffer fehlt").id();
+        var matched=parties.stream().filter(p -> p.getId().equals(party)).findFirst();
+        String standardGenres="";
+        if (party!=null) {
+            var matchedParty=Objects.requireNonNull(matched.orElseThrow(),"Erkannte Partyreihe fehlt");
+            if (!matchedParty.getStandardGenres().isEmpty()) standardGenres="; Standardgenres: "+String.join(", ",matchedParty.getStandardGenres());
+        }
         var hits=DiscoveryGenreFilter.matchingTerms(event,genres);
         if (party==null && unrelated(event))
             return new Match("IGNORED",null,"Fachfremde Veranstaltung: expliziter Nicht-Party-Beleg","IGNORED");
         String classification=party!=null ? "MATCH" : hits.isEmpty() ? "UNVERIFIED" : "POSSIBLE_MATCH";
-        String reason=party!=null ? "Bekannte Partyreihe erkannt" +
-                (Objects.requireNonNull(matched.get(0), "Passende Partyreihe fehlt").getStandardGenres().isEmpty() ? "" : "; Standardgenres: "+String.join(", ",Objects.requireNonNull(matched.get(0), "Passende Partyreihe fehlt").getStandardGenres()))
+        String reason=party!=null ? "Bekannte Partyreihe erkannt"+standardGenres
                 : hits.isEmpty() ? "Nicht genügend Informationen zur Genrezuordnung; fehlende Angaben sind keine Ablehnung"
                 : "Partyreihe unbekannt, aber musikalisch passend; Genre-Match: "+String.join(", ",hits);
-        if (!event.location().isBlank() && !EventNormalizer.text(event.location()).contains(EventNormalizer.text(venueName)))
-            return new Match("NEEDS_REVIEW",party,reason+"; abweichende Location in der Quelle",classification);
-        Set<java.time.LocalDate> dates=new HashSet<>();
-        for (String raw:event.starts()) {
-            var date=EventNormalizer.date(raw);
-            if (date==null) return new Match("NEEDS_INQUIRY",party,reason+"; Startdatum fehlt oder ist unvollständig",classification);
-            dates.add(date);
-        }
-        if (dates.size()!=1) return new Match("NEEDS_INQUIRY",party,reason+"; Datum fehlt oder ist widersprüchlich: "+event.starts(),classification);
-        if (EventNormalizer.text(event.state()).matches(".*(cancel|reschedul|postpon|unconfirm|tentative).*") )
-            return new Match("NEEDS_INQUIRY",party,reason+"; Absage, Verschiebung oder unbestätigte Angabe: "+event.state(),classification);
+        var verification=EventVerification.assess(event,venueName);
+        if (!verification.sufficient())
+            return new Match("NEEDS_INQUIRY",party,reason+"; "+String.join("; ",verification.reasons()),classification);
+        String lifecycle=EventLifecycle.signal(event);
+        if (!lifecycle.equals("ACTIVE"))
+            return new Match("NEEDS_INQUIRY",party,reason+"; Veranstaltungsänderung prüfen: "+lifecycle,classification);
         if (party==null) return new Match(classification.equals("UNVERIFIED") ? "NEEDS_INQUIRY" : "NEEDS_REVIEW",null,reason,classification);
         if (!approved) return new Match("NEEDS_REVIEW",party,reason+"; Quelle nicht zur automatischen Übernahme freigegeben",classification);
         return new Match("READY",party,reason+"; eindeutiges Startdatum und freigegebene Quelle",classification);

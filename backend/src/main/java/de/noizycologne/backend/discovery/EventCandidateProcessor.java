@@ -53,6 +53,10 @@ public class EventCandidateProcessor {
             var replacement=store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE venue_id=? AND identity_key=?",venue.getId(),identity);
             old=replacement.isEmpty() ? null : replacement.getFirst();
         }
+        // Unapproved observations remain available to monitoring; they must not
+        // replace the candidate's already approved source or editorial decision.
+        if (old!=null && !approved && Boolean.TRUE.equals(store.jdbc().queryForObject(
+                "SELECT approved FROM discovery_sources WHERE id=?",Boolean.class,old.get("source_id")))) return;
         if (old!=null) store.jdbc().update("INSERT INTO discovery_candidate_identities(venue_id,identity_key,candidate_id) VALUES (?,?,?) ON CONFLICT DO NOTHING",venue.getId(),identity,old.get("id"));
         // Includes ambiguous legacy reviews: uncertainty about provenance never permits overwriting them.
         if (old!=null && !"AUTOMATIC".equals(old.get("decision_origin"))) {
@@ -64,6 +68,12 @@ public class EventCandidateProcessor {
                     """,evaluator.raw(event),fingerprint,event.evidence(),url,technical.reason(),technical.classification(),EventMatcher.VERSION,operation,old.get("id"));
                 store.technicalAudit((String)old.get("id"),(String)old.get("matching_class"),operation);
             }
+            return;
+        }
+        if (old!=null && old.get("calendar_entry_id")!=null
+                && EventChangeMonitor.classify(evaluator.event(old),event,false)==null) {
+            store.jdbc().update("UPDATE discovery_candidates SET raw_event=?,fingerprint=?,evidence=?,source_url=?,updated_at=now() WHERE id=?",
+                evaluator.raw(event),fingerprint,event.evidence(),url,old.get("id"));
             return;
         }
         if (PartyOnlyPolicy.concert(event) && old==null) return;

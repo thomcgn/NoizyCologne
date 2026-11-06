@@ -1,0 +1,7 @@
+FROM node:24-alpine
+WORKDIR /app
+COPY security.mjs gateway.mjs ./
+USER node
+ENV NODE_ENV=production
+EXPOSE 3128
+CMD ["node", "gateway.mjs"]

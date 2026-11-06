@@ -58,6 +58,8 @@ class WorkflowFixture:
         for file in ['scripts/check-quality.sh', 'scripts/check-repository.py', 'scripts/install-hooks.sh',
                      'scripts/quality-scope.py', 'scripts/quality-report.py', '.githooks/pre-commit']:
             shutil.copy2(ROOT / file, self.root / file)
+        (self.root / 'scripts/check-browser.sh').write_text('#!/bin/sh\nprintf "browser-check %s\\n" "$*" >> "$FIXTURE_ROOT/calls"\ntest "$(cat "$FIXTURE_ROOT/fail-stage")" != browser-test\n')
+        (self.root / 'scripts/check-browser.sh').chmod(0o755)
         (self.root / 'scripts/check-java.py').write_text('from pathlib import Path\nimport sys\nprint("Simulated Java analysis fixture")\nsys.exit(1 if Path("fail-stage").read_text() == "java-null-warning" else 0)\n')
         # Do not recursively invoke this workflow suite inside its miniature fixture repository.
         (self.root / 'scripts/tests/test_quality_fixture.py').write_text('import unittest\nclass Fixture(unittest.TestCase):\n def test_fixture(self): self.assertTrue(True)\n')
@@ -120,11 +122,11 @@ class WorkflowTests(WorkflowFixture, unittest.TestCase):
         result = self.run_gate()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         calls = (self.root / 'calls').read_text()
-        for command in ['clean test-compile', 'verify', 'next typegen', 'tsc --noEmit', '--max-warnings=0', 'npm test', 'npm run build', 'docker rm -f fixture-container']:
+        for command in ['clean test-compile', 'verify', 'next typegen', 'tsc --noEmit', '--max-warnings=0', 'npm test', 'npm run build', 'docker rm -f fixture-container', 'browser-check --full']:
             self.assertIn(command, calls)
 
     def test_failures_propagate_and_never_report_success(self):
-        stages = {'java-error': 'backend-compile', 'java-warning': 'backend-compile', 'java-null-warning': 'java-analysis', 'test-failure': 'backend-tests', 'typescript': 'typescript', 'eslint-warning': 'eslint', 'frontend-test': 'frontend-tests', 'build': 'frontend-build'}
+        stages = {'java-error': 'backend-compile', 'java-warning': 'backend-compile', 'java-null-warning': 'java-analysis', 'test-failure': 'backend-tests', 'typescript': 'typescript', 'eslint-warning': 'eslint', 'frontend-test': 'frontend-tests', 'build': 'frontend-build', 'browser-test': 'browser-tests'}
         for failure, stage in stages.items():
             with self.subTest(failure=failure):
                 result = self.run_gate(failure)

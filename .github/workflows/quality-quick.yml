@@ -30,7 +30,7 @@ jobs:
           from pathlib import Path
           scope = json.loads((Path(os.environ['RUNNER_TEMP']) / 'quality-scope.json').read_text())
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              for key in ('backend', 'frontend'):
+              for key in ('backend', 'frontend', 'browser'):
                   print(f'{key}={str(scope[key]).lower()}', file=output)
           PY
 
@@ -43,7 +43,7 @@ jobs:
           cache: maven
 
       - name: Set up Node.js
-        if: steps.scope.outputs.frontend == 'true'
+        if: steps.scope.outputs.frontend == 'true' || steps.scope.outputs.browser == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 24

@@ -69,6 +69,13 @@ class ScopeTests(unittest.TestCase):
         self.assertFalse(result['tooling'])
         self.assertEqual(result['backend_tests'], [])
 
+    def test_browser_only_selects_worker_without_database_or_frontend(self):
+        result = self.plan(['browser-worker/render.mjs'])
+        self.assertTrue(result['browser'])
+        self.assertFalse(result['backend'])
+        self.assertFalse(result['frontend'])
+        self.assertFalse(result['backend_integration'])
+
     def test_renames_keep_old_and_new_component_scopes(self):
         self.git('mv', 'frontend/src/page.tsx', 'backend/src/main/java/fixture/Renamed.java')
         result = self.plan()

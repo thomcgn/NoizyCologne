@@ -197,6 +197,35 @@ Beispiel: „Teenage Dirtbag“ entfällt am 07.11.2026, „Neon Paradise“ fin
 
 Die alte Partyreihe und ihr Entwurf werden nicht in die Ersatzparty umbenannt. Der Ersatz braucht seine eigene Kalenderübernahme und seinen eigenen redaktionellen Entwurf.
 
+## Neue Website prüfen und gefundene Partys beurteilen
+
+Beim Anlegen einer Location reicht zunächst die offizielle **Website**. Wähle
+**Website automatisch prüfen**. Die Anwendung schlägt einen Namen vor und zeigt,
+welche Veranstaltungen und passenden Partys sie lesen konnte. Prüfe den Namen
+und die Quellen vor dem Speichern. Die Prüfung allein legt noch keine Location
+und keine Kalendereinträge an. Erst **Übernehmen** speichert die Location und die
+geprüften Quellen. Eine vorgeschlagene externe Website braucht eine eigene Prüfung.
+
+Manche Websites bauen ihren Kalender erst nach dem Laden auf. Wenn die zusätzliche
+Browserfunktion eingerichtet ist, versucht die Anwendung auch diese Inhalte zu
+lesen. Eine technische Warnung oder **Vollständigkeit nicht bestätigt** bedeutet:
+Es können weitere Termine existieren. Sieh auf der offiziellen Website nach;
+null auswertbare Veranstaltungen bedeutet nicht, dass dort nichts stattfindet.
+Unter **Vorgeschlagene → Location-Quellen** siehst du den letzten Versuch und den
+letzten erfolgreichen Abruf. Ein erfolgreicher Abruf bestätigt noch nicht alle
+inhaltlichen Angaben.
+
+Gefundene Partys zeigen getrennt, **welche Partyreihe erkannt wurde**, **ob der
+Termin belegt ist** und **ob es Absage- oder Verschiebungshinweise gibt**. Eine
+bekannte Reihe mit eindeutig belegtem Datum kann aus einer freigegebenen Quelle
+automatisch in den Kalender gelangen. Eine neue, musikalisch passende Reihe
+bleibt ein Vorschlag. Bei Kooperationen wie „Neon Paradise VS. Neon Kult“ bleiben
+beide Namen sichtbar; prüfe die Zuordnung selbst, weil ein Kalendertermin derzeit
+nur eine Partyreihe führen kann. Widersprüchliche Termine nicht einfach übernehmen:
+Quelle prüfen und gegebenenfalls eine Rückfrage vorbereiten. Absagen und
+Verschiebungen über **Änderungen & Absagen** klären. Bereits manuell getroffene
+Entscheidungen werden durch den nächsten Scan nicht aufgehoben.
+
 ## Wenn etwas nicht klappt
 
 | Meldung oder Situation | Nächster Schritt |

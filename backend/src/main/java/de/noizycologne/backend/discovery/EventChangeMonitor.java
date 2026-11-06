@@ -125,18 +125,30 @@ public class EventChangeMonitor {
     }
     /** Explicit state tokens avoid turning a DJ's illness mentioned in prose into an event cancellation. */
     public static String classify(EventExtractor.Event old,EventExtractor.Event event,boolean conflict) {
-        if (conflict || event.state().contains("SOURCE_CONFLICT") || event.starts().stream().map(EventNormalizer::date).filter(Objects::nonNull).distinct().count()>1) return "CONFLICTING_SOURCES";
-        if (event.state().matches("(?is).*\\b(CANCELLED|CANCELED|EventCancelled|EVENT_CANCELLED)\\b.*")) return "CANCELLATION_DETECTED";
-        if (fingerprint(old).equals(fingerprint(event))) return null;
-        if (event.state().contains("LINEUP_CHANGE")) return "LINEUP_CHANGE";
-        if (event.state().matches("(?is).*(EventPostponed|EventRescheduled|RESCHEDULED).*")) return "RESCHEDULE_DETECTED";
+        var verification=EventVerification.assess(event, "");
+        if (conflict || verification.conflicting()) return "CONFLICTING_SOURCES";
+        String lifecycle=EventLifecycle.signal(event);
+        if (lifecycle.equals("CANCELLED")) return "CANCELLATION_DETECTED";
+        if (fingerprint(old).equals(fingerprint(event)) || sameMeaning(old,event)) return null;
+        if (lifecycle.equals("LINEUP_CHANGE")) return "LINEUP_CHANGE";
+        if (lifecycle.equals("POSTPONED") || lifecycle.equals("RESCHEDULED")) return "RESCHEDULE_DETECTED";
         if (!Objects.equals(date(old),date(event)) && date(old)!=null && date(event)!=null) return "RESCHEDULE_DETECTED";
-        if (event.state().contains("CANCELLATION_HINT")) return "CANCELLATION_UNCONFIRMED";
-        if (event.state().contains("UNCONFIRMED")) return "CONFLICTING_SOURCES";
+        if (lifecycle.equals("CANCELLATION_UNCONFIRMED")) return "CANCELLATION_UNCONFIRMED";
+        if (!verification.sufficient()) return "CONFLICTING_SOURCES";
         if (!EventNormalizer.text(old.title()).equals(EventNormalizer.text(event.title())) && Objects.equals(date(old),date(event))
             && !EventMatcher.nameMatches(event.title(),old.title()) && !EventMatcher.nameMatches(old.title(),event.title())) return "POSSIBLE_REPLACEMENT";
         if (!fingerprint(old).equals(fingerprint(event))) return "EVENT_CHANGED";
         return null;
+    }
+    /** Technical confirmation labels alone do not change an otherwise identical event. */
+    private static boolean sameMeaning(EventExtractor.Event old,EventExtractor.Event event) {
+        return EventNormalizer.text(old.title()).equals(EventNormalizer.text(event.title()))
+            && old.starts().stream().map(EventChangeMonitor::normalizedStart).sorted().distinct().toList()
+                .equals(event.starts().stream().map(EventChangeMonitor::normalizedStart).sorted().distinct().toList())
+            && EventNormalizer.text(old.location()).equals(EventNormalizer.text(event.location()))
+            && EventNormalizer.text(old.evidence()).equals(EventNormalizer.text(event.evidence()))
+            && EventLifecycle.signal(old).equals(EventLifecycle.signal(event))
+            && EventVerification.assess(old, "").status().equals(EventVerification.assess(event, "").status());
     }
     @Transactional
     public void record(String candidate,String source,EventExtractor.Event event,String operation) {

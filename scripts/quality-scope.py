@@ -32,14 +32,16 @@ def changed_paths(root):
 
 
 def classify_paths(paths):
-    result = {'backend': False, 'frontend': False, 'tooling': False,
+    result = {'backend': False, 'frontend': False, 'tooling': False, 'browser': False,
               'frontend_lint': [], 'frontend_lint_all': False}
     lint = set()
     for name in paths:
         path = Path(name)
         if is_document(name):
             continue
-        if name.startswith('backend/'):
+        if name.startswith('browser-worker/') or name in ('scripts/check-browser.sh', 'deploy/server/compose.browser.yaml'):
+            result['browser'] = True
+        elif name.startswith('backend/'):
             result['backend'] = True
         elif name.startswith('frontend/'):
             result['frontend'] = True
@@ -59,7 +61,7 @@ def classify_paths(paths):
             result['tooling'] = True
         else:
             # Unknown build/configuration inputs must not silently receive a docs-only pass.
-            result.update(backend=True, frontend=True, tooling=True, frontend_lint_all=True)
+            result.update(backend=True, frontend=True, browser=True, tooling=True, frontend_lint_all=True)
     result['frontend_lint'] = sorted(lint)
     return result
 
@@ -135,7 +137,7 @@ def plan(root, paths=None):
     result = classify_paths(paths)
     result.update(paths=paths, base_fallback=fallback)
     if fallback:
-        result.update(backend=True, frontend=True, tooling=True, frontend_lint_all=True)
+        result.update(backend=True, frontend=True, browser=True, tooling=True, frontend_lint_all=True)
     deleted_lint = [name for name in result['frontend_lint'] if not (root / 'frontend' / name).is_file()]
     if deleted_lint:
         result['frontend_lint_all'] = True
@@ -147,7 +149,7 @@ def plan(root, paths=None):
     unstaged.update(git_paths(root, 'ls-files', '--others', '--exclude-standard', '-z'))
     result['index_worktree_overlap'] = sorted(name for name in staged & unstaged if code_input(name))
     shared_backend = fallback or any(name in ('config/java-quality.prefs', '.vscode/settings.json') or
-                                      (not name.startswith(('backend/', 'frontend/', 'scripts/', '.githooks/', '.github/workflows/')) and
+                                      (not name.startswith(('backend/', 'frontend/', 'browser-worker/', 'scripts/', '.githooks/', '.github/workflows/')) and
                                        code_input(name) and name not in ('.gitignore', '.gitattributes', '.editorconfig', '.vscode/extensions.json', '.github/branch-protection-main.json'))
                                       for name in paths)
     names, integration, reset = test_classes(root, paths, shared_backend)

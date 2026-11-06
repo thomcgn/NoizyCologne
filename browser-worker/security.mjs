@@ -1,0 +1,99 @@
+import dns from 'node:dns/promises';
+import { isIP } from 'node:net';
+import { createHmac, timingSafeEqual } from 'node:crypto';
+
+export const BOT = 'NoizyCologneDiscovery/1.0';
+export function publicUrl(value) {
+  if (typeof value !== 'string' || value.length > 2048) throw new Error('UNSAFE_URL');
+  const url = new URL(value);
+  if (url.protocol !== 'https:' || url.username || url.password || url.hash || url.port ||
+      !url.hostname.includes('.') || url.hostname.endsWith('.') || isIP(url.hostname) || /[\[\]:]/.test(url.hostname)) throw new Error('UNSAFE_URL');
+  return url;
+}
+export function publicAddress(address) {
+  const family = isIP(address);
+  if (family === 4) {
+    const [a, b] = address.split('.').map(Number);
+    return !(a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && [0, 168, 2, 88].includes(b)) || (a === 198 && [18, 19, 51].includes(b)) || (a === 203 && b === 0));
+  }
+  if (family !== 6 || address.includes('.')) return false;
+  const [first, second = '0'] = address.split(':');
+  const a = Number.parseInt(first, 16), b = Number.parseInt(second || '0', 16);
+  return (a & 0xe000) === 0x2000 && !(a === 0x2001 && b < 0x2000) && a !== 0x2002 && a !== 0x3fff;
+}
+export async function resolvePublic(host, lookup = dns.lookup) {
+  let timer;
+  const addresses = await Promise.race([lookup(host, { all: true, verbatim: true }),
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('DNS_TIMEOUT')), 5000); })]).finally(() => clearTimeout(timer));
+  if (!addresses.length || addresses.some(item => !publicAddress(item.address))) throw new Error('UNSAFE_DNS');
+  return addresses;
+}
+export function secret(value) {
+  if (typeof value !== 'string' || value.length < 32) throw new Error('A browser worker token of at least 32 characters is required');
+  return value;
+}
+export function proxySecret(token) { return createHmac('sha256', token).update('noizy-browser-egress-v1').digest('hex'); }
+export function authorized(actual, expected) {
+  const a = Buffer.from(actual ?? ''), b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+export async function readJson(request, limit = 4096) {
+  let size = 0; const chunks = [];
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > limit) throw new Error('RESPONSE_TOO_LARGE');
+    chunks.push(chunk);
+  }
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+export function send(response, code, data) {
+  response.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  response.end(JSON.stringify(data));
+}
+
+// Product-specific groups override wildcard groups; a crawl-delay is conservatively blocked.
+export function robotsAllowed(text, path) {
+  const groups = []; let group;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.split('#', 1)[0].trim(), colon = line.indexOf(':');
+    if (colon < 0) continue;
+    const key = line.slice(0, colon).trim().toLowerCase(), value = line.slice(colon + 1).trim();
+    if (key === 'user-agent') {
+      if (!group || group.started) { group = { agents: [], rules: [], started: false, delay: false }; groups.push(group); }
+      group.agents.push(value.toLowerCase());
+    } else if (group && ['allow', 'disallow', 'crawl-delay'].includes(key)) {
+      group.started = true;
+      if (key === 'crawl-delay') group.delay = true;
+      else if (value) group.rules.push({ pattern: value, allow: key === 'allow' });
+    }
+  }
+  const specific = groups.some(item => item.agents.includes('noizycolognediscovery'));
+  let longest = -1, allowed = true;
+  for (const item of groups.filter(item => item.agents.includes(specific ? 'noizycolognediscovery' : '*'))) {
+    if (item.delay) return false;
+    for (const rule of item.rules) {
+      if (!globMatches(rule.pattern, path)) continue;
+      const length = Buffer.byteLength(rule.pattern.replace(/\*/g, '').replace(/\$$/, ''));
+      if (length > longest) { longest = length; allowed = rule.allow; }
+      else if (length === longest && rule.allow) allowed = true;
+    }
+  }
+  return allowed;
+}
+
+export function globMatches(pattern, path) {
+  const end = pattern.endsWith('$');
+  if (end) pattern = pattern.slice(0, -1);
+  let p = 0, t = 0, star = -1, retry = 0;
+  while (t < path.length) {
+    if (p === pattern.length && !end) return true;
+    if (pattern[p] === '*') { star = p++; retry = t; }
+    else if (p < pattern.length && pattern[p] === path[t]) { p++; t++; }
+    else if (star >= 0) { p = star + 1; t = ++retry; }
+    else return false;
+  }
+  while (pattern[p] === '*') p++;
+  return p === pattern.length;
+}

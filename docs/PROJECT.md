@@ -3671,3 +3671,78 @@ Fehlt eine stabile externe Identität, wird ein neuer gleichnamiger Termin als u
 Der nachgereichte Schutz vor Überschreibungen gilt auch für die Redaktionsoberfläche: Gespeicherte Captions einschließlich Leertext/Zeilenumbrüchen werden beim Öffnen und nach Kalenderaktualisierungen unverändert geladen; Format-/Mention-/Eintrittsabweichungen erzeugen lediglich einen Prüfhinweis. Bewusst leere Mention-Auswahlen werden nicht mit Standard-DJs neu gefüllt. Ein DOM-Regressionstest prüft den tatsächlichen Editor einschließlich anschließendem Speichern.
 
 Auch nicht-offizielle Beobachtungen bleiben versioniert erhalten. Sie dürfen den letzten offiziellen Bestätigungsstand nicht ersetzen und erzeugen bei Abweichungen einen Quellenkonflikt, keine bestätigte offizielle Absage. Eine eigene Datenbankregression schützt diese Priorität.
+
+# 27. Generische Browser-Discovery und getrennte Eventbewertung (06.11.2026)
+
+Die bestehende Pipeline wird erweitert, nicht ersetzt. `party-rules-4` trennt
+Partyreihen-Erkennung (`PartySeriesRecognition`), belastbare Terminangaben
+(`EventVerification`) und Veranstaltungsstatus (`EventLifecycle`). Normalisierte
+ganze Wortfolgen/Aliasse dürfen in längeren Sondereditionstiteln stehen, niemals
+in fremden Wörtern. VS-/Meets-/Presents-Verbindungen erkennen mehrere bekannte
+Reihen; andere Mehrfachtreffer bleiben mehrdeutig. Die API liefert beide Reihen,
+den Prüfstatus und Übernahmehindernisse separat, ohne gespeicherte manuelle
+Entscheidungen zu überschreiben.
+
+Der Referenztitel **NEON PARADISE VS. NEON KULT VOL: 2 THE REVENGE**, Blue Shell,
+07.11.2026, erkennt bei entsprechendem Katalog beide Reihen als Kooperation.
+Das bestehende Kalendermodell hat eine PartySeries-ID: keine willkürliche erste
+Zuordnung, keine automatische Mehrfachübernahme; manuelle Zuordnung bleibt nötig.
+Eine bekannte eindeutige Reihe mit belegtem Titel/Tag aus freigegebener Quelle
+kann trotz technisch `UNCONFIRMED` gebliebener Detailseite automatisch übernommen
+werden. Fehlende Rohdaten, nur spekulative Termine oder widersprüchliche Daten
+bleiben prüfpflichtig. Quellenseriosität allein genügt nicht. Unbekannte passende
+Partys bleiben Vorschläge. Ein gesamter begrenzter Quellenbatch wird vor
+Übernahmen auf Widersprüche geprüft.
+
+Explizite CANCELLED/POSTPONED/RESCHEDULED-Befunde sperren die Übernahme und verwenden
+den bestehenden Änderungs-/Cancellation-Workflow aus Kapitel 26. Gerüchte,
+DJ-Ausfälle und verschwundene/kaputte Seiten werden nicht zu bestätigten Absagen.
+Bestehende Fingerprints bleiben kompatibel; manuelle Ablehnung/Korrektur,
+Rückfragen und vorhandene Kalendertermine bleiben geschützt. Keine Resets,
+Änderungen an gespeicherten Redaktionsentwürfen oder Instagram-Aktionen.
+
+`VenueSourceDiscoveryService` bevorzugt weiterhin HTTP, JSON-LD, HTML und ICS.
+Nur bei nicht brauchbaren statischen Daten und Client-Rendering-Indizien kann
+`BrowserPageRenderer` einen internen Playwright-/Chromium-Worker anfordern. Die
+DOM-Snapshots laufen durch denselben Extraktor. Generische Karten, deutsche/
+englische/ISO-Daten mit vollständiger Jahreszahl, begrenztes Lazy Loading,
+Pagination und öffentliche iframe-Quellen brauchen keinen Club-spezifischen Code.
+Robots-/Zugriffssperren werden nicht umgangen. Das zusätzliche Gateway prüft
+öffentliche Ziele und pinnt DNS zum Socket; der sandboxed Nicht-Root-Worker hat
+keinen direkten Internet-/Datenbankzugang. Der Browser ist standardmäßig aus.
+
+Browserresultate sind immer unvollständig. Fehler/Timeout/Robots/Paginationgrenzen
+bleiben als Diagnosen sichtbar und beweisen weder leere Kalender noch Abwesenheit.
+Migration **V15** ergänzt Quellen um Abrufmethode, Vollständigkeit, begrenzte
+Diagnosen und tatsächlichen letzten Erfolgszeitpunkt. Altbestände werden nicht
+neu bewertet oder mit erfundenen Erfolgen versehen. Diese Informationen stehen
+unter „Vorgeschlagene → Location-Quellen“ neben der bestehenden Quellenfreigabe.
+
+Im Location-Modal prüft **Website automatisch prüfen** allein die Website und
+schlägt Namen, Quellen und gezählte Veranstaltungen/relevante Partys/bekannte
+Reihen vor. Erst Location-Speichern registriert Quellen mit kurzlebigem Token.
+Bestehende entzogene Freigaben bleiben erhalten; externe Widgets bleiben extern
+und unfreigegeben. Eine Vorschau importiert keine Kalendertermine. Fehler beim
+Quellenspeichern sind ohne doppelte Location erneut versuchbar.
+
+Discovery-Controller/Scheduler sind nicht mehr nur auf local/staging beschränkt;
+vor anderen Profilen Authentifizierung und Schedulerflags ausdrücklich prüfen.
+Dienstag 09:00 Vollsuche und täglich 09:00 Änderungscheck, Europe/Berlin, bleiben
+unverändert. Das optionale Compose-Overlay wird vom regulären Deployment noch
+nicht aktiviert; neue Worker-/Gateway-Images benötigen separate Releasearbeit.
+
+Reale lokale Chromium-Fixtures prüfen zwei unterschiedliche JS-Layouts, verspätete
+Karten, Lazy Loading/Pagination, iframe, JS-Fehler, verweigerte Abrufe und Timeout
+mit aktiver Sandbox ohne Internetzugriff. Java-/PostgreSQL-/Frontend-Regressionen
+prüfen Erkennung, Datenqualität, API, Import, Schutz manueller Entscheidungen,
+Onboarding und den bestehenden Cancellation-Weg. FULL schließt Worker-ESLint,
+Node-Policytests und echte Chromium-Tests ein; QUICK wählt schnelle Workerchecks.
+
+Der reale isolierte **MTC-Test vom 06.11.2026 liefert keine auswertbaren Events**:
+Startseite per HTTP, PARTY-Unterseite `/about` tatsächlich per Browser, aber
+Robots-/Zugriffssperren, unzulässige Unteranfragen und JS-Fehler führen zu einem
+unvollständigen Render. Kein Erfolg aus Suchmaschinen-Snippets. Konfiguration,
+Sicherheitsgrenzen, Ressourcenlimits, genaue Prüfverfahren und Voraussetzungen
+vor einer späteren Produktionseinführung stehen in
+[BROWSER-CRAWLER.md](BROWSER-CRAWLER.md). Die Ausführung erfolgte mit ausdrücklicher
+Erlaubnis lokal im isolierten Worktree, nicht in Codex Cloud oder auf dem VPS.

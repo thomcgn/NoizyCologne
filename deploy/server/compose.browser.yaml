@@ -1,0 +1,60 @@
+# Optional overlay, deliberately excluded from the ordinary production deployment.
+# Run from the repository root; see docs/BROWSER-CRAWLER.md.
+services:
+  api:
+    environment:
+      DISCOVERY_BROWSER_ENABLED: "true"
+      DISCOVERY_BROWSER_URL: http://browser-gateway:3128/render
+      BROWSER_WORKER_TOKEN: ${BROWSER_WORKER_TOKEN:?A random browser token of at least 32 characters is required}
+    networks: [internal, browser-control]
+
+  browser-gateway:
+    image: ghcr.io/thomcgn/noizycologne-browser-gateway:${IMAGE_TAG:-latest}
+    build:
+      context: ../../browser-worker
+      dockerfile: Dockerfile.gateway
+    restart: unless-stopped
+    init: true
+    user: node
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    sysctls:
+      net.ipv4.ip_forward: "0"
+    environment:
+      BROWSER_WORKER_TOKEN: ${BROWSER_WORKER_TOKEN:?Browser token required}
+    expose: ["3128"]
+    mem_limit: 128m
+    cpus: 0.25
+    pids_limit: 64
+    networks: [browser-control, browser-sandbox, browser-egress]
+
+  browser-worker:
+    image: ghcr.io/thomcgn/noizycologne-browser-worker:${IMAGE_TAG:-latest}
+    build:
+      context: ../../browser-worker
+    restart: unless-stopped
+    init: true
+    user: pwuser
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=${BROWSER_SECCOMP_PROFILE:?Absolute path to browser-worker/seccomp_profile.json required}
+    environment:
+      BROWSER_WORKER_TOKEN: ${BROWSER_WORKER_TOKEN:?Browser token required}
+      BROWSER_TIMEOUT_MS: ${BROWSER_TIMEOUT_MS:-20000}
+    expose: ["3000"]
+    tmpfs: [/tmp:rw,size=134217728,mode=1777]
+    shm_size: 256m
+    mem_limit: 768m
+    cpus: 1.0
+    pids_limit: 256
+    networks: [browser-sandbox]
+
+networks:
+  browser-control:
+    internal: true
+  browser-sandbox:
+    internal: true
+  browser-egress: {}

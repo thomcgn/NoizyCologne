@@ -24,6 +24,28 @@ class EventChangeClassificationTests {
         assertThat(EventChangeMonitor.classify(old,event("Neue Party","2026-11-07T23:00","","Club","DJs"),false)).isEqualTo("POSSIBLE_REPLACEMENT");
         assertThat(EventChangeMonitor.classify(old,old,false)).isNull();
     }
+    @Test void technicalConfirmationLabelsAloneDoNotCreateSourceConflicts() {
+        var old=event("Party","2026-11-07T23:00","","Club","DJs");
+        for(String state:List.of("UNCONFIRMED","UNCONFIRMED Detailseite nicht eindeutig auswertbar",
+                "UNCONFIRMED Textvorschau oder unvollständiges Datum")) {
+            assertThat(EventChangeMonitor.classify(old,event("Party","2026-11-07T23:00",state,"Club","DJs"),false)).isNull();
+        }
+        assertThat(EventChangeMonitor.classify(old,event("Party","2026-11-07T23:00","DATA_CONFLICT","Club","DJs"),false))
+                .isEqualTo("CONFLICTING_SOURCES");
+        assertThat(EventChangeMonitor.classify(old,event("Party","2026-11-07T23:00","TENTATIVE","Club","DJs"),false))
+                .isEqualTo("CONFLICTING_SOURCES");
+    }
+    @Test void allExplicitLifecycleSignalsUseTheExistingReviewWorkflows() {
+        var old=event("Party","2026-11-07T23:00","","Club","DJs");
+        for(String state:List.of("POSTPONED","EventPostponed","RESCHEDULED","EventRescheduled")) {
+            assertThat(EventChangeMonitor.classify(old,event("Party","2026-11-07T23:00",state,"Club","DJs"),false))
+                    .isEqualTo("RESCHEDULE_DETECTED");
+        }
+        assertThat(EventChangeMonitor.classify(old,event("Party","2026-11-07T23:00","CANCELLED","Club","DJs"),false))
+                .isEqualTo("CANCELLATION_DETECTED");
+        assertThat(EventChangeMonitor.classify(old,event("Party","2026-11-07T23:00","LINEUP_CHANGE","Club","DJs"),false))
+                .isEqualTo("LINEUP_CHANGE");
+    }
     @Test void extractorSeparatesDjOutageConfirmedEventCancellationAndRumour() {
         var extractor=new EventExtractor();
         for(String text:List.of("DJ Example fällt aus. Party findet statt.","Party abgesagt.","Party vielleicht abgesagt.","DJ Example ist krank. Die Veranstaltung wird abgesagt.")) {

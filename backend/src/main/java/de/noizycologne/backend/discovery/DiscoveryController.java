@@ -3,7 +3,6 @@ package de.noizycologne.backend.discovery;
 import org.jspecify.annotations.NonNull;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
-import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
@@ -11,7 +10,6 @@ import java.util.*;
 import java.time.LocalDate;
 
 @RestController
-@Profile({"local","staging"})
 @RequestMapping("/api/v1/discovery")
 public class DiscoveryController {
     private final DiscoveryStore store;
@@ -20,12 +18,14 @@ public class DiscoveryController {
     private final EventImportService importer;
     private final DiscoveryResetService resets;
     private final EventChangeService changes;
-    public DiscoveryController(DiscoveryStore store,DiscoveryScheduler scheduler,VenueSourceDiscoveryService discovery,EventImportService importer,DiscoveryResetService resets,EventChangeService changes) {
-        this.store=store; this.scheduler=scheduler; this.discovery=discovery; this.importer=importer; this.resets=resets; this.changes=changes;
+    private final DiscoveryEvaluationService evaluator;
+    private final DiscoveryOnboardingService onboarding;
+    public DiscoveryController(DiscoveryStore store,DiscoveryScheduler scheduler,VenueSourceDiscoveryService discovery,EventImportService importer,DiscoveryResetService resets,EventChangeService changes,DiscoveryEvaluationService evaluator,DiscoveryOnboardingService onboarding) {
+        this.store=store; this.scheduler=scheduler; this.discovery=discovery; this.importer=importer; this.resets=resets; this.changes=changes;this.evaluator=evaluator;this.onboarding=onboarding;
     }
     @GetMapping("/changes") public List<Map<String,Object>> changes() { return changes.list(); }
     @GetMapping("/changes/{id}/replacements") public List<Map<String,Object>> replacements(@PathVariable String id) { return changes.replacements(id); }
-    @GetMapping("/candidates/{id}") public Map<String,Object> candidate(@PathVariable String id) { return DiscoveryStore.forApi(store.candidate(id)); }
+    @GetMapping("/candidates/{id}") public Map<String,Object> candidate(@PathVariable String id) { return evaluator.forApi(store.candidate(id),evaluator.rules()); }
     @GetMapping("/changes/{id}/history") public List<Map<String,Object>> changeHistory(@PathVariable String id) { return changes.history(id); }
     @GetMapping("/changes/{id}/dm") public Map<String,String> changeDm(@PathVariable String id) { return Map.of("text",changes.dm(id)); }
     @PutMapping("/changes/{id}") public void decide(@PathVariable String id,@Valid @RequestBody EventChangeService.Decision decision) { changes.decide(id,decision); }
@@ -34,7 +34,8 @@ public class DiscoveryController {
         return Map.of("accepted",true);
     }
     @GetMapping public Map<String,Object> overview(@RequestParam(defaultValue="ALL") String filter) {
-        return Map.of("candidates",store.candidates(filter),"sources",store.sources(),
+        var rules=evaluator.rules();
+        return Map.of("candidates",store.candidates(filter).stream().map(row -> evaluator.forApi(row,rules)).toList(),"sources",store.sources(),
                 "counts",store.jdbc().queryForList("SELECT status,count(*) AS count FROM discovery_candidates GROUP BY status"),
                 "automaticallyImported",store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates WHERE status='IMPORTED' AND reason='Automatisch übernommen'",Long.class),
                 "metrics",store.jdbc().queryForMap("""
@@ -70,6 +71,13 @@ public class DiscoveryController {
         var rows=store.jdbc().queryForList("SELECT * FROM discovery_operations WHERE id=?",id);
         if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Vorgang fehlt");
         return DiscoveryStore.forApi(rows.getFirst());
+    }
+    @PostMapping("/onboard") public DiscoveryOnboardingService.Report onboard(@Valid @RequestBody Probe request) throws java.io.IOException {
+        return onboarding.preview(request.url());
+    }
+    public record SourcePreview(@NotBlank @Size(max=100) String previewToken) { }
+    @PostMapping("/onboard/{venueId}/sources") public void saveSources(@PathVariable String venueId,@Valid @RequestBody SourcePreview request) {
+        onboarding.saveSources(venueId,request.previewToken());
     }
     public record Probe(@NotBlank @Size(max=2048) String url) { }
     private final java.util.concurrent.Semaphore probeLock=new java.util.concurrent.Semaphore(1);

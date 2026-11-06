@@ -20,6 +20,26 @@ public class DiscoveryEvaluationService {
         this.store=store;this.parties=parties;this.genres=genres;this.matcher=matcher;
     }
     public Rules rules() { return new Rules(parties.findAll(),store.aliases(),genres.terms()); }
+    public record Assessment(PartySeriesRecognition.Recognition recognition,EventVerification.Result verification,
+                             String lifecycle,boolean automaticImportEligible,List<@NonNull String> importBlockers) { }
+    /** Additive API diagnostics; persisted editorial decisions remain authoritative and unchanged. */
+    public Map<String,Object> forApi(Map<String,Object> row,Rules rules) {
+        var event=event(row);
+        var recognition=PartySeriesRecognition.recognize(event.title(),rules.parties(),rules.aliases());
+        var verification=EventVerification.assess(event,(String)row.get("venue_name"));
+        String lifecycle=EventLifecycle.signal(event);
+        List<@NonNull String> blockers=new ArrayList<>();
+        if (!List.of("ACTIVE","LINEUP_CHANGE").contains(lifecycle))
+            blockers.add("Absage oder Verschiebung zuerst im bestehenden Änderungs- und Absageworkflow klären");
+        if (Boolean.TRUE.equals(row.get("has_blocking_change"))) blockers.add("Offene Veranstaltungsänderung zuerst klären");
+        if (List.of("REJECTED","DUPLICATE","IGNORED").contains(row.get("status"))) blockers.add("Archivierten Vorschlag zuerst prüfen");
+        boolean eligible=blockers.isEmpty() && row.get("calendar_entry_id")==null
+            && "AUTOMATIC".equals(row.get("decision_origin")) && "READY".equals(row.get("status"))
+            && evaluate(event,(String)row.get("venue_id"),(String)row.get("venue_name"),Boolean.TRUE.equals(row.get("approved")),rules).status().equals("READY");
+        var result=DiscoveryStore.forApi(row);
+        result.put("assessment",new Assessment(recognition,verification,lifecycle,eligible,List.copyOf(blockers)));
+        return result;
+    }
     public String raw(EventExtractor.Event event) { return json.writeValueAsString(EventPrivacy.safe(event)); }
     public EventExtractor.Event event(Map<String,Object> row) {
         if (row.get("raw_event") instanceof String raw && !raw.isBlank())
@@ -41,7 +61,9 @@ public class DiscoveryEvaluationService {
             return new EventMatcher.Match(duplicate ? "DUPLICATE" : "NEEDS_REVIEW",result.partyId(),
                 duplicate ? "Bereits im Kalender vorhanden" : "Konflikt mit bestehendem Termin oder Location-Sperre",result.classification());
         }
-        if (!store.jdbc().queryForList("SELECT id FROM discovery_candidates WHERE venue_id=? AND title=? AND calendar_entry_id IS NOT NULL AND event_date<>?",venueId,event.title(),date).isEmpty())
+        var earlier=store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE venue_id=? AND title=? AND calendar_entry_id IS NOT NULL AND event_date<>?",venueId,event.title(),date);
+        if (earlier.stream().anyMatch(row -> event.identity().isBlank() || event(row).identity().isBlank()
+                || event.identity().equals(event(row).identity())))
             return new EventMatcher.Match("NEEDS_REVIEW",result.partyId(),"Abweichendes Datum zu früherem Fund; Wiederholung oder Verschiebung prüfen",result.classification());
         return result;
     }

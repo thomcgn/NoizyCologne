@@ -552,3 +552,63 @@ test('editorial monitoring warnings preserve multiline captions and deliberately
   assert.equal(saved[0].caption, persisted.caption + ' redaktionell ergänzt');
   assert.deepEqual(saved[0].mentionActorIds, []);
 });
+
+function websiteFixture(overrides = {}) {
+  return { previewToken:'fixture-preview', websiteUrl:'https://new-club.example/', suggestedName:'New Club', checkedAt:'2026-11-06T09:00:00Z',
+    eventCount:12,partyCount:8,knownSeriesCount:2,incomplete:true,problems:[],
+    sources:[{url:'https://new-club.example/events',fetchMethod:'BROWSER',diagnostics:[],extraction:{status:'EVENTS_FOUND',events:[{}],complete:false}}],...overrides };
+}
+async function mountLocationOnboarding(fetcher, save, update = save) {
+  catalogue={parties:[],venues:[],actors:[],createVenue:save,updateVenue:update};
+  globalThis.fetch=fetcher;
+  const Page=loadSource(new URL('../src/app/dashboard/portfolio/page.tsx',import.meta.url)).default;
+  await act(async()=>{mount(h(Page,{initialCategory:'locations'}));});
+  click(button('Neu anlegen'));
+  const dialog=document.querySelector('[role="dialog"]');dialog.querySelector('details').open=true;
+  const website=dialog.querySelector('input[type="url"]');type(website,'https://new-club.example/');return website;
+}
+test('location onboarding needs only a website, shows browser diagnostics and saves previewed sources without importing',async()=>{
+  const requests=[],saved=[];
+  const website=await mountLocationOnboarding(async(url,options={})=>{
+    requests.push({url,...options});return new Response(JSON.stringify(url==='/api/v1/discovery/onboard'?websiteFixture():[]));
+  },async data=>{saved.push(data);return {...data,id:'new-venue'};});
+  await act(async()=>{button('Website automatisch prüfen').click();await new Promise(resolve=>setTimeout(resolve,20));});
+  const dialog=document.querySelector('[role="dialog"]');
+  assert.equal(dialog.querySelector('input').value,'New Club');assert.equal(document.activeElement,website);
+  assert.match(dialog.textContent,/12 Veranstaltungen gefunden, 8 mögliche Partys, 2 bekannte Partyreihen/);
+  assert.match(dialog.textContent,/Browser: Veranstaltungen gefunden/);assert.match(dialog.textContent,/Vollständigkeit.*nicht bestätigt/);
+  await act(async()=>{button('Übernehmen').click();});
+  assert.equal(saved.length,1);assert.equal(saved[0].websiteUrl,'https://new-club.example/');
+  const sourceSave=requests.find(request=>request.url==='/api/v1/discovery/onboard/new-venue/sources');assert.ok(sourceSave);
+  assert.deepEqual(JSON.parse(sourceSave.body),{previewToken:'fixture-preview'});
+  assert.ok(!requests.some(request=>request.url.includes('/import')||request.url.includes('/calendar')));
+  assert.equal(document.querySelector('[role="dialog"]'),null);
+});
+test('late website previews cannot overwrite a changed website, name or focus',async()=>{
+  let finish;
+  const website=await mountLocationOnboarding(async url=>url==='/api/v1/discovery/onboard'?new Promise(resolve=>{finish=resolve;}):new Response('[]'),async data=>({...data,id:'new-venue'}));
+  click(button('Website automatisch prüfen'));
+  act(()=>{Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype,'value').set.call(website,'https://changed.example/');website.dispatchEvent(new Event('input',{bubbles:true}));});
+  await act(async()=>{finish(new Response(JSON.stringify(websiteFixture({suggestedName:'Stale Club'}))));await new Promise(resolve=>setTimeout(resolve,20));});
+  assert.equal(website.value,'https://changed.example/');assert.equal(document.activeElement,website);
+  assert.equal(document.querySelector('[role="dialog"] input').value,'');assert.doesNotMatch(document.querySelector('[role="dialog"]').textContent,/Stale Club|12 Veranstaltungen/);
+});
+test('source registration failure keeps the saved location for retry instead of creating a duplicate',async()=>{
+  let created=0,updated=0,registrations=0;
+  await mountLocationOnboarding(async url=>{
+    if(url==='/api/v1/discovery/onboard')return new Response(JSON.stringify(websiteFixture()));
+    if(url.endsWith('/sources'))return new Response(null,{status:++registrations===1?500:204});
+    return new Response('[]');
+  },async data=>{created++;return {...data,id:'retained-venue'};},async data=>{updated++;assert.equal(data.id,'retained-venue');return data;});
+  await act(async()=>{button('Website automatisch prüfen').click();await new Promise(resolve=>setTimeout(resolve,20));});
+  await act(async()=>{button('Übernehmen').click();});
+  assert.match(document.querySelector('[role="alert"]').textContent,/Location ist gespeichert/);
+  await act(async()=>{button('Übernehmen').click();});
+  assert.equal(created,1);assert.equal(updated,1);assert.equal(document.querySelector('[role="dialog"]'),null);
+});
+test('unreadable website reports an unknown count rather than a confirmed zero events',async()=>{
+  await mountLocationOnboarding(async url=>new Response(JSON.stringify(url==='/api/v1/discovery/onboard'?websiteFixture({eventCount:0,partyCount:0,knownSeriesCount:0,problems:['BROWSER_TIMEOUT'],sources:[]}):[])),async data=>({...data,id:'new-venue'}));
+  await act(async()=>{button('Website automatisch prüfen').click();await new Promise(resolve=>setTimeout(resolve,20));});
+  const text=document.querySelector('[role="dialog"]').textContent;
+  assert.match(text,/Keine verlässliche Veranstaltungszahl ermittelbar/);assert.match(text,/Browser-Zeitlimit/);assert.doesNotMatch(text,/0 Veranstaltungen gefunden/);
+});

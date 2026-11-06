@@ -316,3 +316,25 @@ auch die Prüfdefinition entfernen. Das Gate ersetzt keine Zugriffskontrolle.
 Referenzen: [GitHub Branch Protection](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches),
 [REST Branch Protection](https://docs.github.com/en/rest/branches/branch-protection),
 [Workflow Runs](https://docs.github.com/en/rest/actions/workflow-runs).
+
+## Browser-Worker und JavaScript-Fixtures
+
+Workeränderungen unter `browser-worker/`, das Browser-Compose-Overlay und
+`scripts/check-browser.sh` wählen zusätzlich den Browserbereich. QUICK prüft
+Node-Syntax und Policy-/Auth-/DNS-/Robots-/Single-job-Tests ohne Docker. Reine
+Workeränderungen erzwingen keine PostgreSQL-Datenbank. FULL führt außerdem
+Worker-ESLint mit null Warnungen und echte Chromium-Fixtures in einem eigenen
+Container ohne Netzwerk aus. Die zwei unterschiedlichen JS-Layouts einschließlich
+Lazy Loading, Pagination, iframe und Fehler/Timeout benötigen keine Live-Websites.
+Node >=24, installierte Frontend-ESLint-Abhängigkeiten und ein Dockerhost mit
+funktionierender Chromium-Usernamespace-/Seccomp-Sandbox sind erforderlich.
+Fehlt die Sandbox, scheitert FULL; sie wird nicht für Tests deaktiviert.
+
+`scripts/check-browser.sh --unit|--full` erlaubt gezielte Wiederholungen. Der
+FULL-Testcontainer nutzt eigene Namen, Ressourcenlimits und aktive Sandbox,
+`cap-drop ALL`, `no-new-privileges` und das mitgelieferte Seccomp-Profil. Cleanup-
+Fehler blockieren. Das Image enthält die exakt zum Playwright-Paket passende
+Browserversion. Die Registry muss beim ersten Lauf erreichbar sein; kalte Images
+brauchen zusätzlich Zeit und Plattenplatz. Das eigenständige Live-Probeskript ist
+kein Bestandteil des CI-Gates und verändert keine Datenbank. Architektur,
+Cloud-Voraussetzungen und Grenzen: [BROWSER-CRAWLER.md](BROWSER-CRAWLER.md).
