@@ -41,6 +41,7 @@ public class EventImportService {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,"Automatische Übernahme nach erneuter Prüfung gesperrt: "+current.reason());
         }
         String venue = (String)c.get("venue_id");
+        if (venue==null) throw new ResponseStatusException(HttpStatus.CONFLICT,"Veranstaltungsort zuerst ausdrücklich zuordnen");
         var conflict=evaluator.calendarConflict(evaluator.event(c),venue,party,date,id);
         if (conflict!=null) throw new ResponseStatusException(HttpStatus.CONFLICT,conflict.reason());
         String time = c.get("start_time") == null ? null : c.get("start_time").toString().substring(0,5);
@@ -56,19 +57,37 @@ public class EventImportService {
     }
     @Transactional
     public String confirm(String id,String party,LocalDate date,String inquiry,String dm,String seriesAlias) {
+        return confirm(id,party,date,inquiry,dm,seriesAlias,null);
+    }
+    @Transactional
+    public String confirm(String id,String party,LocalDate date,String inquiry,String dm,String seriesAlias,String venueId) {
         store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
         var candidate=store.candidate(id);
         if ("IMPORTED".equals(candidate.get("status")) && candidate.get("calendar_entry_id") instanceof String entryId) {
-            if (!party.equals(candidate.get("party_id")) || !date.equals(((java.sql.Date)candidate.get("event_date")).toLocalDate()))
+            if ((venueId!=null && !venueId.equals(candidate.get("venue_id"))) || !party.equals(candidate.get("party_id")) || !date.equals(((java.sql.Date)candidate.get("event_date")).toLocalDate()))
                 throw new ResponseStatusException(HttpStatus.CONFLICT,"Bereits übernommen; Änderungen direkt im Kalender prüfen");
             return entryId;
         }
         if (List.of("REJECTED","DUPLICATE","IGNORED").contains(candidate.get("status")))
             throw new ResponseStatusException(HttpStatus.CONFLICT,"Archivierten Vorschlag zuerst prüfen");
+        assignVenue(id,candidate,venueId,true);
         review(id,party,date,"NEEDS_REVIEW",inquiry,dm);
         importCandidate(id,party,date,true);
         rememberAlias(candidate,party,seriesAlias);
         return Objects.requireNonNull((String)store.candidate(id).get("calendar_entry_id"),"Kalenderimport nicht abgeschlossen");
+    }
+    private void assignVenue(String id,Map<String,Object> candidate,String venueId,boolean required) {
+        if (!required && venueId==null) return;
+        if (candidate.get("venue_id")==null) {
+            if (venueId==null || !Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM venues WHERE id=?)",Boolean.class,venueId)))
+                throw new ResponseStatusException(HttpStatus.CONFLICT,"Veranstaltungsort zuerst ausdrücklich zuordnen");
+            if (Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM discovery_candidates WHERE venue_id=? AND identity_key=? AND id<>?)",Boolean.class,venueId,candidate.get("identity_key"),id)))
+                throw new ResponseStatusException(HttpStatus.CONFLICT,"Diese Veranstaltung ist der Location bereits zugeordnet; vorhandenen Vorschlag prüfen");
+            store.jdbc().update("UPDATE discovery_candidates SET venue_id=? WHERE id=?",venueId,id);
+            store.jdbc().update("INSERT INTO discovery_candidate_identities(venue_id,identity_key,candidate_id) VALUES (?,?,?) ON CONFLICT DO NOTHING",venueId,candidate.get("identity_key"),id);
+        } else if (venueId!=null && !venueId.equals(candidate.get("venue_id"))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Der Veranstaltungsort wurde inzwischen zugeordnet; Vorschlag erneut laden");
+        }
     }
     void rememberAlias(Map<String,Object> candidate,String party,String seriesAlias) {
         if (seriesAlias==null || seriesAlias.isBlank()) return;
@@ -90,15 +109,30 @@ public class EventImportService {
     }
     @Transactional
     public void review(String id, String party, LocalDate date, String status, String inquiry, String dm) {
+        review(id,party,date,status,inquiry,dm,null);
+    }
+    @Transactional
+    public void review(String id, String party, LocalDate date, String status, String inquiry, String dm,String venueId) {
         store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
         var previous=store.candidate(id);
         if (!List.of("NEEDS_REVIEW", "NEEDS_INQUIRY", "REJECTED", "DUPLICATE").contains(status)) throw new IllegalArgumentException("Ungültiger Prüfstatus");
         if (!List.of("NONE", "PREPARED", "SENT", "ANSWERED").contains(inquiry)) throw new IllegalArgumentException("Ungültiger Rückfragestatus");
         if (party != null && !Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM party_series WHERE id=?)", Boolean.class, party))) throw new IllegalArgumentException("Unbekannte Partyreihe");
+        assignVenue(id,previous,venueId,false);
         String reason=status.equals("REJECTED") ? "Manuell abgelehnt" : status.equals("DUPLICATE") ? "Manuell als Dublette markiert" : "Manuell geprüft; "+Objects.toString(previous.get("automatic_reason"),"");
         store.jdbc().update("UPDATE discovery_candidates SET party_id=?,event_date=?,status=?,inquiry_status=?,dm_text=?,reason=?,decision_origin='MANUAL',previous_status=?,evaluated_at=now(),updated_at=now() WHERE id=?",
                 party,date,status,inquiry,dm,reason,previous.get("status"),id);
         store.audit(id,(String)previous.get("status"),null);
+    }
+    @Transactional
+    public void reject(String id) {
+        store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
+        var candidate=store.candidate(id);
+        if (candidate.get("calendar_entry_id")!=null || "IMPORTED".equals(candidate.get("status")))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Bereits übernommene Veranstaltung im Kalender oder Absageworkflow prüfen");
+        if ("REJECTED".equals(candidate.get("status")) && "MANUAL".equals(candidate.get("decision_origin"))) return;
+        store.jdbc().update("UPDATE discovery_candidates SET previous_status=status,status='REJECTED',decision_origin='MANUAL',reason='Vom Team sofort abgelehnt: nicht passend zum Portfolio',updated_at=now(),evaluated_at=now() WHERE id=?",id);
+        store.audit(id,(String)candidate.get("status"),null);
     }
     public String dm(String id) {
         var c = store.candidate(id);

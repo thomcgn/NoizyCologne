@@ -33,7 +33,7 @@ public class DiscoveryEvaluationService {
     public Map<String,Object> forApi(Map<String,Object> row,Rules rules) {
         var event=event(row);
         var recognition=PartySeriesRecognition.recognize(event.title(),rules.parties(),rules.aliases());
-        var verification=EventVerification.assess(event,(String)row.get("venue_name"));
+        var verification=EventVerification.assess(event,row.get("venue_id")==null ? "" : (String)row.get("venue_name"));
         String lifecycle=EventLifecycle.signal(event);
         List<@NonNull String> blockers=new ArrayList<>();
         if (!List.of("ACTIVE","LINEUP_CHANGE").contains(lifecycle))
@@ -47,6 +47,7 @@ public class DiscoveryEvaluationService {
         Set<String> standards=new LinkedHashSet<>();
         for (var detected:recognition.parties()) for (var party:rules.parties()) if (party.getId().equals(detected.id())) standards.addAll(party.getStandardGenres());
         if (row.get("party_id") instanceof String selected) for (var party:rules.parties()) if (party.getId().equals(selected)) standards.addAll(party.getStandardGenres());
+        result.put("reported_location",event.location());
         result.put("genreCoverage",GenreCoverage.assess(event,rules.coverageGenres(),standards));
         result.put("assessment",new Assessment(recognition,verification,lifecycle,eligible,List.copyOf(blockers)));
         return result;
@@ -63,7 +64,8 @@ public class DiscoveryEvaluationService {
             "UNCONFIRMED Rohdaten unvollständig; erneuter Abruf erforderlich","");
     }
     public EventMatcher.Match evaluate(EventExtractor.Event event,String venueId,String venueName,boolean approved,Rules rules) {
-        var result=matcher.match(event,venueName,rules.parties(),rules.aliases(),rules.genres(),approved);
+        var result=matcher.match(event,venueId==null ? "" : venueName,rules.parties(),rules.aliases(),rules.genres(),venueId!=null && approved);
+        if (venueId==null && !result.status().equals("IGNORED")) return new EventMatcher.Match("NEEDS_REVIEW",result.partyId(),"Veranstaltungsort aus der Sonderquelle redaktionell zuordnen; "+result.reason(),result.classification());
         if (!result.status().equals("READY")) return result;
         var date=EventNormalizer.date(event.starts().getFirst());
         var conflict=calendarConflict(event,venueId,result.partyId(),date,null);

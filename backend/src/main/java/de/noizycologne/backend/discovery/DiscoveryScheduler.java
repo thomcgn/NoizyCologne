@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 public class DiscoveryScheduler {
     private final DiscoveryStore store;
     private final EventChangeMonitor monitor;
+    private final SpecialSourceService specialSources;
     private final VenueRepository venues;
     private final PartySeriesRepository parties;
     private final DiscoveryGenreFilter genres;
@@ -31,9 +32,9 @@ public class DiscoveryScheduler {
     @Value("${noizy.discovery.monitor.enabled:true}") private boolean monitorEnabled;
     public DiscoveryScheduler(DiscoveryStore store, VenueRepository venues, PartySeriesRepository parties,
             DiscoveryGenreFilter genres, VenueSourceDiscoveryService discovery, EventCandidateProcessor processor,
-            DiscoveryWorkLock workLock, DiscoveryResetService resets,EventChangeMonitor monitor) {
+            DiscoveryWorkLock workLock, DiscoveryResetService resets,EventChangeMonitor monitor,SpecialSourceService specialSources) {
         this.store=store; this.venues=venues; this.parties=parties; this.genres=genres;
-        this.discovery=discovery; this.processor=processor; this.workLock=workLock; this.resets=resets;this.monitor=monitor;
+        this.discovery=discovery; this.processor=processor; this.workLock=workLock; this.resets=resets;this.monitor=monitor;this.specialSources=specialSources;
     }
     @jakarta.annotation.PreDestroy void close() { worker.shutdownNow(); }
     @Scheduled(cron="${noizy.discovery.cron:0 0 9 * * TUE}", zone="${noizy.discovery.zone:Europe/Berlin}")
@@ -104,9 +105,10 @@ public class DiscoveryScheduler {
             try {
                 var initial=request==null ? new DiscoveryResetService.Summary(0,0,0,0,0,0) : resets.apply(request);
                 store.jdbc().update("UPDATE discovery_operations SET summary=? WHERE id=?",resets.serialize(initial),id);
-                int checked=0,failed=0;
+                int checked=0,failed=0,specialChecked=0;
                 if (scan) {
                     store.jdbc().update("INSERT INTO discovery_runs(id,status) VALUES (?,'RUNNING')",id);
+                    var special=specialSources.scan(id);specialChecked=special.checked();failed+=special.failed();
                     for (var venue:venues.findAll()) {
                         if (!venue.isDiscoveryEnabled()) continue;
                         if (changesOnly && !Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM discovery_candidates c LEFT JOIN calendar_entries e ON e.id=c.calendar_entry_id WHERE c.venue_id=? AND COALESCE(e.event_date,c.event_date) BETWEEN (now() AT TIME ZONE 'Europe/Berlin')::date AND (now() AT TIME ZONE 'Europe/Berlin')::date+21 AND (c.calendar_entry_id IS NOT NULL OR c.status NOT IN ('IGNORED','REJECTED','DUPLICATE')))",Boolean.class,venue.getId()))) continue;
@@ -128,7 +130,7 @@ public class DiscoveryScheduler {
                     """,id);
                 summary.put("stillIgnored",store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates WHERE last_evaluation_id=? AND status='IGNORED'",Long.class,id));
                 summary.put("preservedManual",initial.preservedManual());summary.put("failed",failed);
-                String report="Locations geprüft: "+checked+"; fehlgeschlagen: "+failed;
+                String report="Locations geprüft: "+checked+"; Sonderquellen geprüft: "+specialChecked+"; fehlgeschlagen: "+failed;
                 store.jdbc().update("UPDATE discovery_operations SET status=?,finished_at=now(),report=?,summary=? WHERE id=?",
                     failed==0 ? "COMPLETED" : "PARTIAL",report,resets.serialize(summary),id);
                 if (scan) store.jdbc().update("UPDATE discovery_runs SET status=?,finished_at=now(),report=? WHERE id=?",failed==0 ? "COMPLETED" : "PARTIAL",report,id);
