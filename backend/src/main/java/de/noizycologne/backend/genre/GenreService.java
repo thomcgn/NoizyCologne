@@ -1,5 +1,6 @@
 package de.noizycologne.backend.genre;
 
+import org.jspecify.annotations.NonNull;
 import de.noizycologne.backend.media.GenreLexicon;
 import jakarta.transaction.Transactional;
 import org.springframework.http.HttpStatus;
@@ -95,7 +96,7 @@ public class GenreService {
                 .map(alias -> GenreAliasResponse.from(alias)).toList());
     }
 
-    private List<GenreResponse> responses(List<Genre> genres) {
+    private List<GenreResponse> responses(List<@NonNull Genre> genres) {
         Map<String, List<GenreAliasResponse>> aliases = new LinkedHashMap<>();
         aliasRepository.findAllByGenreIdIn(genres.stream().map(genre -> genre.getId()).toList()).forEach(alias ->
                 aliases.computeIfAbsent(alias.getGenreId(), ignored -> new java.util.ArrayList<>()).add(GenreAliasResponse.from(alias)));

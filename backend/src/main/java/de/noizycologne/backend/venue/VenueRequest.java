@@ -11,10 +11,16 @@ public record VenueRequest(
 
         @Size(max = 30)
         @Pattern(regexp = "[A-Za-z0-9._]*", message = "instagram darf nur Buchstaben, Zahlen, Punkte und Unterstriche enthalten")
-        String instagram
+        String instagram,
+        @Size(max = 2048) String websiteUrl,
+        @Size(max = 2048) String eventsUrl,
+        boolean discoveryEnabled
 ) {
 
+    public VenueRequest(String name, String instagram) { this(name, instagram, "", "", false); }
     public VenueRequest {
+        websiteUrl = websiteUrl == null ? "" : websiteUrl.trim();
+        eventsUrl = eventsUrl == null ? "" : eventsUrl.trim();
         instagram = instagram == null ? "" : instagram;
     }
 }

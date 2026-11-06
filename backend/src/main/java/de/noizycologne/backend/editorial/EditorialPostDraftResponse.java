@@ -10,9 +10,12 @@ public record EditorialPostDraftResponse(
         List<String> mentionActorIds,
         List<String> genres,
         String status,
-        String musicTrackId
+        String musicTrackId,
+        boolean approvalNeedsReview,
+        List<String> publicationBlockers
 ) {
-    public static EditorialPostDraftResponse from(EditorialPostDraft draft) {
+    public static EditorialPostDraftResponse from(EditorialPostDraft draft) { return from(draft,List.of()); }
+    public static EditorialPostDraftResponse from(EditorialPostDraft draft,List<String> blockers) {
         return new EditorialPostDraftResponse(
                 draft.getId(),
                 draft.getCalendarEntryId(),
@@ -21,7 +24,9 @@ public record EditorialPostDraftResponse(
                 draft.getMentionActorIds().stream().sorted().toList(),
                 draft.getGenres().stream().sorted().toList(),
                 draft.getStatus(),
-                draft.getMusicTrackId()
+                draft.getMusicTrackId(),
+                draft.isApprovalNeedsReview(),
+                blockers
         );
     }
 }

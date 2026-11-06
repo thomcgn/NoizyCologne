@@ -4,11 +4,12 @@ import de.noizycologne.backend.actor.Actor;
 import de.noizycologne.backend.actor.ActorRepository;
 import de.noizycologne.backend.calendar.CalendarEntry;
 import de.noizycologne.backend.calendar.CalendarEntryRepository;
+import de.noizycologne.backend.cancellation.PublishEligibilityService;
+import de.noizycologne.backend.discovery.DiscoveryStore;
 import de.noizycologne.backend.media.MediaAssetRepository;
 import de.noizycologne.backend.music.MusicTrack;
 import de.noizycologne.backend.music.MusicTrackRepository;
 import de.noizycologne.backend.party.PartySeriesRepository;
-import de.noizycologne.backend.party.PartySeries;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +21,12 @@ import java.util.Set;
 
 @Service
 public class EditorialPostDraftService {
+
+    private final PublishEligibilityService eligibility;
+    private final DiscoveryStore discoveryStore;
+
+    private EditorialPostDraftResponse response(EditorialPostDraft draft) { return EditorialPostDraftResponse.from(draft,eligibility.blockers(draft.getCalendarEntryId())); }
+    private void lockEditorial() { discoveryStore.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)"); }
 
     private static final Set<String> STATUSES = Set.of("DRAFT", "READY_FOR_REVIEW", "APPROVED");
 
@@ -35,22 +42,27 @@ public class EditorialPostDraftService {
                                      ActorRepository actorRepository,
                                      PartySeriesRepository partySeriesRepository,
                                      MediaAssetRepository mediaAssetRepository,
-                                     MusicTrackRepository musicTrackRepository) {
+                                     MusicTrackRepository musicTrackRepository,
+                                     PublishEligibilityService eligibility,
+                                     DiscoveryStore discoveryStore) {
         this.draftRepository = draftRepository;
         this.calendarEntryRepository = calendarEntryRepository;
         this.actorRepository = actorRepository;
         this.partySeriesRepository = partySeriesRepository;
         this.mediaAssetRepository = mediaAssetRepository;
         this.musicTrackRepository = musicTrackRepository;
+        this.eligibility = eligibility;
+        this.discoveryStore = discoveryStore;
     }
 
     @Transactional(readOnly = true)
     public List<EditorialPostDraftResponse> getDrafts() {
-        return draftRepository.findAll().stream().map(draft -> EditorialPostDraftResponse.from(draft)).toList();
+        return draftRepository.findAll().stream().map(draft -> response(draft)).toList();
     }
 
     @Transactional
     public EditorialPostDraftResponse create(String calendarEntryId, EditorialPostDraftRequest request) {
+        lockEditorial();
         CalendarEntry entry = findEvent(calendarEntryId);
         if (draftRepository.findByCalendarEntryId(calendarEntryId).isPresent()) {
             throw conflict("Für diese Veranstaltung existiert bereits ein Redaktionsentwurf");
@@ -62,11 +74,13 @@ public class EditorialPostDraftService {
         draft.update(request.caption().trim(), request.hashtags().trim(), request.status(),
                 request.mentionActorIds(), genres, musicTrack == null ? null : musicTrack.getId());
         if (musicTrack != null) musicTrack.markUsed(java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC));
-        return EditorialPostDraftResponse.from(draftRepository.save(draft));
+        if ("APPROVED".equals(request.status())) draft.confirmReview();
+        return response(draftRepository.save(draft));
     }
 
     @Transactional
     public EditorialPostDraftResponse update(String id, EditorialPostDraftRequest request) {
+        lockEditorial();
         EditorialPostDraft draft = draftRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Redaktionsentwurf nicht gefunden"));
         CalendarEntry entry = findEvent(draft.getCalendarEntryId());
@@ -74,7 +88,8 @@ public class EditorialPostDraftService {
         draft.update(request.caption().trim(), request.hashtags().trim(), request.status(), request.mentionActorIds(),
                 normalizedGenres(request, Set.of()), musicTrack == null ? null : musicTrack.getId());
         if (musicTrack != null) musicTrack.markUsed(java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC));
-        return EditorialPostDraftResponse.from(draftRepository.save(draft));
+        if ("APPROVED".equals(request.status())) draft.confirmReview();
+        return response(draftRepository.save(draft));
     }
 
     private CalendarEntry findEvent(String id) {
@@ -102,6 +117,7 @@ public class EditorialPostDraftService {
             throw badRequest("Jede Mention muss auf einen Akteur mit DJ-Rolle verweisen");
         }
         if ("APPROVED".equals(request.status())) {
+            eligibility.requireOriginalApproval(entry.getId());
             if (request.caption().isBlank()) {
                 throw badRequest("Ein freizugebender Entwurf benötigt eine Caption");
             }

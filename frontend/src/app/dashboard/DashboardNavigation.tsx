@@ -8,6 +8,7 @@ import { useState } from "react";
 const navigationItems = [
   { href: "/dashboard", label: "Übersicht" },
   { href: "/dashboard/kalender", label: "Kalender" },
+  { href: "/dashboard/vorschlaege", label: "Vorgeschlagene" },
   { href: "/dashboard/partys", label: "Partys" },
   { href: "/dashboard/djs", label: "DJs" },
   { href: "/dashboard/locations", label: "Locations" },

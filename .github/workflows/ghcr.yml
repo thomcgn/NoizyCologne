@@ -20,15 +20,8 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '25'
+          java-version: '21'
           cache: maven
-
-      - name: Start PostgreSQL
-        run: docker compose -f backend/compose.yaml up -d
-
-      - name: Run backend tests
-        working-directory: backend
-        run: ./mvnw -B test
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -41,19 +34,8 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: TypeScript check
-        working-directory: frontend
-        run: |
-             npx next typegen
-             npx tsc --noEmit
-      
-      - name: Lint frontend
-        working-directory: frontend
-        run: npm run lint
-
-      - name: Build frontend
-        working-directory: frontend
-        run: npm run build
+      - name: Full quality gate
+        run: scripts/check-quality.sh --full
 
       - name: Validate Caddy configuration
         run: |

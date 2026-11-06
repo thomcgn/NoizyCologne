@@ -1,5 +1,8 @@
 package de.noizycologne.backend.music;
 
+import static java.util.Objects.requireNonNull;
+import org.jspecify.annotations.NonNull;
+import de.noizycologne.backend.json.JsonValues;
 import de.noizycologne.backend.calendar.CalendarEntry;
 import de.noizycologne.backend.calendar.CalendarEntryRepository;
 import de.noizycologne.backend.editorial.EditorialPostDraftRepository;
@@ -45,11 +48,11 @@ class MusicTrackControllerIntegrationTests {
     @Autowired private PartySeriesRepository partyRepository;
     @Autowired private VenueRepository venueRepository;
 
-    private final List<String> trackIds = new ArrayList<>();
-    private final List<String> draftIds = new ArrayList<>();
-    private final List<String> entryIds = new ArrayList<>();
-    private final List<String> partyIds = new ArrayList<>();
-    private final List<String> venueIds = new ArrayList<>();
+    private final @NonNull List<String> trackIds = new ArrayList<>();
+    private final @NonNull List<String> draftIds = new ArrayList<>();
+    private final @NonNull List<String> entryIds = new ArrayList<>();
+    private final @NonNull List<String> partyIds = new ArrayList<>();
+    private final @NonNull List<String> venueIds = new ArrayList<>();
 
     @AfterEach
     void cleanUp() {
@@ -82,18 +85,18 @@ class MusicTrackControllerIntegrationTests {
         MusicTrackRequest request = new MusicTrackRequest(
                 "Verified Artist", "Verified Song", Set.of("Punk"), Set.of(party.getId()),
                 "dQw4w9WgXcQ", "", 12, 12);
-        MusicTrackResponse created = objectMapper.readValue(
-                mockMvc.perform(post("/api/v1/music/tracks")
+        MusicTrackResponse created = JsonValues.readRequired(objectMapper,
+                mockMvc.perform(requireNonNull(post("/api/v1/music/tracks")
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(objectMapper.writeValueAsString(request)))
+                                .content(JsonValues.write(objectMapper,request))))
                         .andExpect(status().isCreated())
                         .andReturn().getResponse().getContentAsString(),
                 MusicTrackResponse.class);
         trackIds.add(created.id());
         assertThat(created.youtubeVideoId()).isEqualTo("dQw4w9WgXcQ");
 
-        MusicTrackResponse[] suggestions = objectMapper.readValue(
-                mockMvc.perform(get("/api/v1/music/tracks").param("calendarEntryId", entry.getId()))
+        MusicTrackResponse[] suggestions = JsonValues.readRequired(objectMapper,
+                mockMvc.perform(requireNonNull(get("/api/v1/music/tracks").param("calendarEntryId", entry.getId())))
                         .andExpect(status().isOk())
                         .andReturn().getResponse().getContentAsString(),
                 MusicTrackResponse[].class);
@@ -101,11 +104,11 @@ class MusicTrackControllerIntegrationTests {
         assertThat(List.of(suggestions).stream().filter(item -> item.id().equals(created.id())).findFirst().orElseThrow().matchReasons())
                 .contains("Partyreihen-Favorit");
 
-        EditorialPostDraftResponse draft = objectMapper.readValue(
-                mockMvc.perform(post("/api/v1/calendar-entries/{id}/editorial-drafts", entry.getId())
+        EditorialPostDraftResponse draft = JsonValues.readRequired(objectMapper,
+                mockMvc.perform(requireNonNull(post("/api/v1/calendar-entries/{id}/editorial-drafts", entry.getId())
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(objectMapper.writeValueAsString(new EditorialPostDraftRequest(
-                                        "Caption", "#test", "DRAFT", Set.of(), Set.of("Punk"), created.id()))))
+                                .content(JsonValues.write(objectMapper,new EditorialPostDraftRequest(
+                                        "Caption", "#test", "DRAFT", Set.of(), Set.of("Punk"), created.id())))))
                         .andExpect(status().isCreated())
                         .andReturn().getResponse().getContentAsString(),
                 EditorialPostDraftResponse.class);
@@ -113,12 +116,12 @@ class MusicTrackControllerIntegrationTests {
         assertThat(draft.musicTrackId()).isEqualTo(created.id());
         assertThat(trackRepository.findById(created.id()).orElseThrow().getLastUsedAt()).isNotNull();
 
-        MusicTrackResponse updated = objectMapper.readValue(
-                mockMvc.perform(put("/api/v1/music/tracks/{id}", created.id())
+        MusicTrackResponse updated = JsonValues.readRequired(objectMapper,
+                mockMvc.perform(requireNonNull(put("/api/v1/music/tracks/{id}", created.id())
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(objectMapper.writeValueAsString(new MusicTrackRequest(
+                                .content(JsonValues.write(objectMapper,new MusicTrackRequest(
                                         request.artist(), request.title(), request.genres(), request.partySeriesIds(),
-                                        request.youtubeVideoId(), request.spotifyTrackUrl(), request.previewStartSeconds(), 42))))
+                                        request.youtubeVideoId(), request.spotifyTrackUrl(), request.previewStartSeconds(), 42)))))
                         .andExpect(status().isOk())
                         .andReturn().getResponse().getContentAsString(),
                 MusicTrackResponse.class);

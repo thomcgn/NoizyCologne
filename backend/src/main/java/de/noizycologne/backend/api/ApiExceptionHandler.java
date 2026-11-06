@@ -1,5 +1,6 @@
 package de.noizycologne.backend.api;
 
+import org.jspecify.annotations.NonNull;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
@@ -18,7 +19,7 @@ import java.util.stream.Collectors;
 public class ApiExceptionHandler {
 
     @ExceptionHandler(ResponseStatusException.class)
-    ResponseEntity<ApiErrorResponse> handleResponseStatus(ResponseStatusException exception) {
+    ResponseEntity<@NonNull ApiErrorResponse> handleResponseStatus(ResponseStatusException exception) {
         HttpStatus status = HttpStatus.resolve(exception.getStatusCode().value());
         if (status == null) status = HttpStatus.INTERNAL_SERVER_ERROR;
         return error(status, responseStatusCode(status, exception.getReason()),
@@ -27,7 +28,7 @@ public class ApiExceptionHandler {
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    ResponseEntity<ApiErrorResponse> handleValidation(MethodArgumentNotValidException exception) {
+    ResponseEntity<@NonNull ApiErrorResponse> handleValidation(MethodArgumentNotValidException exception) {
         String fields = exception.getBindingResult().getFieldErrors().stream()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                 .collect(Collectors.joining("; "));
@@ -36,34 +37,39 @@ public class ApiExceptionHandler {
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
-    ResponseEntity<ApiErrorResponse> handleConstraintViolation(ConstraintViolationException exception) {
+    ResponseEntity<@NonNull ApiErrorResponse> handleConstraintViolation(ConstraintViolationException exception) {
         return error(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", "Bitte prüfe die Eingaben.", false);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    ResponseEntity<ApiErrorResponse> handleUnreadableBody() {
+    ResponseEntity<@NonNull ApiErrorResponse> handleUnreadableBody() {
         return error(HttpStatus.BAD_REQUEST, "INVALID_JSON", "Die Anfrage enthält ungültige oder unvollständige Daten.", false);
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
-    ResponseEntity<ApiErrorResponse> handleUploadTooLarge() {
+    ResponseEntity<@NonNull ApiErrorResponse> handleUploadTooLarge() {
         return error(HttpStatus.CONTENT_TOO_LARGE, "FILE_TOO_LARGE",
                 "Die Bilddatei ist zu groß. Erlaubt sind höchstens 8 MB.", false);
     }
 
     @ExceptionHandler(DataAccessException.class)
-    ResponseEntity<ApiErrorResponse> handleDatabaseFailure() {
+    ResponseEntity<@NonNull ApiErrorResponse> handleDatabaseFailure() {
         return error(HttpStatus.SERVICE_UNAVAILABLE, "DATABASE_UNAVAILABLE",
                 "Die Datenbank ist momentan nicht erreichbar. Bitte später erneut versuchen.", true);
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    ResponseEntity<@NonNull ApiErrorResponse> handleInvalidArgument(IllegalArgumentException exception) {
+        return error(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", exception.getMessage(), false);
+    }
+
     @ExceptionHandler(Exception.class)
-    ResponseEntity<ApiErrorResponse> handleUnexpectedFailure() {
+    ResponseEntity<@NonNull ApiErrorResponse> handleUnexpectedFailure() {
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR",
                 "Der Server konnte die Anfrage nicht verarbeiten. Bitte versuche es erneut.", true);
     }
 
-    private ResponseEntity<ApiErrorResponse> error(HttpStatus status, String code, String message, boolean retryable) {
+    private ResponseEntity<@NonNull ApiErrorResponse> error(@NonNull HttpStatus status, String code, String message, boolean retryable) {
         return ResponseEntity.status(status).body(new ApiErrorResponse(code, message, status.value(), retryable));
     }
 

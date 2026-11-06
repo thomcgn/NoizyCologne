@@ -14,10 +14,12 @@ public record PartyRecurrenceResponse(
         if (party.getRecurrenceKind() == null) {
             return null;
         }
+        var weekday = party.getRecurrenceWeekday();
+        var occurrence = party.getRecurrenceOccurrence();
         return new PartyRecurrenceResponse(
                 party.getRecurrenceKind(),
-                party.getRecurrenceWeekday() == null ? null : party.getRecurrenceWeekday().intValue(),
-                party.getRecurrenceOccurrence() == null ? null : party.getRecurrenceOccurrence().intValue(),
+                weekday == null ? null : weekday.intValue(),
+                occurrence == null ? null : occurrence.intValue(),
                 party.getRecurrenceDescription()
         );
     }

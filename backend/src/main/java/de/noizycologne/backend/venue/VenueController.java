@@ -40,6 +40,7 @@ public class VenueController {
     @ResponseStatus(HttpStatus.CREATED)
     public VenueResponse createVenue(@Valid @RequestBody VenueRequest request) {
         Venue venue = new Venue(request.name().trim(), request.instagram());
+        venue.configureDiscovery(request.websiteUrl(), request.eventsUrl(), request.discoveryEnabled());
         return VenueResponse.from(venueRepository.save(venue));
     }
 
@@ -48,6 +49,7 @@ public class VenueController {
         Venue venue = venueRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Venue nicht gefunden"));
         venue.update(request.name().trim(), request.instagram());
+        venue.configureDiscovery(request.websiteUrl(), request.eventsUrl(), request.discoveryEnabled());
         return VenueResponse.from(venueRepository.save(venue));
     }
 

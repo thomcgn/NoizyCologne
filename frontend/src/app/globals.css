@@ -81,6 +81,11 @@ body {
 [data-theme="light"] [class~="bg-white/10"] { background-color: rgb(23 23 23 / 0.08); }
 [data-theme="light"] [class~="text-white"] { color: #171717; }
 [data-theme="light"] [class~="text-black"] { color: #ffffff; }
+/* Keep primary actions paired; white logo backgrounds must stay white. */
+[data-theme="light"] :is(button, a)[class~="bg-white"][class~="text-black"] {
+  background-color: #171717;
+  color: #ffffff;
+}
 [data-theme="light"] [class~="text-neutral-200"] { color: #262626; }
 [data-theme="light"] [class~="text-neutral-300"] { color: #404040; }
 [data-theme="light"] [class~="text-neutral-400"] { color: #525252; }

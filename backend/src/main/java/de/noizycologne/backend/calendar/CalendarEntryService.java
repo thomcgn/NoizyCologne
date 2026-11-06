@@ -2,6 +2,7 @@ package de.noizycologne.backend.calendar;
 
 import de.noizycologne.backend.actor.Actor;
 import de.noizycologne.backend.actor.ActorRepository;
+import de.noizycologne.backend.discovery.DiscoveryStore;
 import de.noizycologne.backend.media.MediaAssetRepository;
 import de.noizycologne.backend.media.PartyFlyerResponse;
 import de.noizycologne.backend.party.PartySeriesRepository;
@@ -24,6 +25,9 @@ import java.util.Set;
 @Service
 public class CalendarEntryService {
 
+    private final DiscoveryStore discoveryStore;
+    private void lockCalendar() { discoveryStore.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)"); }
+
     private static final DateTimeFormatter DATE_FORMAT =
             DateTimeFormatter.ofPattern("uuuu-MM-dd").withResolverStyle(ResolverStyle.STRICT);
     private static final DateTimeFormatter TIME_FORMAT =
@@ -39,12 +43,14 @@ public class CalendarEntryService {
                                 VenueRepository venueRepository,
                                 PartySeriesRepository partySeriesRepository,
                                 ActorRepository actorRepository,
-                                MediaAssetRepository mediaAssetRepository) {
+                                MediaAssetRepository mediaAssetRepository,
+                                DiscoveryStore discoveryStore) {
         this.calendarEntryRepository = calendarEntryRepository;
         this.venueRepository = venueRepository;
         this.partySeriesRepository = partySeriesRepository;
         this.actorRepository = actorRepository;
         this.mediaAssetRepository = mediaAssetRepository;
+        this.discoveryStore = discoveryStore;
     }
 
     @Transactional(readOnly = true)
@@ -64,6 +70,7 @@ public class CalendarEntryService {
 
     @Transactional
     public CalendarEntryResponse createEntry(CalendarEntryRequest request) {
+        lockCalendar();
         ValidatedEntry validated = validate(request);
         CalendarEntry entry = new CalendarEntry(
                 validated.date(),
@@ -81,6 +88,7 @@ public class CalendarEntryService {
 
     @Transactional
     public CalendarEntryResponse updateEntry(String id, CalendarEntryRequest request) {
+        lockCalendar();
         ValidatedEntry validated = validate(request);
         CalendarEntry entry = calendarEntryRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Kalendereintrag nicht gefunden"));
@@ -100,6 +108,7 @@ public class CalendarEntryService {
 
     @Transactional
     public void deleteEntry(String id) {
+        lockCalendar();
         CalendarEntry entry = calendarEntryRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Kalendereintrag nicht gefunden"));
         calendarEntryRepository.delete(entry);
@@ -198,16 +207,15 @@ public class CalendarEntryService {
 
     private CalendarEntryResponse toResponse(CalendarEntry entry) {
         PartyFlyerResponse flyer = null;
-        if (entry.getEventFlyerMediaId() != null) {
-            flyer = mediaAssetRepository.findById(entry.getEventFlyerMediaId())
-                    .map(asset -> new PartyFlyerResponse(
-                            asset.getId(),
-                            asset.getOriginalFilename(),
-                            asset.getMediaType(),
-                            asset.getFileSize(),
-                            "/api/v1/calendar-entries/" + entry.getId() + "/flyer"
-                    ))
-                    .orElse(null);
+        var mediaId = entry.getEventFlyerMediaId();
+        if (mediaId != null) {
+            var asset = mediaAssetRepository.findById(mediaId);
+            if (asset.isPresent()) {
+                var media = asset.get();
+                flyer = new PartyFlyerResponse(media.getId(), media.getOriginalFilename(),
+                        media.getMediaType(), media.getFileSize(),
+                        "/api/v1/calendar-entries/" + entry.getId() + "/flyer");
+            }
         }
         return CalendarEntryResponse.from(entry, flyer);
     }

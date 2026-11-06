@@ -23,6 +23,7 @@ coverage/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
 *.iml
 
 # Operating System
@@ -37,3 +38,9 @@ data/
 backups/
 .previous-image-tag
 README.txt
+
+# Local quality logs and disposable test media
+.quality/
+
+# Python quality-tool bytecode
+__pycache__/

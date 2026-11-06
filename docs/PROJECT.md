@@ -1,10 +1,13 @@
 # NoizyCologne – Lastenheft, Pflichtenheft & Entwicklungs-/Lernhandbuch
 
-> **Version:** 1.7 · **Stand:** 31. Oktober 2026 · **Status:** Fachliche Gesamtspezifikation mit lokal bestätigtem Frontend-Prototyp  
+> **Version:** 1.9 · **Stand:** 6. November 2026 · **Status:** Persistente Team-Anwendung mit Redaktion, Party-Discovery und Änderungsprüfung; Instagram-Publishing nicht implementiert
 > **Zielgruppe:** NoizyCologne-Team und Entwickler  
 > **Source of Truth:** Diese Version ersetzt v1.6 und frühere Projektdokumente fachlich. Für das tatsächlich implementierte Verhalten gilt zusätzlich der aktuelle Codezustand; nur dokumentierte Features sind noch nicht automatisch umgesetzt.  
 > **Wichtig:** Dieses Handbuch enthält Lastenheft, Pflichtenheft, technische Lern-/Agenten-Referenzen **und einen Ist-/Soll-Abgleich**. Die früheren Beispielskripte sind nicht automatisch identisch mit der aktuellen Codebasis. Die Entwicklung erfolgt auf Arch Linux; der Benutzer hat den lokalen Kalender-Prototyp erfolgreich getestet. Plattform-Funktionen werden vor Produktivstart im realen Meta-Konto verifiziert.  
+> **Verbindlicher Projektumfang (05.11.2026):** Ausschließlich Partys. Konzerte sind ausdrücklich unerwünscht und von Discovery sowie deren Kalenderübernahme ausgeschlossen. Frühere Konzertbezüge in diesem Handbuch gelten als überholte Beschreibung.
 > **Verbindlicher Vorbehalt:** Weitere fachliche Pflichtschritte **vor** dem Posting sind angekündigt und noch nicht beschrieben. Bis zu deren Freigabe bleibt das reguläre automatische Publishing **deaktiviert** (`NOIZY_PUBLISH_ENABLED=false`).
+
+**Für die tägliche Arbeit im Team:** Das [Team-Handbuch](TEAM-HANDBUCH.md) erklärt die tatsächlich vorhandenen Abläufe ohne technische Vorkenntnisse. Dieses Projektdokument bleibt die fachliche und technische Referenz mit ausdrücklich getrenntem Ist- und Soll-Zustand. Aktueller Bedienstand: Kapitel 23 bis 26; Qualitätsregeln: Kapitel 25 und [QUALITY.md](QUALITY.md). Das Publishing-Flag allein aktiviert keinen Versand: Ein Instagram-Publisher und seine Warteschlange sind im aktuellen Code nicht vorhanden.
 
 ---
 
@@ -32,7 +35,10 @@
 20. **Location- und DJ/Act-Stammdaten, Zuordnungen und Tabellenimport**
 21. **Google-Sheets-Modell: Party-Portfolio, Partyreihen und Jahreskalender (neu v1.5)**
 22. **Dokumentation-first-Workflow, Smartphone-Notizen und Coding-Agent-Übergaben**
-23. **Ist-Stand 31.10.2026, Flyer- und Redaktionskonzept sowie nächste Implementierungsschritte (neu v1.7)**
+23. **Aktueller Produktstand, Flyer- und Redaktionskonzept sowie offene Schritte (aktualisiert 05.11.2026)**
+24. **Location Discovery, Vorschläge und manuelle Instagram-Rückfragen (v1.8)**
+25. **Permanente Code-Quality-Routine**
+26. **Event Change Monitoring und zentraler Cancellation-Prozess**
 
 ---
 
@@ -42,7 +48,7 @@
 
 > **Zeitliche Einordnung:** Die folgenden Stichpunkte enthalten historische Architekturentscheidungen. Für die tatsächlich lokale Bedienbarkeit und neuere Änderungen vom 31.10.2026 siehe 1.1a und Kapitel 23. Frühe Hinweise zu noch nicht gebuchtem Hosting, Excel-Import oder automatischem DJ-Tagging sind durch v1.7 teilweise überholt.
 
-- NoizyCologne bereitet von Kölner Locations/Veranstaltern gelieferte **Party- und Konzertflyer** auf und veröffentlicht **gewöhnliche Instagram-Foto-/Feed-Posts**. **Keine Reels als Kernformat.**
+- NoizyCologne bereitet von Kölner Locations/Veranstaltern gelieferte **Partyflyer** auf und veröffentlicht **gewöhnliche Instagram-Foto-/Feed-Posts**. **Keine Reels als Kernformat.**
 - Textinformationen aus Flyern: Name, Datum, Einlass/Beginn, Location, Genres, Acts/DJs, Eintritt (wenn vorhanden), Social-Handles, weitere Hinweise.
 - **Stammdaten:** Locations und DJs/Acts werden getrennt verwaltet und über m:n-Beziehungen verbunden. Die dauerhafte Location-Zuordnung ist ausdrücklich **nicht** gleichbedeutend mit einem Auftritt bei jedem Event. Für Caption und Story zählen nur **explizit dem Event zugeordnete** Acts.
 - **Neu v1.5 – echte Sheet-Struktur aus Screenshots:** Ein Party-Portfolio enthält **Partyreihen** mit Veranstalter, Turnus, Genres und ggf. DJ-Vorgaben; Jahreskalender enthalten **konkrete Datumszellen je Venue-Spalte**. Eine Partyreihe ist nicht dasselbe wie ein einzelner Eventtermin. Portfolio-DJs sind keine bestätigten Event-Auftritte.
@@ -61,10 +67,10 @@
 ### 1.1a Verbindliche Entscheidungen vom 31.10.2026 (v1.7; ersetzen ältere Vorschläge bei Widerspruch)
 
 - **Manuelle Stammdaten statt Excel-Automatismus:** Die früheren Tabellen dienen nur als historische Orientierung. Der MVP ersetzt sie durch die manuelle Pflege im NoizyCologne-Party-Portfolio und Kalender. Die in Kapitel 20/21 beschriebenen Importer bleiben **historische/optionale Später-Ideen**, **kein aktueller Muss-Entwicklungsschritt**. Insbesondere wird keine XLSX-Datei automatisch importiert oder synchronisiert.
-- **Partyreihen-Dauerflyer:** Jede Partyreihe kann optional genau einen **Standard-/Dauerflyer** referenzieren. Er gehört zur Partyreihe und ist unabhängig vom Turnus; ein Dauerflyer kann auch bei unregelmäßigen Partys bestehen. **Noch nicht implementiert.**
+- **Partyreihen-Dauerflyer:** Jede Partyreihe kann optional genau einen **Standard-/Dauerflyer** referenzieren. Er gehört zur Partyreihe und ist unabhängig vom Turnus; ein Dauerflyer kann auch bei unregelmäßigen Partys bestehen. **Inzwischen persistent implementiert; aktueller Stand siehe Kapitel 23.**
 - **Veranstaltungsflyer hat Vorrang:** Für eine konkrete Veranstaltung kann im Redaktionsbereich ein eigenes Bild hinterlegt werden. Dieses überschreibt den Standardflyer **nur für den zugehörigen Instagram-Beitragsentwurf**, niemals das Original der Partyreihe oder andere Termine.
-- **Instagram-artige Redaktion verpflichtend:** Jede Veranstaltung, die für einen Instagram-Feed-Beitrag bearbeitet wird, erscheint im Redaktionsbereich als realistische **Instagram-Foto-Post-Vorschau** mit Bild, Account-Kopf, Caption, Hashtags und Mentions. Eingaben aktualisieren die Post-Ansicht live. Eine reine Tabellenzeile oder Formularvorschau allein reicht dort nicht. **Geplant; noch nicht implementiert.**
-- **Kalender ist eigenständig:** Kalendereinträge und Location-Sperren können lokal bereits angelegt, angezeigt, bearbeitet und gelöscht werden; farbige Partyreihen und ein optionaler Turnus sind bedienbar. Daten liegen bisher nur im **React-State**, werden nach Browser-Reload verloren und sind **keine dauerhaft gespeicherten, publishfähigen Posts**.
+- **Instagram-artige Redaktion verpflichtend:** Jede Veranstaltung, die für einen Instagram-Feed-Beitrag bearbeitet wird, erscheint im Redaktionsbereich als realistische **Instagram-Foto-Post-Vorschau** mit Bild, Account-Kopf, Caption, Hashtags und Mentions. Eingaben aktualisieren die Post-Ansicht live. **Inzwischen mit persistenten Entwürfen implementiert; die Vorschau ist keine Instagram-Veröffentlichung.**
+- **Kalender ist eigenständig:** Kalendereinträge und Location-Sperren können angelegt, angezeigt, bearbeitet und gelöscht werden; farbige Partyreihen und ein optionaler Turnus sind bedienbar. **Gespeicherte Daten liegen inzwischen in PostgreSQL und bleiben nach einem Browser-Reload erhalten.** Ein Kalendertermin erzeugt weiterhin keinen Instagram-Post.
 - **Mentions ≠ Auftritt:** Eine Partyreihe kennt Resident-DJs, weitere DJs und Veranstalter. In einem Event werden Instagram-DJ-Mentions abhängig von der Party-Vorgabe vorausgewählt oder manuell angehakt. Eine Mention behauptet **nicht automatisch** einen bestätigten Auftritt; tatsächliches Event-Line-up bleibt ein eigenständiges, später zu pflegendes Fachdatum.
 - **Keine automatische Posting-Freigabe:** Kein Kalendertermin und kein Turnus erzeugt automatisch einen veröffentlichbaren Beitrag. Abnahme, echte Bilddatei, bereinigte Caption und zusätzliche Pre-Publish-Gates bleiben erforderlich. `NOIZY_PUBLISH_ENABLED=false`.
 
@@ -87,7 +93,7 @@
 4. Keine erfundenen Veranstaltungsdaten. Unklare Flyer-Felder bleiben offen und blockieren nötigenfalls die Freigabe.
 5. Secrets niemals in Git, Screenshots, Tickets oder Browser-Logs.
 6. Jede Workflow-Regel wird über `PublishEligibilityService` **serverseitig** erzwungen. Ein Frontend-Schalter allein ist keine Sicherheit.
-7. **Git-Konvention:** Lokal entwickeln → committen → `git push origin main` → automatisch Tests, Docker-Build, GHCR, Deploy und Smoke-Test; andere Branches gehen nicht direkt live.
+7. **Git-Konvention:** Lokal entwickeln → vollständiges Quality Gate und null IDE-Fehler/-Warnungen nachweisen → committen → freigegebenen Arbeitsbranch pushen. Ein Push auf `main` startet automatisch Tests, Docker-Build, GHCR, Deploy und Smoke-Test und erfordert deshalb einen entsprechenden Deployment-Auftrag. Andere Branches gehen nicht direkt live; die Referenzkonfiguration in Kapitel 19 ist kein zusätzliches Approval-Gate des tatsächlich vorhandenen Workflows.
 8. Kein Live-Deploy überspringt Tests; technische Bereitstellung ≠ Freigabe zum Instagram-Posting (`NOIZY_PUBLISH_ENABLED=false`).
 9. Das Dokument bei jeder Anforderungsänderung mit einer Zeile im Änderungsprotokoll aktualisieren.
 
@@ -2114,6 +2120,16 @@ Bei jeder Ergänzung gleichzeitig **Kapitel 3 (Lastenheft), 4 (Pflichtenheft), 5
 
 | Version | Datum | Änderungen |
 |---|---|---|
+| v1.9 Heller Modus und Branch-CI | 06.11.2026 | Primäre Buttons mit weißem Hintergrund und schwarzer Schrift erhalten im hellen Modus gemeinsam eine dunkle Fläche und weiße Schrift; Location-Übernehmen und gleich gestaltete Formularaktionen bleiben lesbar, weiße Logo-Flächen bleiben erhalten. Anlegen-/Bearbeiten-Regressionen prüfen mindestens 4,5:1 Textkontrast. Die CI prüft jeden Arbeitsbranch mit dem vollständigen Quality Gate; Deployment bleibt an den separaten bestehenden Workflow gebunden. |
+| v1.9 Team und Qualität | 05.11.2026 | Verständliches Team-Handbuch ergänzt; veraltete Prototyp-/Reload-Angaben korrigiert, gespeicherte Freigabe von Instagram-Publishing und noch fehlender Bildversion-Fixierung getrennt. Conversion-/Null-Diagnosen einschließlich INFO blockieren; vier Feldinjektionen auf Konstruktoren umgestellt. Vollständiges Quality Gate und aktueller IDE-Nachweis vor jedem Commit verpflichtend. |
+| v1.8 Nur Partys | 05.11.2026 | Konzerte ausdrücklich aus dem Projektumfang ausgeschlossen; Konzertnavigation, Extraktion, Detailabrufe, Matching und manuelle Discovery-Übernahme abgesichert. |
+| v1.8 Abrufbudget | 05.11.2026 | Konfigurierbares 2-MiB-Response-Limit mit 4-MiB-Hardcap; Größen- und Zeitlimit getrennt; beide aktuellen Live-Music-Hall-Listen lesend geprüft. |
+| v1.8 Quellennavigation | 05.11.2026 | PARTY-/LIVE-Navigation und zugängliche Linkbeschriftungen erkennen, Programmseiten vor Detailabrufen priorisieren, leere Wix-HTML-Einbettungen korrekt diagnostizieren. |
+| v1.8 Wix-Programm | 05.11.2026 | Wix-Eventkarten, deutsche Datumsbereiche und textbasierte Jahresvorschauen ergänzt; aktuelles Blue-Shell-Programm mit 55 Einträgen geprüft. |
+| v1.8 Detailabruf | 05.11.2026 | Veranstaltungslinks erst nach positivem Abgleich mit aktiven Genres/Aliasen abrufen; Übersicht und Detaildaten mit Konflikterhalt zusammenführen. |
+| v1.8 Monitoring | 05.11.2026 | Tägliche Änderungsprüfung, Quellenhistorie, Ersatzpartys und zentraler Cancellation-Service mit separater Grafik/Absageentwurf; Publishing-/Reconciliation-Grenzen ausdrücklich dokumentiert, siehe Kapitel 26. |
+| v1.8 Korrektur | 05.11.2026 | robots.txt: führende Wildcards korrekt auswerten, Allow-Priorität und Bot-Gruppen beachten; Blue-Shell-Regressionsfixture ergänzt. |
+| v1.8 | 05.11.2026 | Location Discovery mit additiver Migration V12, abgesichertem HTTPS-Crawler, persistenten Vorschlägen und Scanberichten, dienstäglicher Suche, Kalender-Matching und manuellem Instagram-Rückfrageworkflow; siehe Kapitel 24. |
 | 0.1 | 29.10.2026 | Grundkonzept Flyer → normaler Instagram-Foto-Post → iOS/Android-Musik-Handoff |
 | 0.2 | 29.10.2026 | Manuelle Posting-Reihenfolge, 3er-Venue-Regel, Freitag-/Samstag-Balance, Feed-Vorschau |
 | 1.0 | 30.10.2026 | Zentrales Lastenheft und Pflichtenheft; Absage-/CANCELLED-Workflow und Einschränkungen veröffentlichter Posts; vollständige VS-Code-/Ubuntu-/VPS-/Docker-Anleitung; Lernmodule, Tests, SQL, APIs, Tickets, Hosting-Kostencheck und Erweiterungspunkt für neue Pre-Publish-Schritte |
@@ -3094,24 +3110,26 @@ Ein Coding-Agent darf erklären, Tests erzeugen und Code vorschlagen; **die Lern
 
 ---
 
-# 23. Aktueller Produktstand, Flyer-Hierarchie und Instagram-Redaktion (v1.7, 31.10.2026)
+# 23. Aktueller Produktstand, Flyer-Hierarchie und Instagram-Redaktion (aktualisiert 05.11.2026)
 
-> **Normativ:** Dieses Kapitel präzisiert und überstimmt ältere Annahmen aus Kapiteln 3, 4, 7, 13, 16, 20 und 21, soweit sie der manuellen MVP-Pflege oder der getrennten Redaktion widersprechen. **„Bedienbar“ bedeutet nicht „dauerhaft gespeichert“ und nicht „live veröffentlicht“.**
+> **Normativ:** Dieses Kapitel präzisiert und überstimmt ältere Annahmen aus Kapiteln 3, 4, 7, 13, 16, 20 und 21, soweit sie der manuellen MVP-Pflege oder der getrennten Redaktion widersprechen. **Gespeicherte Stammdaten, Kalendertermine und Redaktionsentwürfe bleiben nach dem Neuladen erhalten. „Gespeichert“ oder „Freigegeben“ bedeutet weiterhin nicht „auf Instagram veröffentlicht“.**
 
 ## 23.1 Verifizierter Bedienstand und technische Grenzen
 
-| Bereich | Tatsächlich aktuell bedienbar, nach lokaler Rückmeldung | Grenze / nicht fertig |
+| Bereich | Tatsächlich implementiert, lokal geprüft | Grenze / nicht fertig |
 |---|---|---|
-| Partyreihen | Neue Partyreihe anlegen/bearbeiten, Instagram-Handle, Farbe, DJ- und Veranstalterzuordnung, Vorauswahlregel für DJ-Mentions | Nur React-State; **kein** Dauerflyer-Upload |
-| Akteure | Personen/Kollektive erfassen; Rollen DJ/Veranstalter und Beziehungen zu Partys | Nur React-State; keine persistierte Datenbank |
-| Turnus | Optional kein Turnus, wöchentlich nach Wochentag, monatlich nach n-tem/letztem Wochentag oder Freitext | Keine automatische Terminerzeugung; nach Reload verloren |
-| Location-Portfolio | Locations mit Instagram-Handle verwalten | Nur React-State |
+| Partyreihen | Persistentes Anlegen/Bearbeiten, Instagram-Handle, Farbe, DJs/Veranstalter, Mention-Vorauswahl, lesbare Standardgenres und optionaler Dauerflyer | Ein Turnus erzeugt keine Termine; Änderungen an Standardgenres ändern keine bereits gespeicherten Entwürfe |
+| Akteure | Personen/Kollektive mit Rollen DJ/Veranstalter und Partyzuordnungen persistent pflegen | Eine Zuordnung ist kein bestätigter Auftritt |
+| Turnus | Optional kein Turnus, wöchentlich nach Wochentag, monatlich nach n-tem/letztem Wochentag oder Freitext; wird an der Partyreihe gespeichert | Keine automatische Terminerzeugung |
+| Location-Portfolio | Locations mit Instagram-Handle, Website und Discovery-Aktivierung persistent verwalten | Website-Abrufe können begrenzt oder gesperrt sein; leere Ergebnisse beweisen keine Absage |
 | Kalender | Eintrag erstellen, als farbige Party im Monatsraster sehen, mehrere Events am Tag, Location-Sperre, Bearbeiten/Löschen, DJ-Mentions in Event-Editor | Kein veröffentlichtes Instagram-Ereignis |
 | Webauftritt | Öffentliche Landingpage und geschützte Team-Oberfläche mit Login | Keine öffentlich freigegebene REST-Fach-API |
 | Backend/Deployment | Spring Boot, PostgreSQL, Flyway und persistente CRUD-Anbindung der Stammdaten, Kalenderdaten und Medien | Meta-Publishing bleibt deaktiviert |
 | Flyer/Redaktion | Dauerflyer, Event-Flyer, Instagram-nahe Vorschau und persistente Redaktionsentwürfe | Kein Meta-Publishing; Freigabe ist technisch lokal/serverseitig gespeichert, aber nicht an Instagram gekoppelt |
+| Genres/Musik | Aktive Genres und Aliasse verwalten, lokale Flyer-Genre-Vorschläge prüfen, verifizierte Musik manuell zu Entwürfen zuordnen | Keine automatische Songrecherche, kein automatisches Instagram-Audio |
+| Vorgeschlagene/Änderungen | Begrenzte offizielle Quellensuche, gespeicherte Vorschläge, manuelle Rückfragen, täglicher Änderungscheck und zentraler Absageentwurf | Keine automatischen DMs oder Absageveröffentlichungen; Quellenbefunde benötigen die vorgesehene Prüfung |
 
-**Qualifizierung des Status:** Diese Bestandsaufnahme basiert auf den bis 31.10.2026 im gemeinsamen Entwicklungsgespräch erfolgreich getesteten lokalen Schritten und auf der bekannten Repository-Struktur. Sie ist **kein** behaupteter End-to-End-Test gegen einen produktiven Server. Ein lokal bestätigter `npx tsc --noEmit`-Check ersetzt keine Integrationstests.
+**Qualifizierung des Status:** Diese Bestandsaufnahme wurde am 05.11.2026 mit dem aktuellen Code und den lokalen Backend-/Frontend-Regressionen abgeglichen. Sie ist **kein** behaupteter End-to-End-Test gegen einen produktiven Server oder Instagram. Ein einzelner TypeScript-Check ersetzt weder Integrationstests noch die vollständige Prüfroutine.
 
 ## 23.2 Fachliche Entitäten sauber unterscheiden
 
@@ -3123,7 +3141,7 @@ Ein Coding-Agent darf erklären, Tests erzeugen und Code vorschlagen; **die Lern
 
 ## 23.3 Dauerflyer: bewusst im Party-Portfolio
 
-**Bedienung (Soll):** Im Editor einer Partyreihe erscheint optional „Dauerflyer (Standardbild)“ mit Upload/Auswählen, Preview, Austauschen und Entfernen. Die normale Partyreihe darf auch **ohne Dauerflyer** gespeichert werden. Eine Änderung des Dauerflyers ändert **keinen** bestehenden, bereits freigegebenen Instagram-Beitrag. Flyer ist unabhängig von einem festen Turnus.
+**Bedienung (Ist):** Im Editor einer Partyreihe kann ein optionaler Dauerflyer hochgeladen, angesehen, ausgetauscht und entfernt werden. Die Partyreihe darf auch **ohne Dauerflyer** gespeichert werden. Der Flyer ist unabhängig von einem festen Turnus.
 
 **Priorität der Bildquelle im Redaktionsentwurf:**
 
@@ -3140,7 +3158,7 @@ Partyreihe hat Dauerflyer?   ── ja ──> Dauerflyer vorschlagen
         (nicht freigabefähig)
 ```
 
-Ein eigener Flyer zu einem Termin **überschreibt nur die Bildauswahl dieses Beitrags**, nicht den Dauerflyer und nicht die Vorschau anderer Events derselben Partyreihe. Die redaktionell gewählte Bildreferenz wird spätestens bei Freigabe als unveränderliche Version fixiert. Wurde ein Standardflyer ersetzt, behalten bereits freigegebene Beiträge ihre zugeordnete Bildversion. Ein Platzhalter darf nie als echtes Postbild veröffentlicht werden.
+Ein eigener Flyer zu einem Termin **überschreibt nur die Bildauswahl dieses Beitrags**, nicht den Dauerflyer und nicht die Vorschau anderer Events derselben Partyreihe. **Offenes Soll:** Eine unveränderliche Medienversion pro freigegebenem Entwurf ist noch nicht implementiert. Die Vorschau verwendet derzeit den aktuellen Event-Flyer beziehungsweise Dauerflyer; ein späterer Austausch kann deshalb auch die Vorschau eines bereits freigegebenen Entwurfs ändern. Das Team muss den betroffenen Entwurf erneut prüfen. Ein Platzhalter darf nie als echtes Postbild veröffentlicht werden.
 
 ## 23.4 Instagram-Redaktion: Veranstaltung MUSS wie ein Feed-Beitrag aussehen
 
@@ -3168,11 +3186,11 @@ Ein eigener Flyer zu einem Termin **überschreibt nur die Bildauswahl dieses Bei
 
 ## 23.6 Turnus und Kalendergrenzen
 
-- Turnus ist **optional**, unabhängig vom Dauerflyer und aktuell nur als Stammdatensatz im Frontend editierbar.
+- Turnus ist **optional**, unabhängig vom Dauerflyer und wird als Teil der Party-Stammdaten gespeichert.
 - Unterstützte lokale Regeln: wöchentlich (Wochentag), monatlich (1.–4. oder letzter Wochentag) und „andere/unklare Regel“ als Beschreibung.
 - Eine Regel erzeugt **heute keine Termine**; künftige Automatik darf nur **Kalender-Entwürfe nach Vorschau/Bestätigung**, keine Posts, erzeugen.
 - Kalender-Events und Location-Sperren sind **separate** Einträge. Sperren dürfen keine Instagram-Post-Entwürfe auslösen.
-- Kalender-CRUD im React-State ist **flüchtig**. Nächster Daten-Meilenstein ist die persistente Anbindung an Spring Boot + PostgreSQL mit Flyway-Migrationen, Validierung und späterer Team-Autorisierung.
+- Kalendertermine und Location-Sperren sind persistent an Spring Boot und PostgreSQL angebunden. Erfolgreich gespeicherte Änderungen bleiben nach einem Neuladen erhalten. Ungespeicherte Formulareingaben können weiterhin verloren gehen; differenzierte Teamrollen sind noch offen.
 
 ## 23.7 Geplante Datenflüsse ohne Vorwegnahme der Implementierung
 
@@ -3199,17 +3217,17 @@ flowchart TD
 | Party mit Dauerflyer, ohne Turnus | Standardbild wird im Redaktionsentwurf angeboten |
 | Party mit Dauerflyer und monatlichem Turnus | Standardbild verfügbar, **keine** automatische Terminerzeugung |
 | Zwei Termine derselben Partyreihe, nur einer mit Spezialflyer | Nur der eine redaktionelle Beitrag zeigt Spezialflyer; anderer zeigt Dauerflyer |
-| Dauerflyer wird nach Freigabe eines Beitrags ersetzt | Bereits freigegebener Beitrag behält die referenzierte ursprüngliche Medienversion |
+| Dauerflyer wird nach Freigabe eines Beitrags ersetzt | **Aktuelle Grenze:** Vorschau kann sich ändern; erneut prüfen. Unveränderliche Medienversion pro Entwurf bleibt ein offenes Abnahmekriterium |
 | Caption/Mentions/Hashtags werden bearbeitet | Sichtbare Instagram-Post-Vorschau aktualisiert sich sofort |
 | Kein Bild vorhanden | Entwurf darf nicht zur Veröffentlichung freigegeben werden |
 | Location-Sperre | Kalenderanzeige möglich, kein Instagram-Entwurf |
 | Resident-Voreinstellung aktiv | Residents mit gültigen Handles vorausgewählt, individuell abwählbar |
 | Kein bestätigter Auftritt, DJ aber verknüpft | DJ-Zuordnung allein erzeugt keine Auftrittsbehauptung |
 | Ein Tag mit zwei Partys verschiedener Farbe | Beide Termine sichtbar, jeweils in Partyfarbe |
-| Eintrag bearbeiten/löschen | Lokaler Kalender reagiert ohne Dublette; spätere API schützt vor Inkonsistenzen |
-| Browser neuladen (aktueller Stand) | Verlust lokaler Daten ist derzeit bekannte Grenze, **kein** Erfolgstest dauerhafter Speicherung |
-| PostgreSQL-CRUD später | Alle Daten bleiben nach Reload erhalten; API-Validierung und Änderungsrechte geprüft |
-| Vorzeitiger Publishing-Aufruf | Blockiert, solange Gate-Freigaben/echtes Bild fehlen oder Feature Flag deaktiviert ist |
+| Eintrag bearbeiten/löschen | Kalender zeigt den gespeicherten Stand; bestehende API prüft fachliche Konflikte und Abhängigkeiten |
+| Browser nach erfolgreichem Speichern neuladen | Stammdaten, Kalender und gespeicherte Entwürfe werden erneut geladen; ungespeicherte Eingaben sind davon ausgenommen |
+| PostgreSQL-CRUD | Persistenz und API-Validierung mit separater Testdatenbank geprüft; differenzierte Teamrollen bleiben offen |
+| Vorzeitiges Publishing | Kein Instagram-Publisher und keine Versandwarteschlange vorhanden; gespeicherte Freigaben und lokale Prüfhaken senden nichts |
 
 ## 23.9 Nächste kleine Coding-Tickets
 
@@ -3219,7 +3237,7 @@ flowchart TD
 
 ## 23.10 Festhaltepunkt für den nächsten Commit
 
-Der Nutzer hat bestätigt, dass der lokale Frontend-TypeScript-Check erfolgreich ist und dass das Anlegen/Anzeigen/Bearbeiten/Löschen von Kalender-Einträgen **funktioniert**. Git-Checkpoint vor weiteren funktionalen Änderungen empfohlen. **Nicht hiermit behaupten**, dass ein Commit oder Push bereits erfolgt ist: Lokales Git ist außerhalb dieses Handbuchs zu prüfen. Danach wird dieses vollständige v1.7-Handbuch als `docs/PROJECT.md` versioniert. Frühere v1.6-MD bleibt Historie.
+Vor jedem Commit gelten das vollständige Quality Gate und der aktuelle IDE-Nachweis aus Kapitel 25. Commit- und Pushstatus werden aus Git geprüft und im Abschluss gemeldet; diese Spezifikation behauptet keinen bereits erfolgten Push oder eine Produktionsabnahme. Das [Team-Handbuch](TEAM-HANDBUCH.md) ergänzt diese Referenz um verständliche Bedienabläufe und ändert keine fachlichen Anforderungen.
 
 ## 23.11 Offline-OCR 2.0 – verbindliche Betriebsgrenzen
 
@@ -3249,7 +3267,13 @@ Die Oberfläche zeigt genau einen sichtbaren YouTube-IFrame-Player. Es gibt kein
 
 Partys können optionale Standardgenres aus dem bestehenden aktiven Genre-Katalog erhalten. Sie werden in `party_series_genres` gespeichert und beim Anlegen eines neuen `EditorialPostDraft` mit den veranstaltungsbezogenen Genres dedupliziert vereinigt. Die resultierende Genre-Menge wird im Entwurf und damit in der Caption gespeichert.
 
+**API-Vertrag und Bugfix vom 05.11.2026:** `standardGenres: string[]` enthält weiterhin exakte, lesbare **Anzeigenamen** (z. B. `Emo`, `Metalcore`, `Hardcore`), keine Genre-IDs und keine OCR-Aliasse. `PartySeriesService` prüft diese Namen mit `findAllByDisplayNameInAndActiveTrue` gezielt gegen den aktiven Katalog. Die frühere ID-Abfrage `findAllById` war vertragswidrig und verursachte den reproduzierten HTTP-400-Fehler. Jeder Name muss genau einem aktiven Genre entsprechen: unbekannte/inaktive sowie mehrdeutige aktive Anzeigenamen werden mit einer benannten Validierungsfehlermeldung abgelehnt. Ein gleichnamiges inaktives Genre macht einen eindeutig aktiven Namen nicht mehrdeutig. Rand-Leerzeichen werden wie bisher entfernt; Mengen verhindern doppelte Speicherung. Es erfolgt keine ID-Umstellung und keine Datenmigration.
+
+Bestehende Namen bleiben unverändert lesbar. Beim Bearbeiten sind aktive Namen vorausgewählt; gespeicherte, nicht mehr aktive/verfügbare Namen werden zusätzlich sichtbar und ausdrücklich abwählbar angezeigt. Erneutes Speichern eines inaktiven Namens wird zurückgewiesen, statt den Wert stillschweigend zu löschen. Neue Redaktionsentwürfe übernehmen weiterhin lesbare Namen; gespeicherte Entwürfe und Captions werden durch die Korrektur nicht geändert.
+
 Event-spezifische Zusatzgenres verändern die Partyreihe nicht. Änderungen an Party-Standardgenres wirken nicht rückwirkend auf bereits gespeicherte Entwürfe. Die Musikvorschläge verwenden die Genres des konkreten Entwurfs; es gibt dafür keine zweite Genrequelle und keine zusätzliche Musik-API.
+
+Regression des Namensvertrags: API-Anlegen/-Laden/-Ändern mit `Emo`, `Metalcore`, `Hardcore`, Hinzufügen/Entfernen, Leerlisten, doppelte Werte, unbekannte/inaktive Namen und mehrdeutige aktive Anzeigenamen geprüft. Neue Entwürfe übernehmen die Namen; Änderungen an Party-Standards und Special-Genres ändern keine bestehenden Entwürfe. DOM-Tests prüfen Checkbox-Vorauswahl, Payload-Namen und explizites Entfernen nicht mehr verfügbarer Namen. Validierung: Backend-Paket und vollständiger Testlauf erfolgreich (ein opt-in Offline-Discovery-Test ohne Export übersprungen), 18 Frontend-Tests, TypeScript, ESLint und Frontend-Build erfolgreich. Datenbanktests ausschließlich im kurzlebigen Testcontainer auf Port 55434, kein Push oder Deployment.
 
 ## 23.15 Kompaktes Frontend-Redesign
 
@@ -3258,3 +3282,349 @@ Das Dashboard verwendet eine gemeinsame, responsive Navigation mit zugänglichem
 Portfolio-, Akteur- und Genre-Editoren werden in einem gemeinsamen, fokussierbaren Modal geöffnet. Das Modal unterstützt Escape, Fokusfalle und eine klare Abbrechen-/Schließen-Aktion; die vorhandene API-, Validierungs- und State-Logik bleibt unverändert. Weitere fachliche Formulare werden schrittweise nach demselben Muster umgestellt. Die Redaktions- und Kalenderfunktionen bleiben eigenständige Arbeitsseiten.
 
 Die Dashboard-Shell ist Mobile First für eine kleinste Zielbreite von 390 px (iPhone 13 Pro) ausgelegt. Navigation, Theme-/Logout-Steuerung und Modals überlagern den Inhalt auf kleinen Geräten nicht; Desktop-Sidebar und zweispaltige Arbeitsbereiche werden erst ab geeigneten Mindestbreiten aktiviert. Ein erfolgreicher Build ersetzt keine manuelle Prüfung auf realen iOS-Viewports.
+
+# 24. Location Discovery, Vorschläge und manuelle Instagram-Rückfragen (v1.8)
+
+## 24.1 Implementierter Umfang und Bestandsanalyse
+
+Locations (`Venue`), Partyreihen (`PartySeries`), Kalendertermine (`CalendarEntry`) und Genres sind PostgreSQL-Stammdaten. Discovery verwendet ihre bestehenden IDs und die bestehende Genreverwaltung. `DashboardNavigation.tsx` führt zur neuen Route `/dashboard/vorschlaege`; deren Bearbeitungen verwenden `DashboardModal`, einschließlich Fokusfalle und Escape. Das Location-Modal bleibt Teil des Portfolio-Editors.
+
+Die APIs sind wie die bestehenden Stammdaten auf `local` und `staging` beschränkt. Im bestehenden Hosting schützt Caddys `forward_auth` sämtliche `/api/v1/*`-Routen mit der Team-Session. Das Backend besitzt weiterhin keinen eigenen Team-Login und darf nicht öffentlich am Proxy vorbei erreichbar gemacht werden. Lokal gilt derselbe vorhandene Entwicklungszugriff wie für Kalender und Portfolio.
+
+**Discovery erzeugt ausschließlich Kalendereinträge und Prüfdatensätze.** Sie erzeugt keine Medien, lädt keine Bilder herunter, legt keinen Redaktionsentwurf an und ruft keine Instagram-Publishing-Funktion auf. Die bestehenden Flyer-, Genre-, Musik- und redaktionellen Freigabeschritte bleiben eigenständige Vorgänge. `NOIZY_PUBLISH_ENABLED=false` gilt weiterhin.
+
+## 24.2 Eine neue Location hinzufügen
+
+1. Unter „Locations“ einen Namen eintragen und „Website & Partysuche“ aufklappen.
+2. Die offizielle HTTPS-Website eintragen; optional eine direkte Kalender-, Detail- oder ICS-URL angeben.
+3. „Quelle prüfen“ zeigt die gefundenen URLs, Eventzahlen und technische Diagnosen, ohne Kalenderdaten anzulegen. Bei einer noch nicht gespeicherten Location bleiben diese Prüfergebnisse vorerst ungespeichert.
+4. Automatische Suche aktivieren und die Location speichern. Der nächste manuelle oder dienstägliche Scan berücksichtigt sie.
+5. Quellen und eventuelle Fehler anschließend unter „Vorgeschlagene → Location-Quellen“ prüfen.
+
+Es gibt keine Clubnamen-Whitelist und keine Location-spezifischen Java-Verzweigungen. Eine unbekannte Website kann allein durch ihre URL eingebunden werden, sofern Homepage/Links und Eventdaten den unterstützten öffentlich auslesbaren Strukturen entsprechen. Bei abweichendem HTML lässt sich unter „Quelle / Profil bearbeiten“ ohne Java-Änderung eine direkte URL oder ein CSS-Profil für Event-Container, Titel und Startdatum hinterlegen. Das Startdatum kann als ISO-Wert in `datetime`/`content` oder als unterstützter vollständiger deutscher Datumswert vorliegen. Textlisten können einen expliziten Jahreskontext verwenden; fehlende oder mehrdeutige Jahre werden nicht geraten.
+
+Offizielle Quellen werden über den Host der explizit hinterlegten `websiteUrl` zugeordnet. Die aktivierte Location erlaubt für diese Quellen die konservative Kalenderautomatik. Eine abweichende `eventsUrl`, eine allein ohne offizielle Website hinterlegte Eventquelle oder eine zusätzlich angelegte Portalquelle ist **EXTERNAL** und zunächst nicht freigegeben. Eine redaktionelle Quellenfreigabe kann ausdrücklich gesetzt oder entzogen werden; die Quelle bleibt dabei als extern gekennzeichnet. Ein verlinktes fremdes Portal wird nicht automatisch gecrawlt. Die Redaktion muss externe Bestätigungsqualität und anwendbare Nutzungsregeln vor einer Freigabe selbst prüfen.
+
+## 24.3 Architektur und Abrufgrenzen
+
+| Komponente | Aufgabe |
+|---|---|
+| `VenueSourceDiscoveryService` | Direkte Event-URL bevorzugen; interne Links mit Event-/Programm-/Kalender-Hinweisen in einer begrenzten Breitensuche verfolgen |
+| `EventPageFetcher` / `SafeUrls` | HTTPS, DNS-Prüfung beim Verbindungsaufbau, robots.txt, Request- und Response-Limits |
+| `EventExtractor` | JSON-LD einschließlich `@graph`/`ItemList`, ICS, semantische HTML-Listen und Detailseiten; optionale CSS-Profile |
+| `EventNormalizer` | Unicode-/Namensnormalisierung, vollständige Datumswerte, Berliner Zeitzone, stabile Hashes |
+| `EventMatcher` | Exakte Partyreihennamen und explizite Aliase, konservativer Party-/Genrebeleg, Datums- und Statusprüfung |
+| `EventCandidateProcessor` | Transaktionaler Abgleich von Scan-Fingerprints mit manuellen Entscheidungen; gemeinsamer Lock mit Import und Redaktion |
+| `EventImportService` | Transaktionale manuelle/automatische Kalenderübernahme, Konflikt-/Dublettenprüfung, Prüf- und Rückfragestatus |
+| `DiscoveryScheduler` | Ein begrenzter Worker, PostgreSQL-Scanlock, Quellenprüfung pro Location, persistenter Laufbericht |
+
+Pro Location werden höchstens drei Startquellen untersucht. Pro Startquelle gelten maximal acht Seiten, Tiefe zwei, 200 untersuchte Links und höchstens 40 geeignete Navigationslinks pro Seite und eine Queue mit höchstens 16 Links; alle müssen auf demselben exakten Host bleiben. Pro Location werden höchstens 300 Eventfunde verarbeitet. Abrufe sind JVM-weit seriell mit mindestens 500 ms Pause, ohne automatische Wiederholungen. Verbindungsaufbau: fünf Sekunden; Socket-/Antwortwartezeit: acht Sekunden; Body-Lesephase: zehn Sekunden, jeweils zusätzlich zum standardmäßigen Größenlimit von 2 MiB (über `DISCOVERY_MAX_RESPONSE_BYTES` zwischen 64 KiB und maximal 4 MiB konfigurierbar). robots.txt zählt als zusätzlicher Abruf und wird innerhalb einer Quellensuche je Host zwischengespeichert.
+
+Migration **V12** ergänzt `website_url`, `events_url`, `discovery_enabled`, `last_discovery_at` und `discovery_status` additiv an `venues`; Instagram bleibt das bestehende Feld. Weitere Tabellen: `discovery_sources` mit Freigabe/Profil/Status/Abrufzeit, `party_series_aliases`, `discovery_candidates` mit Herkunft/Fingerprint/Rückfrage und `discovery_runs` mit Start/Ende/Bericht. Die Übersicht lädt die neuesten 500 Kandidaten und zehn Laufberichte; Statuszähler beziehen sich auf den gesamten Bestand.
+
+## 24.4 Extraktion und Diagnose
+
+Priorität: JSON-LD → ICS → generische HTML-Listen → semantische Detailseite. HTML-Regeln erkennen u. a. `article` mit `time`, `.event`, `.event-item`, `.event-list-item` und Schema.org-Microdata. Ein CSS-Profil kann die drei Selektoren ersetzen. Es wird kein fremdes JavaScript ausgeführt. RSS/Atom, allgemeines natürlichsprachliches Datumsverstehen, wiederkehrende ICS-Regeln und beliebige Widget-/Ticket-APIs sind nicht Bestandteil dieses MVP.
+
+`EVENTS_FOUND` bedeutet interpretierbare Eventfunde, nicht automatisch relevante oder importierbare Partys. `NO_EVENTS` erfordert eine ausdrückliche Leermeldung oder einen leeren abgeschlossenen ICS-Kalender. Unbekannte/leere HTML-Strukturen ergeben `UNINTERPRETABLE`; eine kurze App-Shell mit externem Script ergibt heuristisch `JAVASCRIPT_REQUIRED`. Weitere Diagnosen: `BLOCKED`, `ROBOTS_BLOCKED`, `SCAN_FAILED`, `PARTIAL_FAILURE`, `REDIRECT_REQUIRES_REVIEW`, `RESPONSE_TOO_LARGE`, `FETCH_TIMEOUT`, `RESPONSE_LIMIT` (historischer Sammelstatus), `UNSUPPORTED_ENCODING` und `UNSUPPORTED_CONTENT`. Ein fehlender Kalender oder ein unbekanntes Layout ist kein Beweis, dass keine Events existieren.
+
+`last_discovery_at` bezeichnet die letzte erfolgreiche Prüfung mit Eventfunden oder ausdrücklichem Leerbestand. `last_fetched_at` ist der letzte Abrufversuch der einzelnen Quelle. Ein fehlerhafter Teilabruf bleibt in der Quellenübersicht sichtbar. Die JavaScript-Diagnose ist eine Heuristik, keine Garantie, dass ein Browser die Daten darstellen könnte.
+
+## 24.5 Matching, Wiederholung und Änderungen
+
+Ein eindeutig normalisierter Partyreihenname oder expliziter Alias muss **genau eine** bekannte Partyreihe treffen; Satzzeichen, Großschreibung und ausdrücklich erkennbare Special-/Edition-Suffixe werden gemäß 24.16 berücksichtigt. Aliase können im Party-Modal gepflegt werden (`GET/PUT /api/v1/discovery/parties/{id}/aliases`). Aktive Kataloggenres einschließlich expliziter OCR-Aliasse können unbekannte Veranstaltungen als `POSSIBLE_MATCH` zur Prüfung vorschlagen; sie berechtigen niemals allein zur Übernahme. Fehlende Angaben ergeben `UNVERIFIED` statt einer automatischen Ablehnung. Die aktuellen versionierten Regeln und der Reset sind in 24.16 beschrieben. Standardgenres gehören weiter zur vorhandenen Partyreihe und müssen nicht in Discovery dupliziert werden. Bestehende bekannte Partyreihennamen sind ein stärkerer Beleg als ein generisches Genre.
+
+Automatischer Import verlangt außerdem eine gebundene Location, genau ein vollständiges Startdatum, keine abweichende Locationangabe, keine bekannte Absage/Verschiebung/Unbestätigtheit, eine freigegebene Quelle sowie einen konfliktfreien Kalender. Ein `endDate` nach Mitternacht erzeugt keinen zweiten Starttag. Datumswerte mit Offset werden in `Europe/Berlin` ausgewertet. Die Vorschlags-API serialisiert Kalendertage ausdrücklich als `YYYY-MM-DD`, ohne Timestamp-Verschiebung. Fehlende Uhrzeiten bleiben `NULL`; unterschiedliche Uhrzeitangaben werden nicht zu einer erfundenen Uhrzeit zusammengeführt. Unbekannte ICS-Zeitzonen werden zur Prüfung markiert.
+
+Vor der ersten Übernahme werden alle begrenzten Funde einer Location gesammelt; abweichende Starttage gleichnamiger Funde im selben Batch gehen konservativ gemeinsam zur Rückfrage. Auch reguläre Wiederholungstermine können dadurch eine manuelle Prüfung benötigen.
+
+Kandidatenschlüssel verwenden Quell-IDs/ICS-UIDs oder normalisierten Namen mit Startangaben; Fingerprints erkennen Änderungen. Unveränderte bekannte Funde werden bei gleicher Matcher-Version nicht erneut übernommen. Explizit abgelehnte und manuell als Dublette markierte Kandidaten bleiben archiviert. Ein Fund mit bekanntem Namen und geändertem Datum wird vorsichtshalber geprüft: Das kann eine reguläre Wiederholung oder eine Verschiebung sein. Änderungen bereits importierter Funde ändern den Kalender nicht stillschweigend. Die Redaktion prüft sie im bestehenden Kalendereditor. Ein bestehender Termin derselben Party am selben Ort/Tag ist eine Dublette; andere Termine und Location-Sperren am selben Ort/Tag blockieren die Automatik.
+
+Alle Discovery-Importe, Kandidatenabgleiche und manuellen Prüfentscheidungen verwenden denselben PostgreSQL-Transaktionslock. Das schützt auch parallele manuelle Importe und mehrere Backend-Instanzen; normale manuelle Kalenderbearbeitungen gehören weiterhin zur bestehenden Kalender-API. Vor einem manuellen Import muss die Redaktion Partyreihe und bestätigtes Datum wählen. Es entsteht weder ein neues Party-Stammdatum noch eine neue Location.
+
+## 24.6 Vorschläge und Instagram-Rückfragen
+
+| Status | Bedeutung |
+|---|---|
+| `NEEDS_REVIEW` | Neue passende Party, externe Quelle, Mehrdeutigkeit oder Kalender-/Änderungskonflikt |
+| `NEEDS_INQUIRY` | Fehlender/widersprüchlicher Start oder Absage/Verschiebung/Unbestätigtheit |
+| `READY` | Automatikbedingungen erfüllt; interne Zwischenstufe vor Import |
+| `IMPORTED` | Im Kalender; Grund unterscheidet automatische und manuelle Übernahme |
+| `REJECTED` / `DUPLICATE` / `IGNORED` | Manuell abgelehnt, belegte Dublette oder explizit fachfremder Beleg; fehlende Angaben bleiben ungeklärt |
+
+Die Übersicht bietet Prüfung, Partyzuordnung, Datumsänderung, manuelle Übernahme, Ablehnung, Dublettenmarkierung, Quelllink, Quellenprofile und einen manuellen Suchlauf. Quellenbelege und Rückfragen sind einklappbar. Bereits übernommene Kalenderdaten werden über den Kalender geprüft.
+
+„DM vorbereiten“ erzeugt und speichert einen editierbaren deutschen Text mit Location, Party und Klärungsgrund. „Text kopieren“ und „Instagram-Profil öffnen“ sind getrennte Nutzeraktionen. Ohne vorhandenen Instagram-Handle bleibt derselbe neutrale Rückfragetext kopierbar. Rückfragestatus: `NONE` → `PREPARED` → `SENT` → `ANSWERED`, wobei Versand und Antwort ausschließlich manuell gesetzt werden. Ein bestätigtes Datum und eine Partyzuordnung ermöglichen anschließend die Kalenderübernahme.
+
+Es gibt keinen DM-Versand, keine Instagram-Login-Automation, keine Zustellbehauptung, keine Browser-Bots und keine privaten Instagram-APIs.
+
+## 24.7 Scheduler und Betrieb
+
+Standard: **Dienstag, 09:00 Uhr, `Europe/Berlin`**, serverseitig mit Spring `@Scheduled`. Umgebungsvariablen:
+
+| Variable | Standard | Bedeutung |
+|---|---|---|
+| `DISCOVERY_ENABLED` | `true` | Automatischen Scheduler aktivieren; manuelle Suche bleibt separat möglich |
+| `DISCOVERY_CRON` | `0 0 9 * * TUE` | Spring-Cron-Ausdruck mit Sekundenfeld |
+| `DISCOVERY_ZONE` | `Europe/Berlin` | Zeitzone einschließlich Sommer-/Winterzeit |
+| `DISCOVERY_MAX_RESPONSE_BYTES` | `2097152` | Maximale Response-Body-Größe in Bytes; zulässig 65536 bis 4194304 |
+
+Compose und `.env.example` enthalten die Durchleitung dieser Variablen; es wurde damit kein Deployment ausgeführt. Bestehende Locations starten durch die Migration deaktiviert. Ein zusätzlicher PostgreSQL-Sessionlock verhindert überlappende Scans über JVM-Grenzen hinweg. Laufberichte bleiben nach Neustarts erhalten; beim nächsten Scan werden verwaiste `RUNNING`-Berichte zu `INTERRUPTED`. Verpasste Dienstagstermine werden nicht automatisch nachgeholt; dafür existiert die manuelle Suche. Quellen- und Locationfehler verhindern nicht die Bearbeitung anderer Locations. Unvollständige Läufe werden als `PARTIAL` protokolliert.
+
+## 24.8 Sicherheitsgrenzen
+
+Nur HTTPS, Port 443/Standardport, ohne URL-Credentials, IP-Literale oder Fragmente. Sämtliche DNS-Ergebnisse werden vom tatsächlichen Verbindungsresolver geprüft; Loopback, private, Link-Local-, Multicast-, Dokumentations- und weitere reservierte Adressen werden abgelehnt. Der Client verbindet über genau diesen Resolver und verwendet keinen Systemproxy. Automatische Redirects sind deaktiviert; eine Weiterleitung muss durch die explizite endgültige URL ersetzt werden. Das verhindert auch Weiterleitungen auf interne Ziele.
+
+robots.txt wird vor jeder Website-Suche geprüft. Die Implementierung wertet passende Bot-Gruppen aus (explizite NoizyCologneDiscovery-Gruppe vor Wildcard-Gruppe), unterstützt `Allow`, `Disallow`, `*` und abschließendes `$` und bevorzugt die spezifischste passende Regel; bei Gleichstand gewinnt `Allow`. Ein passendes `Crawl-delay` führt weiterhin zum Blockieren, bis individuelle Host-Pausen unterstützt werden. Nicht abrufbare robots.txt-Dateien außer HTTP 404 blockieren die Suche. Login-/403-/429-Schranken werden nicht umgangen. Es gibt keine Browser-Cookies, automatischen Bildabrufe, Codeausführung oder HTML-Ausgabe externer Inhalte. Das Frontend rendert Belege als Text; externe Links müssen HTTPS verwenden. Gzip/sonstige komprimierte Responses werden im MVP abgelehnt, damit kein Dekompressionsbombenpfad entsteht. UTF-8 ist der derzeitige Textdecodierungsstandard.
+
+Selektoren und Quellenfreigaben sind redaktionelle Konfiguration, keine fremden Website-Anweisungen. Änderungen an Website-Regeln und die inhaltliche Zuverlässigkeit einer Quelle bleiben redaktionell zu prüfen. Discovery ersetzt keine individuelle rechtliche Prüfung einer Website.
+
+## 24.9 Lokale Tests und Beispielstrukturen
+
+Die Fixtures unter `backend/src/test/resources/discovery` sind kleine synthetische Referenzfälle. Sie sind **keine aktuellen Mitschnitte** der Club-Websites und belegen keine Live-Kompatibilität dieser Domains. Die Namen dienen der Zuordnung der fünf gewünschten Strukturbeispiele:
+
+| Referenz | Geprüfte Struktur | Lokaler Extraktionstest |
+|---|---|---|
+| MTC | JSON-LD-`@graph` mit `MusicEvent`, Start/Ende über Mitternacht | unterstützt |
+| Blue Shell | HTML-Eventliste mit `article`, Überschrift, `time` und Detail-Link | unterstützt |
+| Tsunami Club | ICS mit UID, DTSTART/DTEND und Berliner Zeitzone | unterstützt |
+| Garagen | Schema.org-Event-Microdata mit `content`-Startdatum | unterstützt |
+| Live Music Hall | Semantische Detailseite mit `h1` und `time` | unterstützt |
+| Vollständig unbekannte Location | Neue Homepage-URL → Programm-Link → generische Eventliste/Detailseite | unterstützt, ohne Clubnamen im Code |
+
+Zusätzlich geprüft: unbekanntes Layout, fehlender Kalender, ausdrücklicher Leerbestand, JavaScript-Shell, fehlerhaftes JSON-LD, direkte URL, CSS-Profil, Startdatum ohne Uhrzeit, Freitag-/Samstag-Widerspruch, exakter Name, Alias und Mehrdeutigkeit, neue Indie-Party versus Konzert, externe Freigabe, wiederholte Scans, Dubletten, Änderungen importierter Events, deutscher DM-Text, bestätigte manuelle Übernahme, parallele Importe, Scanlock, einzelne fehlerhafte Location, Crawl-/Domain-/robots-Grenzen und SSRF-Adressklassen. Kein Test benötigt eine Live-Clubwebsite.
+
+Die PostgreSQL-Integrationstests liefen ausschließlich gegen einen separaten kurzlebigen Testcontainer auf Port 55434. Die vorhandene lokale Datenbank auf Port 5433 und produktive Systeme wurden nicht verwendet. Maven kompiliert für Java 21; Docker- und CI-Konfiguration verwenden ebenfalls Java 21. Der lokale Testhost hatte JDK 25. Validierung: 46 Backend-Tests erfolgreich, davon 20 Discovery-Tests; Maven-Paket erfolgreich. Frontend: ESLint und Next.js-Produktionsbuild erfolgreich. Compose-Konfiguration mit neutralen Testwerten validiert. Eine Prüfung im realen iPhone-/Instagram-Client und ein Live-Abgleich der fünf Website-Layouts sind damit nicht behauptet.
+
+Technische Referenzen: [jsoup-Selektoren](https://jsoup.org/cookbook/extracting-data/selector-syntax), [Apache HttpClient DNS-Resolver](https://hc.apache.org/components/httpcomponents-client-5.6.x/5.6.1/httpclient5/apidocs/org/apache/hc/client5/http/impl/io/PoolingHttpClientConnectionManagerBuilder.html).
+
+## 24.10 Korrektur der Blue-Shell-Quellenprüfung
+
+Die am 05.11.2026 öffentlich abgerufene [Blue-Shell-robots.txt](https://www.blue-shell.de/robots.txt) erlaubt `/` und sperrt für allgemeine Bots `*?lightbox=`. Der erste Parser hatte den Teil vor `*` als Präfix verwendet. Bei einer führenden Wildcard war dieses Präfix leer und sperrte dadurch irrtümlich sämtliche Seiten. Die Korrektur prüft das gesamte Muster und berücksichtigt Allow-Regeln sowie passende Bot-Gruppen; die Website-Regeln werden weiterhin eingehalten.
+
+Die robots.txt liegt als lokale Regression unter `blue-shell-robots.txt`. Die gezielten `RobotsRulesTests` und bestehenden `DiscoveryTests` laufen ohne Datenbank oder Live-Website. Diese Korrektur beseitigt die falsche robots-Sperre; sie ist kein Nachweis einer vollständigen Wix-Eventextraktion.
+
+## 24.11 Genreprüfung vor Event-Detailabrufen
+
+Die Quellensuche prüft jede erkannte Veranstaltung anhand ihres Titels und ihrer eigenen Übersichtsangaben gegen aktive Datenbank-Genres einschließlich Anzeigenamen und expliziter Aliase. Der Abgleich verwendet vollständige normalisierte Wörter, keine unscharfen Teilworttreffer. Ein positiver Genrebeleg erlaubt den Abruf des zugehörigen Detail-Links, auch bei URLs ohne `event`/`party` im Pfad. Dies gilt für „Quelle prüfen“ und die geplanten/manuellen Suchläufe gleichermaßen. Seit der Korrektur in 24.16 erlauben auch ein bekannter Partyreihenname/Alias oder ein ausdrücklicher Partyhinweis im Titel den begrenzten Detailabruf ohne Genrebeleg. Eindeutig fachfremde und Konzertfunde bleiben ausgeschlossen; fehlende Genres allein verhindern die Klärung einer erkennbaren Party nicht mehr. Ein positiver Genrebeleg allein berechtigt weiterhin nicht zum Kalenderimport.
+
+HTML-Eventkarten mit Titel und Link werden auch ohne Startdatum erkannt. JSON-LD-Links dürfen relativ sein. Für Detailabrufe bleiben HTTPS-/DNS-/SSRF-Schutz, exakter Host, robots.txt, acht Seiten pro Startquelle, Tiefe zwei und Queue-Limit 16 verbindlich. Erkannte Event-URLs werden aus der allgemeinen Navigationssuche ausgeschlossen, damit ein negatives Genreergebnis nicht durch ein `/events/...` im Link umgangen wird. Allgemeine Kalender-/Programmseiten dürfen weiterhin zum Finden von Veranstaltungen aufgerufen werden.
+
+Die Detailseite ergänzt Startangaben, Location, Status und Quellenbelege der Übersicht. Titel müssen nach Normalisierung eindeutig übereinstimmen; unterschiedliche Starttage, Absagen, Verschiebungen und Location-Widersprüche bleiben zur Prüfung erhalten. Fehlgeschlagene, blockierte, nicht erreichte oder nicht eindeutig zuordenbare Detailseiten markieren den Fund als unbestätigt. Zusammengeführte Übersicht und Detailquelle verwenden dieselbe Kandidatenidentität, sodass keine zweite Übernahme allein durch den zusätzlichen Abruf entsteht.
+
+Lokale Tests prüfen Genre-/Aliasfreigabe, Ablehnung eines unpassenden Konzertlinks trotz Event-Pfad, Wortgrenzen, fehlendes Startdatum, relative JSON-LD-Links, Datumskonflikte und Absagen, abweichende Detailtitel sowie robots-/Domain-Schutz. Die Erweiterung setzt voraus, dass die Übersicht selbst als Eventliste oder über ein konfiguriertes Extraktionsprofil lesbar ist; sie führt kein fremdes JavaScript aus.
+
+Validierung dieser Erweiterung: alle 59 Backend-Tests erfolgreich, Maven-Paket erfolgreich; PostgreSQL ausschließlich im separaten kurzlebigen Testcontainer auf Port 55434. Kein Push, Deployment oder produktiver Datenzugriff.
+
+## 24.12 Wix-Programmseiten und deutsche Textvorschauen
+
+Das am 05.11.2026 öffentlich abgerufene HTML von `https://www.blue-shell.de/programm` enthält seine Veranstaltungen bereits serverseitig. Die zuvor fehlende Erkennung war eine Lücke im HTML-Parser, keine notwendige JavaScript-Ausführung. Die erweiterten Regeln sind plattformbezogen, ohne Abfrage eines bestimmten Clubnamens oder Hosts:
+
+- Wix-Karten über `data-hook="event-list-item"`, Titel über `ev-list-item-title`, vollständige Datumsfelder im Bereich `ev-full-date-location` und direkte Detail-Links über `event-details`/`ev-rsvp-button`. Teilen-Links werden nicht als Eventdetail bevorzugt.
+- Deutsche Monatsnamen/-abkürzungen sowie numerische vollständige Datumswerte, optional mit Uhrzeit. Ein ausdrücklich getrennter Bereich wie `13. Nov. 2026, 23:00 – 14. Nov. 2026, 04:00` liefert ausschließlich den Start am 13. November um 23 Uhr. Explizite Alternativen mit „oder“ bleiben mehrere Startangaben.
+- Absatzbasierte Textlisten im Format `09.01. PARTYNAME` unter einer expliziten Jahreszeile wie `2027`. Der Jahreskontext bleibt auf denselben Absatzcontainer beschränkt. Ein alleiniger Bereich wie `2026/27` liefert kein eindeutiges Jahr; solche Einträge bleiben ohne Startdatum. Vorschauen werden ausdrücklich als unbestätigt markiert und nicht automatisch übernommen.
+- Zusammengesetzte Genrebegriffe mit expliziter Party-Endung wie `Indieparty` sind Genre- und Partybeleg, sofern das Genre aktiv im Katalog ist. Beliebige Teilworttreffer wie `Indien` bleiben ausgeschlossen. „Fällt aus“ wird als unbestätigte/abgesagte Angabe erkannt.
+
+Beim lokalen Auswerten des aktuell abgerufenen Programm-HTML wurden **55 Einträge erkannt: 20 Eventkarten und 35 Textvorschauen**. 46 Einträge enthalten einen vollständigen Starttag; neun Vorschauen haben nur den mehrdeutigen Jahresbereich. Das sind Extraktionszahlen und keine Anzahl bestätigter, relevanter oder importierter Partys. Die beispielhaft geprüfte Eventdetailseite lieferte ebenfalls strukturierte Eventdaten. Dies ersetzt keine Prüfung aller verlinkten Detailseiten.
+
+Die neue Fixture `wix-programme.html` bildet die beobachtete DOM-Struktur mit synthetischen Veranstaltungsnamen ab. Die Tests laufen ohne Live-Website und decken Karten plus Vorschau, deutsche Monate, nächtliche Datumsbereiche, Absagen, eindeutige und fehlende Jahre, Jahreskontextgrenzen, Genre-Partyzusammensetzungen sowie die Koexistenz mit JSON-LD ab. Die bestehenden synthetischen Referenzfixtures der anderen Locations bleiben unverändert.
+
+Validierung: 65 Backend-Tests ohne Fehler, Maven-Paket erfolgreich, isolierte PostgreSQL-Testinstanz auf Port 55434. Ein zusätzlicher lesender Live-Abruf über `EventPageFetcher` bestätigte `ROBOTS_ALLOWED=true` und `EVENTS_FOUND` mit 55 Einträgen; dabei wurden keine Kalender- oder produktiven Daten geschrieben.
+
+## 24.13 Quellennavigation und aktuelle MTC-Grenze
+
+Die Untersuchung der aktuellen MTC-Homepage am 05.11.2026 zeigte zwei vom bisherigen Filter übersehene Menüpunkte: `PARTY` führt nach `/about`, `LIVE` nach `/live-shows`. Die Navigationsregeln berücksichtigen nun auch diese Bezeichnungen, Konzert-/Show-Übersichten sowie zugängliche Beschriftungen aus `aria-label`/`title`. Es werden maximal 200 Links pro Seite angesehen und davon höchstens 40 passende Navigationslinks berücksichtigt; die Queue bleibt auf 16 Einträge und die Suche auf acht Seiten und Tiefe zwei begrenzt. Sprachalternativen aus HTML-`link`-Metadaten werden nicht als zusätzliche Kalenderseiten verfolgt. Programmseiten haben Vorrang vor bereits gefundenen Eventdetails, damit ein erster Kalender das Budget nicht aufbraucht, bevor weitere Party-Rubriken geprüft wurden.
+
+Eine Homepage mit gefundenen Programmverweisen erhält `SOURCE_LINKS_FOUND` statt einer irreführenden Extraktionsfehlermeldung. In der Quellenprüfung wird bei technischen Diagnosen keine vermeintlich bestätigte Zahl „0 Events“ mehr angehängt. Der Laufstatus priorisiert bei fehlenden Eventfunden den festgestellten JavaScript-Bedarf einer Unterseite gegenüber dem Navigationsstatus der Homepage.
+
+Die aktuellen MTC-Unterseiten liefern in den untersuchten HTTP-Antworten leere `HtmlComponent`-Elemente und keine auslesbaren Veranstaltungslisten. Das öffentlich eingebettete `wix-warmup-data`-JSON benennt diese Komponenten. Der Parser liest ausschließlich diese inert vorliegenden Metadaten und prüft, ob die bezeichnete Komponente tatsächlich leer im aktuellen DOM steht; eine globale Liste installierter Apps reicht als Diagnose nicht aus. Ergebnis ist `JAVASCRIPT_REQUIRED`, auch wenn der restliche Seitentext durch Navigation, Kontakt und Footer länger als die frühere 250-Zeichen-Heuristik ist. Vorhandene echte Eventdaten behalten Vorrang.
+
+Die Korrektur macht die MTC-Navigation nachvollziehbar, verspricht aber keine MTC-Eventextraktion aus browserseitig erzeugten Einbettungen. Es wird weder fremdes JavaScript ausgeführt noch ein geblockter Abruf umgangen. Für solche Quellen ist weiterhin eine zusätzlich hinterlegte öffentlich auslesbare Kalender-/Eventquelle erforderlich; eine externe Quelle bleibt als extern gekennzeichnet und benötigt eine ausdrückliche Automatikfreigabe. Die frühere synthetische JSON-LD-Fixture namens `mtc.html` belegt lediglich JSON-LD-Unterstützung und ist ausdrücklich keine aktuelle MTC-Kompatibilitätsbestätigung.
+
+Neue lokale Regressionen decken den MTC-Menüweg mit anderen Host-/Pfadnamen, Unterseiten nach mehr als 40 sonstigen Links, `aria-label`, Programmpriorität vor Eventdetails, leere aktuelle Komponenten gegenüber unbeteiligten Metadaten sowie Domain-/Tiefenbegrenzung ab.
+
+Validierung: 72 Backend-Tests und Maven-Paket erfolgreich; Frontend-Produktionsbuild und ESLint erfolgreich. Der zusätzliche lesende Live-Crawl erreichte die MTC-Homepage sowie die Party- und Live-Unterseiten und bestätigte den Navigations-/JavaScript-Befund. PostgreSQL-Tests liefen ausschließlich in einem separaten kurzlebigen Container auf Port 55434. Keine produktiven Datenänderungen, kein Push oder Deployment.
+
+## 24.14 Live Music Hall und Response-Größenlimit
+
+Die am 05.11.2026 öffentlich abgerufene Live-Music-Hall-Seite `/parties` enthält elf Eventkarten und etwa 962 KB HTML; `/veranstaltungen` enthält 18 Konzerteinträge und etwa 1,05 MB HTML. Der bestehende Wix-Parser erkennt diese Karten bereits. Das frühere 1.000.000-Byte-Limit blockierte jedoch die Konzertseite; bei unbekannter Content-Length wurden Größe und Lesezeit gemeinsam als `RESPONSE_LIMIT` gemeldet.
+
+Der Standard beträgt nun **2 MiB**, konfigurierbar über `DISCOVERY_MAX_RESPONSE_BYTES` zwischen 64 KiB und einer nicht überschreitbaren Hardcap von 4 MiB. Content-Length und tatsächlich gelesene Bytes werden beide begrenzt. Ein fehlender oder falscher Längenheader umgeht das Limit nicht. Zu große Antworten ergeben immer `RESPONSE_TOO_LARGE`; überschrittene Lese-/Socket-Zeiten ergeben `FETCH_TIMEOUT`. Komprimierte Antworten bleiben ausgeschlossen, nicht unterstützte Content-Types werden vor dem Lesen des Bodys abgewiesen. Domain-/DNS-/robots-Regeln, Seitenanzahl, Rate und Zeitbudgets bleiben unverändert.
+
+Die elf Party- und 18 Konzerteinträge sind Extraktionszahlen, keine bestätigten Genre-Treffer oder Kalenderimporte. Eine ältere lokale Backend-/Frontend-Instanz kann weiterhin die ursprünglichen Meldungen anzeigen; nach Änderungen muss der aktive Entwicklungsserver den aktuellen Code laden. Die Konfiguration ist in Compose und `.env.example` durchgereicht, ohne damit ein Deployment auszuführen.
+
+Lokale Regressionen prüfen eine Antwort knapp oberhalb des früheren Limits, die exakte Grenze und deren Überschreitung um ein Byte, einen endlosen Stream ohne Längenangabe, separate Timeout-Diagnose und die Konfigurations-Hardcap. Die Live-Seiten sind keine automatisierte Testabhängigkeit.
+
+Validierung: 77 Backend-Tests, Maven-Paket, Frontend-Produktionsbuild, ESLint und Compose-Konfigurationsprüfung erfolgreich. Zusätzliche lesende Live-Abrufe über den echten `EventPageFetcher` bestätigten für beide Live-Music-Hall-Seiten erlaubte robots-Regeln und `EVENTS_FOUND` mit elf beziehungsweise 18 Einträgen. Testdaten lagen ausschließlich in der kurzlebigen PostgreSQL-Instanz auf Port 55434; keine produktiven Datenänderungen, kein Push oder Deployment.
+
+## 24.15 Verbindlich nur Partys – keine Konzerte
+
+Nutzerentscheidung vom 05.11.2026: Konzerte sind für das Projekt irrelevant und ausdrücklich unerwünscht. Diese Entscheidung ersetzt ältere Beschreibungen, in denen Konzerte als mögliche Zielinhalte genannt werden. Die zuvor dokumentierten Konzertextraktionszahlen waren technische Parserprüfungen, keine erwünschten Projektergebnisse.
+
+`PartyOnlyPolicy` prüft Konzertbelege vor Genre-/Partyreihen-Matching. Explizite Konzert-/Concert-Bezeichnungen, deutsche Konzert-Zusammensetzungen, Tournee- und Tribute-Show-Belege schließen einen Fund aus; auch gleichzeitig genannte DJs, Partybegriffe, passende Genres oder ein exakter Partyreihenname heben diesen Ausschluss nicht auf. Gemischte Konzert-/Partyfunde werden konservativ ausgeschlossen. Seit 24.16 gilt die präzise Ausnahme für eine eigenständig als Aftershowparty/Afterparty betitelte Party: Die bloße Erwähnung des vorherigen Konzerts in ihrer Beschreibung macht sie nicht selbst zum Konzert. Ein Konzertbegriff im eigenen Titel bleibt ein Ausschluss. Der allgemeine Schema.org-Typ `MusicEvent` allein ist kein Konzertbeleg, weil auch Partys diesen Typ verwenden.
+
+Eindeutige Konzert-Menüpunkte wie „KONZERTE“, „LIVE“ und `/live-shows` werden nicht weiterverfolgt. Als Konzertübersichten erkennbare direkt hinterlegte Seiten erhalten `EXCLUDED_CONCERTS` („Konzertquelle ausgeschlossen – nur Partys relevant“). Gemischte allgemeine Veranstaltungsübersichten bleiben zulässig; darin werden einzelne Konzertfunde vor Detailabrufen entfernt. Das gilt für HTML, JSON-LD und ICS. Eine reine Konzertquelle ist ein bewusst ausgeschlossener Inhalt und kein technischer Scanfehler.
+
+Konzertfunde erzeugen keine neuen Discovery-Vorschläge. Wird beim erneuten Abgleich ein automatisch verwalteter Konzertkandidat erkannt, wird er als `IGNORED` archiviert. Manuell geprüfte Entscheidungen bleiben seit 24.16 geschützt; die serverseitige Importsperre für Konzerte gilt unabhängig davon weiter. Ein zusätzlicher serverseitiger Importcheck blockiert sowohl automatische als auch manuelle Discovery-Übernahmen anhand der gespeicherten Konzertbelege, auch nach manueller Änderung des Prüfstatus. Bestehende Kalenderdatensätze werden dadurch nicht automatisch gelöscht oder nachträglich verändert; es wurde keine produktive Datenbereinigung ausgeführt.
+
+Regressionen prüfen Konzertbelege trotz Genre/DJ/Partyname, reine und gemischte Übersichten, ICS, Party-`MusicEvent`, das Überspringen von Konzertnavigation und die Sperre manueller Übernahme eines alten Kandidaten.
+
+Validierung dieser Einschränkung: 82 Backend-Tests, Maven-Paket, Frontend-Produktionsbuild und ESLint erfolgreich. Datenbanktests ausschließlich in einem separaten kurzlebigen PostgreSQL-Container auf Port 55434; keine produktiven Daten geändert, kein Push oder Deployment.
+
+
+## 24.16 Discovery-Reset, Entscheidungsherkunft und Regelversion `party-rules-2`
+
+Die lokale Bestandsanalyse am **05.11.2026** erfolgte über eine PostgreSQL-Sitzung mit `default_transaction_read_only=on`. Die vorhandene Datenbank auf Port 5433 wurde weder migriert noch zurückgesetzt. Bestätigter Bestand: **94 automatisch ignorierte Kandidaten**, **0 manuell abgelehnte Kandidaten**, zwei weitere Vorschläge, **0 gespeicherte Partyreihen**, 42 aktive Genres und 65 Genre-Aliasse. Alle 94 ignorierten Zeilen stammten von Blue Shell und hatten denselben automatischen Sammelgrund. Der vollständige Befund und die Grenzen der Offline-Auswertung stehen in [DISCOVERY_DIAGNOSIS_2026-11-05.md](DISCOVERY_DIAGNOSIS_2026-11-05.md).
+
+Der neue Matcher bewertet dieselbe lesende Kopie als **8 `POSSIBLE_MATCH`, 78 `UNVERIFIED`, 8 `IGNORED`, 0 bestätigte bekannte Reihen**. Die acht möglichen Treffer umfassen sechs verschiedene Titel, nicht acht nachgewiesene Clubpartys. Unklare Konzert-/Partyart muss redaktionell geprüft werden; ein Genre-Match allein erzeugt keinen Kalendereintrag. Kein Reset dieser vorhandenen Daten wurde ausgeführt.
+
+### Status und Herkunft
+
+Der fachliche Matching-Befund `matching_class` ist vom bisherigen Bearbeitungsstatus getrennt:
+
+| Matching-Befund | Bedeutung | Bearbeitung |
+|---|---|---|
+| `MATCH` | Genau eine bekannte Partyreihe oder ein expliziter Alias erkannt | `READY` nur bei vollständigen, konfliktfreien Angaben und freigegebener Quelle; sonst Prüfung/Rückfrage |
+| `POSSIBLE_MATCH` | Unbekannte Reihe mit belegtem aktivem Kataloggenre/Alias | Vorschlag, niemals allein automatisch importieren |
+| `UNVERIFIED` | Genre-/Veranstaltungsinformationen fehlen oder die Zuordnung ist mehrdeutig | `NEEDS_INQUIRY`/`NEEDS_REVIEW`; kein automatischer Papierkorb |
+| `IGNORED` | Expliziter Konzert- oder fachfremder Beleg, etwa Poetry Slam, Comedy oder geschlossene Gesellschaft | Automatisch archivieren; Grund anzeigen |
+
+Bekannte Reihen müssen keine zusätzlichen Website-Genres beweisen. Ihre Standardgenres werden im Grund angezeigt. Namen werden Unicode-/Case-/Satzzeichen-normalisiert verglichen; gleichlautende kompakte Schreibweisen und ausdrücklich abgegrenzte Special-/Edition-/Volume-Suffixe sind zulässig. Beliebige Teilstrings und unscharfe Namensscores sind ausgeschlossen. Mehrere passende Reihen bleiben prüfbedürftig. Genrebegriffe stammen aus aktiven kanonischen Namen, Anzeigenamen und expliziten Genre-/OCR-Aliassen; Wortgrenzen und Kombinationen bleiben erhalten. Es gibt keine erfundenen Konfidenzprozente.
+
+`decision_origin` unterscheidet `AUTOMATIC` und `MANUAL`. Für historisch nicht sicher rekonstruierbare Prüfentscheidungen verwendet die additive Migration **V13** bewusst `LEGACY` und schützt diese wie manuelle Entscheidungen. Alte `REJECTED`- und ausdrücklich manuelle Gründe sind manuell, alte `IGNORED`-Entscheidungen nach dem bisherigen Code automatisch. Die zwei vorhandenen offenen Altvorschläge werden deshalb konservativ geschützt, statt eine unbewiesene Historie zu erfinden. Neue manuelle Prüfungen, Ablehnungen, Dublettenmarkierungen und Übernahmen werden explizit protokolliert. Ein erneuter Abruf darf technische Quellenbelege und den getrennten technischen Befund aktualisieren, ohne manuelle Status-, Party-, Datums- oder Rückfrageentscheidungen zu überschreiben. Neue Konzertbelege bleiben dadurch auch bei geschütztem manuellem Prüfstatus vor einem Import wirksam.
+
+Zusätzliche Felder: `automatic_reason`, `matcher_version`, `evaluated_at`, `previous_status`, `last_evaluation_id` und `raw_event`. Letzteres speichert die **extrahierten Eventfelder** mit Startliste, Status, Location und begrenztem Quellenbeleg, keine vollständige HTML-Archivkopie. Alte Zeilen haben keine vollständigen Event-Rohdaten. Ihre Rekonstruktion aus Titel/Datum/Beleg erhält `UNCONFIRMED`; verlorene Konflikt-/Statusangaben werden nicht als bestätigte Daten erfunden. Ein echter erneuter Abruf ist über Modus C möglich.
+
+### Bedienung und Reset-Umfänge
+
+Unter `/dashboard/vorschlaege`:
+
+- **Jetzt suchen:** Aktivierte Locations im bestehenden begrenzten Crawler erneut abrufen. Auch ein unveränderter Fund wird bei geänderter Matcher-Version neu geprüft.
+- **Neu bewerten:** Öffnet die Vorschau mit Modus B.
+- **Suchlauf zurücksetzen:** Öffnet dasselbe Bestätigungsmodal mit Modus A.
+
+| Modus | Verhalten |
+|---|---|
+| A / `IGNORED` | Automatische `IGNORED`-/`REJECTED`-Entscheidungen anhand gespeicherter Belege neu bewerten |
+| B / `ALL` | Alle nicht übernommenen, automatisch verwalteten Kandidaten erneut bewerten |
+| C / `RESCAN` | Zusätzlich alle aktivierten Location-Websites mit bisherigen Quellen-/Seiten-/Hostbudgets neu abrufen; bekannte Treffer aus alten Belegen erst nach erfolgreichem neuem Abruf automatisch übernehmen |
+
+Manuelle Prüfentscheidungen und unklare `LEGACY`-Entscheidungen bleiben standardmäßig unverändert. **„Auch manuell abgelehnte Kandidaten erneut zur Prüfung vorlegen“** ist standardmäßig aus und benötigt ein zweites ausdrückliches Bestätigungshäkchen; der Server verlangt dafür ebenfalls eine Bestätigungsangabe. Nur manuelle `REJECTED`-Zeilen werden dadurch geöffnet, keine anderen manuellen Entscheidungen. Diese Kandidaten bleiben `MANUAL` und gehen ausschließlich zu `NEEDS_REVIEW`, auch bei einem technischen `MATCH`. Bereits importierte Kandidaten und ihre Kalendereinträge werden durch die Neubewertung nicht geändert oder gelöscht.
+
+Die Vorschau zeigt Anzahl, geschützte Altentscheidungen, fehlende Event-Rohdaten sowie Party/Location, alten/neuen Status und Grund; maximal 500 Detailzeilen, aber die Anzahl und Verarbeitung gelten für den gesamten betroffenen Bestand. Modus C kann weitere neue Funde liefern, die vor dem Abruf noch nicht bekannt sind. Ein Vorschau-Hash wird vor der Anwendung erneut geprüft; geänderte Kandidaten/Regelergebnisse erfordern eine neue Vorschau.
+
+### Transaktionen, Idempotenz und Audit
+
+`DiscoveryResetService` übernimmt gespeicherte Neubewertungen in einer Transaktion unter dem mit Import/Redaktion geteilten Transaktionslock `73624602`. `DiscoveryWorkLock` reserviert den PostgreSQL-Sessionlock `73624601` **vor** der Jobannahme und hält ihn über den gesamten Scan/Reset. Damit sind Scheduler, manuelle Suche und Reset auch über mehrere Backend-Instanzen gegenseitig ausgeschlossen. Ein konkurrierender neuer Auftrag erhält HTTP 409.
+
+Jede Reset-Anforderung hat eine UUID und einen Hash ihrer Optionen. Ein Retry derselben Anforderung liefert denselben Vorgang; dieselbe UUID mit anderen Optionen wird abgelehnt. Ein erneuter eigenständiger Reset erzeugt keine zusätzlichen Kandidaten oder Kalendereinträge. `discovery_candidate_identities` erhält alternative Quellidentitäten. Titel/Ort/eindeutiger Tag verhindern zusätzliche Neuerfassungen desselben Vorkommens über Textliste, JSON-LD und Detailseite. Bereits vorhandene Mehrfachzeilen werden nicht pauschal gelöscht oder automatisch zusammengeführt; bei neuen Identitäten wird eine vorhandene, bevorzugt geschützte Zeile wiederverwendet.
+
+`discovery_operations` speichert Modus, Anforderungsoptionen einschließlich Bestätigung, Regelversion, Start/Ende, Status, Bericht und Zähler. `discovery_decisions` speichert Kandidat/Vorgang, vorherigen/neuen Bearbeitungsstatus und Matching-Befund, Ursprung, Grund, Regelversion und Bewertungszeit. Es wird keine historisch unbekannte Benutzeridentität erfunden. `COMPLETED`, `PARTIAL`, `FAILED` und nach einem Neustart erkannte `INTERRUPTED`-Vorgänge bleiben unterscheidbar. Location-Fehler beschädigen keine manuellen Entscheidungen; fehlgeschlagene Abrufe erlauben keine Übernahme aus alten Belegen. Gespeicherte Teilentscheidungen und Location-Diagnosen bleiben erkennbar.
+
+Alle Zähler stammen aus SQL-Abfragen beziehungsweise dem persistenten Entscheidungsprotokoll. Filter gelten serverseitig **vor** der 500-Zeilen-Begrenzung. „Neu bewertet“ basiert auf dem Reset-Audit, nicht bloß auf einem aktuellen Status. Die Zusammenfassung zählt eindeutige Kandidaten, neu entstandene `POSSIBLE_MATCH`-Befunde, weiterhin ignorierte Kandidaten, geschützte Entscheidungen, Status-/Befundwechsel und fehlerhafte Locations. Quellen und bisherige `discovery_runs` bleiben erhalten. Es gibt keine Reset-DELETEs und kein TRUNCATE.
+
+### API und Regressionen
+
+- `POST /api/v1/discovery/reset/preview`: `{mode, includeManualRejected}` → Vorschau und Token, ausschließlich lesend.
+- `POST /api/v1/discovery/reset`: Modus, Option, Bestätigung, Vorschautoken und Vorgangs-UUID → HTTP 202 mit `operationId`.
+- `GET /api/v1/discovery/operations/{id}`: persistentes Ergebnis/Fehlerstatus.
+- Die Übersicht liefert Metriken, Vorgänge, Diagnosen und die serverseitig gefilterten Kandidaten.
+
+Lokale Fixtures prüfen fehlende Genres, spezifische Genre-Kombinationen, bekannte Reihen ohne Website-Genre, Satzzeichen/Schreibweisen, Aliasse, Specials, Datumskonflikte, fachfremde Events und eigenständige Aftershowpartys. PostgreSQL-Regressionen prüfen Schutz und explizites Wiederöffnen manueller Ablehnungen, Schutz anderer manueller/unklarer Altentscheidungen, unveränderte Kalendertermine, wiederholte Resets/Request-Retries, bestehende Mehrfacherfassungen, veraltete Vorschauen, tatsächliche API-Zähler/Filter, parallele Jobs und fehlgeschlagene Neuabrufe. Frontend-Tests prüfen Vorschau, Umfangswechsel, ausdrückliche Zusatzbestätigung und erhaltenen Fokus.
+
+Der optionale Test `ReadOnlyDiscoveryDiagnosisTests` verarbeitet nur eine per `NOIZY_DISCOVERY_SNAPSHOT` ausdrücklich übergebene lokale JSON-Kopie; er öffnet weder Datenbank noch Websites. Rohdaten des Bestands werden nicht im Repository eingecheckt. Für Datenbanktests immer eine separate kurzlebige Testinstanz und `DB_URL`/`DB_USER`/`DB_PASSWORD` setzen; niemals Tests mit schreibenden Fixtures gegen den bestehenden lokalen Bestand starten.
+
+
+Validierung der Reset-Korrektur: **100 Backend-Tests erfolgreich**, einschließlich des ausdrücklich aktivierten Offline-Replays der 94 kopierten Datensätze; Maven-Paket erfolgreich. **16 Frontend-Tests**, TypeScript (`tsc --noEmit`), ESLint und Next.js-Produktionsbuild erfolgreich. PostgreSQL-Schreibtests ausschließlich im kurzlebigen Testcontainer auf Port 55434. Die Bestandsdatenbank blieb auf Migration V12 und wurde nur lesend untersucht. Keine produktiven Datenänderungen, kein Push und kein Deployment. DOM-Tests ersetzen keine visuelle Browser-/Mobilabnahme.
+
+
+# 25. Permanente Code-Quality-Routine (05.11.2026)
+
+Die Root-`AGENTS.md` enthält das verbindliche **Mandatory Quality Gate** für alle zukünftigen Codex-Aufträge. Nach zusammenhängenden Änderungen gelten passende Tests/Analysen; vor jedem lokalen Commit ist `scripts/check-quality.sh --full` erfolgreich auszuführen. Zusätzlich muss VS Code vor jedem Commit **null projektbezogene Fehler und Warnungen** anzeigen, einschließlich bestehender Conversion-, Unchecked-Conversion- und Null-Type-Safety-Warnungen. Auch entsprechende ECJ-Informationshinweise blockieren. Ohne aktuellen IDE-Diagnosenachweis kein Commit; ein grüner CLI-Lauf ersetzt diesen Nachweis nicht. Keine still übersprungenen Checks, globalen Suppressions, Regelabschwächungen oder `--no-verify`-Umgehungen.
+
+Versionierte Hooks liegen in `.githooks`; `scripts/install-hooks.sh` aktiviert sie nach Prüfung vorhandener Konfigurationen, ohne andere Hooks unbemerkt zu ersetzen. Neue Klone müssen den Installer einmal ausführen. Der Hook prüft ausschließlich und verändert weder Index noch Commit-/Push-Zustand automatisch.
+
+Die gemeinsame lokale/CI-Routine umfasst javac mit `-Xlint:all`/Warnungsfehlern, Tests und Maven-Paket, eine gepinnte zusätzliche ECJ-Analyse einschließlich Testcode, Next-Typegen, TypeScript, ESLint mit `--max-warnings=0`, Frontend-Tests und Produktionsbuild. Die ECJ-XML-Berichte werden unabhängig vom Exitcode ausgewertet: Jeder Problemeintrag einschließlich INFO verhindert einen Erfolg; fehlende oder beschädigte Berichte ebenso. `.vscode/settings.json` bindet dasselbe Java-Profil mit JSpecify-Defaults und den sekundären älteren Spring-Annotationen ein. Diff, Konfliktmarker und konfigurierte Secret-Muster werden auch im tatsächlichen Index geprüft. Backend-Schreibtests laufen stets in einem eigenen kurzlebigen PostgreSQL-Container mit zufälligem Loopback-Port, niemals gegen bestehende Datenbanken.
+
+Die erste Bereinigung behob 44 Java-Warnungen. Die dabei tolerierten zunächst 98, nach Event Change Monitoring 109 Conversion-/Null-Informationshinweise waren eine Lücke des Gates und sind keine zulässige Ausnahme mehr. Die Korrektur erhält generische NonNull-Verträge durchgängig und prüft Werte an Bibliotheksgrenzen tatsächlich. `JsonValues` weist unerwartetes JSON `null` zurück, bevor erforderliche API-/Eventobjekte verwendet werden. Es gibt keine pauschalen Suppressions oder externen Teilmodelle, die unannotierte Bibliotheksmethoden fälschlich als sicher deklarieren. Der optionale historische Offline-Discovery-Test wird ohne privaten Export ausdrücklich als nicht ausgeführt gemeldet. Voraussetzungen, Diagnosegrenzen, Fehlerbehandlung und getestete Fehler-/Hook-Szenarien sind in [QUALITY.md](QUALITY.md) dokumentiert.
+
+# 26. Event Change Monitoring und zentraler Cancellation-Prozess (05.11.2026)
+
+Diese Erweiterung setzt die Anforderungen aus Kapitel 10 teilweise technisch um und ergänzt Kapitel 24 um die Überwachung bekannter Veranstaltungen. Es entstehen keine zweiten Event-/Party-Modelle: Quellenbeobachtungen referenzieren `discovery_candidates`, bestätigte Absagen referenzieren `calendar_entries`.
+
+## 26.1 Bestandsanalyse: Soll und tatsächlicher Code
+
+Vor dieser Änderung waren wöchentliche Suche (Dienstag 09:00 Europe/Berlin), ICS-UID/JSON-LD-ID/Detail-URL, Identitätsaliasse, konservative Übernahme, manuelle Prüfentscheidungen und Fingerprint-Änderungen vorhanden. Bei einem geänderten bereits übernommenen Kandidaten wurde nur allgemein `NEEDS_REVIEW` gesetzt. Ein versionierter Quellenverlauf, eigene Änderungsmeldungen, ein täglicher Check und ein zentraler Cancellation-Service fehlten.
+
+Kapitel 10 beschrieb einen **Soll-Workflow**, keine vorhandene Implementierung. Insbesondere existieren im aktuellen Backend **keine Instagram-Publication-Entität, keine Publishing-Queue, keine laufenden Publishing-Jobs und keine Remote-Reconciliation**. Redaktionsentwürfe enden bei `APPROVED`; dieser Status bedeutet ausdrücklich nicht „veröffentlicht“. Die Erweiterung erfindet keine Instagram-Erfolge oder erfolgreichen Jobabbrüche. Eine spätere Publisher-Integration muss vor dem Senden die serverseitige Sperre berücksichtigen und angefangene/unklare Remote-Vorgänge reconciliieren. Das reguläre Publishing bleibt gemäß Projektvorbehalt deaktiviert. Reale Tests „geplanten Job storniert“, „laufenden Instagram-Vorgang gestoppt“ und „veröffentlichten Remote-Post erhalten“ sind mangels dieser Komponenten nicht ausführbar; geprüft wird der Erhalt der bestehenden lokalen Inhalte und das Unterlassen jeglicher Remote-Aktion.
+
+## 26.2 Daten, Identität und Änderungsvergleich
+
+Additive Migration **V14** ergänzt Kandidaten um erste Beobachtung, letzte erfolgreiche Bestätigung, letzte Änderung, normalisierten Monitoring-Fingerprint und letzten Quellenbefund. Bei Altzeilen bleibt die unbekannte erste Sichtung unbekannt. `discovery_observations` hält begrenzte extrahierte Eventversionen einschließlich stabiler Identität, Quelle, Vorgang und Zeitpunkt; keine vollständigen HTML-Archive. ICS-UID, strukturierte ID, HTML-`data-event-id` und Detail-URL werden genutzt, soweit vorhanden. Ohne stabile Identität wird ausschließlich ein gleichnamiges Vorkommen am selben Ort und Tag konservativ zugeordnet; ein anderer Tag wird nicht durch unscharfes Titelmatching als sichere Verschiebung behauptet.
+
+`event_changes` enthält Vorher-/Nachher-Befund, Kalenderverknüpfung, Quelle, Grund, Sperre und Bearbeitungsrevision. `event_change_history` protokolliert Entscheidungen. Der Vergleich findet vor weiteren automatischen Übernahmen über den gesammelten Quellenstand statt. Unterstützte Befunde:
+
+- `CANCELLATION_DETECTED`: ausdrücklicher offizieller Absagebefund; redaktionelle Bestätigung nötig.
+- `CANCELLATION_UNCONFIRMED`: ausdrücklich unsicherer Absagehinweis, keine öffentliche Absage.
+- `RESCHEDULE_DETECTED`: geändertes Datum derselben Identität oder expliziter Verschiebungsstatus.
+- `POSSIBLE_REPLACEMENT`: andere Party am belegten Location-/Kalendertag, bisheriges Event nicht gleichzeitig bestätigt. Mehrere Events bleiben möglich; kein automatisches Ersetzen.
+- `SOURCE_MISSING`: nach zwei vollständigen erfolgreichen Abrufen derselben Quelle nicht bestätigt, keine Absage.
+- `EVENT_CHANGED`, `LINEUP_CHANGE`, `CONFLICTING_SOURCES`: weitere Änderungen beziehungsweise widersprüchliche Angaben.
+
+Eine unvollständige HTML-Liste, Navigation, Rendering-Anforderung, Abrufbegrenzung oder Netzwerk-/Robotsfehler darf keine Abwesenheit beweisen. Automatisch nachweisbare Vollständigkeit ist derzeit bewusst auf vollständig parsebare, nicht abgeschnittene ICS-Kalender begrenzt. HTML-Änderungen werden positiv erkannt; das Fehlen in beliebigen HTML-Programmlisten wird ohne Vollständigkeitsnachweis **nicht** als `SOURCE_MISSING` ausgegeben. Eine erneute tägliche vollständige ICS-Prüfung ist der Kontrollabruf; Wiederholung desselben Vorgangs zählt nicht doppelt.
+
+## 26.3 Zeitplan und Schutz vor konkurrierenden Änderungen
+
+Die wöchentliche Suche bleibt erhalten. Zusätzlich gilt täglich 09:00 Europe/Berlin für bekannte relevante Kandidaten und übernommene Veranstaltungen im kommenden 21-Tage-Fenster. Der tägliche Check verwendet vorhandene Locations, offizielle gespeicherte Detailseiten, Übersichten und Quellenprofile; keine neue Location-Recherche. Pro Location bleiben Abruf-/Seitenbudgets begrenzt. Die Zeitzone und Cron-Ausdrücke sind konfigurierbar:
+
+```properties
+DISCOVERY_ENABLED=true
+DISCOVERY_CRON=0 0 9 * * TUE
+DISCOVERY_MONITOR_ENABLED=true
+DISCOVERY_MONITOR_CRON=0 0 9 * * *
+DISCOVERY_ZONE=Europe/Berlin
+```
+
+Suche, Reset und Monitoring teilen den bestehenden PostgreSQL-Sessionlock. Gleichzeitige lokale Scheduler-Termine werden hinter dem laufenden Worker erneut angefordert; manuelle konkurrierende Aufträge erhalten weiterhin einen Konflikt. Ein belegter Lock einer anderen Backend-Instanz erlaubt keine parallele Verarbeitung. Globale Transaktionslocks schützen Quellenentscheidungen, Kalenderänderungen, Originalfreigaben und Cancellation. Kalenderaktualisierungen prüfen zusätzlich den beim Befund gespeicherten Kalenderstand; veraltete Kalender-/Dialogrevisionen führen zu HTTP 409. Das Aufheben einer Sperre stellt eine frühere Freigabe nicht automatisch wieder her.
+
+## 26.4 Ein zentraler Cancellation-Service
+
+`CancellationService` verarbeitet ausschließlich **bestätigte vollständige Veranstaltungsabsagen**. Auslöser: manuell bestätigtes Teamwissen, ausdrücklicher offizieller Quellenbefund oder dokumentierte bestätigte DM-Antwort. Pro Kalendertermin existiert höchstens eine Cancellation. `event_cancellations` speichert Auslöser, allgemeinen Grund, Quelle, Zeitpunkt, optionalen Ersatzkandidaten und einen **separaten Absageentwurf**; `cancellation_history` protokolliert den Verlauf.
+
+Die Bestätigung markiert das bestehende Kalender-Event `CANCELLED`, setzt die Originalfreigabe auf prüfbedürftig und sperrt serverseitig weitere Originalfreigaben. Originalcaption, Hashtags, Genres, Musik, Mentions, Flyer und PartySeries-ID werden nicht umgewandelt. Ein Ersatz bleibt ein eigener Discovery-Kandidat und wird separat geprüft; die Absage kann ihn verknüpfen. Es erfolgt keine automatische Erstellung eines zweiten Kalendereintrags und keine Löschung des alten Eintrags.
+
+`PERSONALBEDINGTER_AUSFALL` ist ein allgemeiner interner Grund, keine Diagnose. Erkannte Gesundheitsbegriffe in externem Belegtext beziehungsweise Titeln führen vor Speicherung zu neutralem Ersatztext. Das ist eine konservative lexikalische Redaktion, keine vollständige DLP-/Medizinklassifikation; zusätzliche private Inhalte dürfen auch manuell nicht übernommen werden. Rückfragen, Antworten, Gründe und öffentliche Absagetexte dürfen keine privaten Gesundheitsdetails enthalten; die automatisch erzeugte Caption bleibt neutral. Nur-DJ-Ausfälle bleiben `LINEUP_CHANGE`: Event aktiv, Originalentwurf erhalten, redaktionelle Prüfung/Sperre bis zur Klärung. Es werden keine Ersatz-DJs erfunden.
+
+Die Aktion „Absagegrafik vorbereiten“ erzeugt idempotent ein **neues PNG-MediaAsset** mit kontrastreichem CANCELLED-/ABGESAGT-Balken. Vorhandener Event-Flyer, sonst Dauerflyer, dient als Hintergrund; ohne Flyer entsteht eine neutrale Grafik. Originaldateien und -referenzen bleiben erhalten. Das Backend-Runtime-Image installiert dafür `fontconfig` und DejaVu-Schriften; die Java2D-Grafikerstellung läuft headless. Der Absageentwurf hat eigene Zustände `DRAFT`, `READY_FOR_REVIEW`, `APPROVED`; die Freigabe verlangt eigene Grafik und Text. Sie sendet nichts an Instagram. Die Notfallausnahme der Feed-3er-Regel wird nicht automatisch aktiviert: Feed-Queue, Publisher-Rollen und deren protokollierte Notfallpriorisierung bleiben bis zur tatsächlichen Publishing-Implementierung Soll-Zustand.
+
+## 26.5 Oberfläche und API
+
+Unter „Vorgeschlagene“ öffnet **„Änderungen & Absagen“** den eigenen Bereich mit Kategorien, Vorher-/Nachher-Tabelle, Quellenlink, Historie, bestätigter Kalenderaktualisierung, Trennung mehrerer Events, Ablehnung und begründetem Aufheben der Sperre. Der DM-Entwurf enthält Location, alte/neue Party und Datum, ist editierbar/kopierbar und kann manuell als gesendet oder beantwortet markiert werden. Die App versendet keine DM. Bestätigte Absagen verwenden dasselbe Cancellation-Modal wie manuelle Absagen. Die Redaktion zeigt Warnungen/Sperrgründe; der Kalender kennzeichnet bestätigte Absagen.
+
+- `POST /api/v1/discovery/monitor`: separaten Änderungscheck anfordern.
+- `GET /api/v1/discovery/changes`: Änderungsvergleiche; `/{id}/history`, `/{id}/dm`, `/{id}/replacements` für Verlauf/Rückfrage/Ersatzkandidaten.
+- `PUT /api/v1/discovery/changes/{id}`: versionierte, begründete redaktionelle Entscheidung.
+- `GET /api/v1/discovery/candidates/{id}`: Ersatzkandidaten direkt prüfen.
+- `GET/POST /api/v1/cancellations`: zentrale Liste/manuelle oder belegte bestätigte Absage.
+- `POST/GET /api/v1/cancellations/{id}/graphic`: eigene Grafik vorbereiten/lesen.
+- `PUT /api/v1/cancellations/{id}/announcement`: versionierten separaten Absageentwurf speichern/freigeben.
+- `GET /api/v1/cancellations/{id}/history`: Absagehistorie.
+
+Neue APIs folgen der bestehenden lokalen/staging-API- und Caddy-Sessionabsicherung. Individuelle Team-/Publisher-Identitäten und deren differenzierte Rollen sind in diesem Repository noch nicht umgesetzt und werden nicht durch frei übergebene Actor-IDs vorgetäuscht.
+
+
+## 26.6 Lokale Validierung und Grenzen
+
+Regressionen prüfen stabile Identität trotz Datum-/Titelwechsel, echte kanonische Detail-URLs, Uhrzeit/Location/Beschreibung, offizielle Absage versus Gerücht und DJ-Ausfall, vollständige versus beschädigte ICS-Quellen, Quellenverlust nach wiederholter vollständiger Prüfung, widersprüchliche Quellen ohne doppelte Meldung, bestehende manuelle Kalendertermine, wiederverwendete Identitäten, eigenständige Ersatzkandidaten und deren ausdrücklich geprüfte Übernahme nach bestätigter Absage. Getestet sind unveränderte Originalcaptions/-genres/-freigabestatus und Originalflyerbytes, serverseitig blockierte Originalfreigaben, separate Grafik-/Absagefreigabe, veraltete Revisionen und das 21-Tage-Fenster.
+
+Frontend-DOM-Regressionen prüfen Vergleichstabelle, editierbaren Rückfragetext ohne Fokusverlust, manuelle Versandmarkierung, Konfliktmeldung ohne Verlust der Eingaben, zentrale manuelle Absage und separates Grafikvorbereiten ohne Publishing-/Instagram-Aufruf. Sie ersetzen keine visuelle Abnahme in realen mobilen Browsern oder einen realen Instagram-/Publishing-Test. Vor dem lokalen Commit laufen TypeScript, ESLint, Production-Build, Maven-Paket, Java-Analysen und sämtliche Tests über das verbindliche vollständige Quality Gate. Datenbankschreibtests und Flyway V14 laufen ausschließlich im kurzlebigen Testcontainer; die bestehende Entwicklungs-/Produktionsdatenbank wird nicht migriert. Diese Prüfungen lösen weder Deployment noch Instagram-Aktionen aus.
+
+Der zuletzt vollständig bestätigte Lauf nach der Qualitätskorrektur umfasst **127 Backend-Tests (126 erfolgreich, ein ausdrücklich optionaler historischer Offline-Test ohne Exportdatei übersprungen)** und **22 erfolgreiche Frontend-Tests**, zusätzlich **13 Gate-/Hook-Selbsttests**, **11 Java-Analysetestmethoden** und die Frontend-Negativprüfungen. javac sowie beide lokal geprüften ECJ-Versionen melden im Haupt- und Testcode **null Fehler, Warnungen und INFO-Diagnosen**. Die früher tolerierten 109 Informationshinweise sind behoben; es gibt keine entsprechende Ausnahme mehr, siehe [QUALITY.md](QUALITY.md). TypeScript, ESLint, Backend-Paket, Frontend-Build und `git diff --check` sind erfolgreich. Der Nutzer hat die aktuelle VS-Code-Problemliste mit null Fehlern und Warnungen bestätigt. Dies ist keine visuelle Mobil- oder Instagram-Abnahme.
+
+Nachtrag zur vollständig nachgereichten Anforderung: Bekannte Special-/Edition-Titel bleiben eine Titeländerung desselben Events. Lokale ICS-Fixtures prüfen die stabile UID bei Freitag-/Samstag-Verschiebung und Titelkorrektur. Zusätzliche PostgreSQL-Regressionen prüfen, dass abgelehnte unveränderte Befunde geschlossen bleiben, erst ein neuer relevanter Befund eine weitere Warnung erzeugt und spätere manuelle Kalenderkorrekturen weder vom Scan noch von einem veralteten Vergleich überschrieben werden.
+
+Fehlt eine stabile externe Identität, wird ein neuer gleichnamiger Termin als unklarer Quellenkonflikt (Wiederholung oder Verschiebung) zur Redaktion gegeben und der bisherige Originalpost vorsorglich gesperrt; er wird nicht als sicher verschoben ausgegeben. Explizite Special-/Edition-Schreibweisen am gleichen Tag nutzen den vorhandenen konservativen Namensmatcher und erzeugen keine zweite Kalenderübernahme.
+
+Der nachgereichte Schutz vor Überschreibungen gilt auch für die Redaktionsoberfläche: Gespeicherte Captions einschließlich Leertext/Zeilenumbrüchen werden beim Öffnen und nach Kalenderaktualisierungen unverändert geladen; Format-/Mention-/Eintrittsabweichungen erzeugen lediglich einen Prüfhinweis. Bewusst leere Mention-Auswahlen werden nicht mit Standard-DJs neu gefüllt. Ein DOM-Regressionstest prüft den tatsächlichen Editor einschließlich anschließendem Speichern.
+
+Auch nicht-offizielle Beobachtungen bleiben versioniert erhalten. Sie dürfen den letzten offiziellen Bestätigungsstand nicht ersetzen und erzeugen bei Abweichungen einen Quellenkonflikt, keine bestätigte offizielle Absage. Eine eigene Datenbankregression schützt diese Priorität.

@@ -105,6 +105,20 @@ class GenreLexiconTests {
                 .containsExactly("Breakbeat");
     }
 
+    @Test
+    void constructorDoesNotDispatchOverridableRefresh() {
+        GenreRepository genres = mock(GenreRepository.class);
+        GenreAliasRepository aliases = mock(GenreAliasRepository.class);
+        when(genres.findAllByActiveTrueOrderByCanonicalNameAsc()).thenReturn(List.of());
+        class GuardedLexicon extends GenreLexicon {
+            GuardedLexicon() { super(genres, aliases); }
+            @Override public synchronized void refresh() {
+                throw new AssertionError("Refresh must not run before subclass initialization");
+            }
+        }
+        assertThat(new GuardedLexicon().findGenres(List.of(word("Unknown")))).isEmpty();
+    }
+
     private TesseractOcrService.OcrWord word(String text) {
         return word(text, 90, 0);
     }

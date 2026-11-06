@@ -1,5 +1,7 @@
 package de.noizycologne.backend.media;
 
+import static java.util.Objects.requireNonNull;
+import org.jspecify.annotations.NonNull;
 import de.noizycologne.backend.calendar.CalendarEntry;
 import de.noizycologne.backend.calendar.CalendarEntryRepository;
 import de.noizycologne.backend.party.PartySeries;
@@ -50,14 +52,14 @@ class CalendarEntryFlyerControllerIntegrationTests {
     private static final byte[] PNG = java.util.Base64.getDecoder().decode(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
 
-    private static byte[] JPEG;
+    private static final byte @NonNull[] JPEG;
 
     static {
         try {
             BufferedImage image = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
             ByteArrayOutputStream output = new ByteArrayOutputStream();
             ImageIO.write(image, "jpg", output);
-            JPEG = output.toByteArray();
+            JPEG = requireNonNull(output.toByteArray());
         } catch (java.io.IOException exception) {
             throw new ExceptionInInitializerError(exception);
         }
@@ -81,10 +83,10 @@ class CalendarEntryFlyerControllerIntegrationTests {
     @Autowired
     private MediaAssetRepository mediaAssetRepository;
 
-    private final List<String> entryIds = new ArrayList<>();
-    private final List<String> venueIds = new ArrayList<>();
-    private final List<String> partyIds = new ArrayList<>();
-    private final List<String> assetIds = new ArrayList<>();
+    private final @NonNull List<String> entryIds = new ArrayList<>();
+    private final @NonNull List<String> venueIds = new ArrayList<>();
+    private final @NonNull List<String> partyIds = new ArrayList<>();
+    private final @NonNull List<String> assetIds = new ArrayList<>();
 
     @AfterEach
     void cleanUp() throws Exception {
@@ -127,8 +129,8 @@ class CalendarEntryFlyerControllerIntegrationTests {
 
         MockMultipartFile upload = new MockMultipartFile(
                 "file", "event.jpg", MediaType.IMAGE_JPEG_VALUE, JPEG);
-        String uploadBody = mockMvc.perform(multipart("/api/v1/calendar-entries/{id}/flyer", entry.getId())
-                        .file(upload))
+        String uploadBody = mockMvc.perform(requireNonNull(multipart("/api/v1/calendar-entries/{id}/flyer", entry.getId())
+                        .file(upload)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andReturn().getResponse().getContentAsString();
@@ -179,8 +181,8 @@ class CalendarEntryFlyerControllerIntegrationTests {
 
         MockMultipartFile upload = new MockMultipartFile(
                 "file", "closure.png", MediaType.IMAGE_PNG_VALUE, PNG);
-        mockMvc.perform(multipart("/api/v1/calendar-entries/{id}/flyer", entry.getId())
-                        .file(upload))
+        mockMvc.perform(requireNonNull(multipart("/api/v1/calendar-entries/{id}/flyer", entry.getId())
+                        .file(upload)))
                 .andExpect(status().isBadRequest());
 
         assertThat(mediaAssetRepository.count()).isEqualTo(assetsBefore);

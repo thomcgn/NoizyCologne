@@ -16,12 +16,14 @@ public record CalendarEntryResponse(
         String startTime,
         String reason,
         List<String> mentionDjIds,
-        PartyFlyerResponse eventFlyer
+        PartyFlyerResponse eventFlyer,
+        String eventStatus
 ) {
 
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
 
     public static CalendarEntryResponse from(CalendarEntry entry, PartyFlyerResponse eventFlyer) {
+        var startTime = entry.getStartTime();
         return new CalendarEntryResponse(
                 entry.getId(),
                 entry.getEventDate().toString(),
@@ -30,10 +32,11 @@ public record CalendarEntryResponse(
                 entry.getNotes(),
                 entry.getEntryPrice(),
                 entry.getPartyId(),
-                entry.getStartTime() == null ? null : entry.getStartTime().format(TIME_FORMAT),
+                startTime == null ? null : startTime.format(TIME_FORMAT),
                 entry.getReason(),
                 entry.getMentionDjIds().stream().sorted().toList(),
-                eventFlyer
+                eventFlyer,
+                entry.getEventStatus()
         );
     }
 }

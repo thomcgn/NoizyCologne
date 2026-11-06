@@ -1,5 +1,6 @@
 package de.noizycologne.backend.party;
 
+import org.jspecify.annotations.NonNull;
 import de.noizycologne.backend.actor.Actor;
 import de.noizycologne.backend.actor.ActorRepository;
 import de.noizycologne.backend.calendar.CalendarEntryRepository;
@@ -15,6 +16,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 @Service
@@ -72,8 +74,8 @@ public class PartySeriesService {
     @Transactional
     public PartySeriesResponse updateParty(String id, PartySeriesRequest request) {
         validateRequest(request);
-        PartySeries party = partySeriesRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Partyreihe nicht gefunden"));
+        PartySeries party = Objects.requireNonNull(partySeriesRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Partyreihe nicht gefunden")));
         ensureNameAvailable(request.name(), id);
         validateActorReferences(request);
         validateStandardGenres(request.standardGenres());
@@ -96,8 +98,8 @@ public class PartySeriesService {
 
     @Transactional
     public void deleteParty(String id) {
-        PartySeries party = partySeriesRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Partyreihe nicht gefunden"));
+        PartySeries party = Objects.requireNonNull(partySeriesRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Partyreihe nicht gefunden")));
         if (calendarEntryRepository.countByPartyId(id) > 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Die Partyreihe wird noch von Kalendereinträgen verwendet und kann nicht gelöscht werden");
@@ -106,12 +108,17 @@ public class PartySeriesService {
     }
 
     private PartySeriesResponse toResponse(PartySeries party) {
-        PartyFlyerResponse flyer = party.getDefaultFlyerMediaId() == null ? null
-                : mediaAssetRepository.findById(party.getDefaultFlyerMediaId())
-                .map(asset -> new PartyFlyerResponse(asset.getId(), asset.getOriginalFilename(),
-                        asset.getMediaType(), asset.getFileSize(),
-                        "/api/v1/parties/" + party.getId() + "/default-flyer"))
-                .orElse(null);
+        PartyFlyerResponse flyer = null;
+        var mediaId = party.getDefaultFlyerMediaId();
+        if (mediaId != null) {
+            var asset = mediaAssetRepository.findById(mediaId);
+            if (asset.isPresent()) {
+                var media = asset.get();
+                flyer = new PartyFlyerResponse(media.getId(), media.getOriginalFilename(),
+                        media.getMediaType(), media.getFileSize(),
+                        "/api/v1/parties/" + party.getId() + "/default-flyer");
+            }
+        }
         return PartySeriesResponse.from(party, flyer);
     }
 
@@ -188,8 +195,8 @@ public class PartySeriesService {
         }
     }
 
-    private List<PartyDjAssignment> djAssignments(PartySeriesRequest request) {
-        List<PartyDjAssignment> assignments = new ArrayList<>();
+    private List<@NonNull PartyDjAssignment> djAssignments(PartySeriesRequest request) {
+        List<@NonNull PartyDjAssignment> assignments = new ArrayList<>();
         request.residentDjIds().forEach(id -> assignments.add(new PartyDjAssignment(id, "resident")));
         request.otherDjIds().forEach(id -> assignments.add(new PartyDjAssignment(id, "other")));
         return assignments;
@@ -197,9 +204,12 @@ public class PartySeriesService {
 
     private void validateStandardGenres(Set<String> standardGenres) {
         if (standardGenres.isEmpty()) return;
-        var genres = genreRepository.findAllById(standardGenres);
-        if (genres.size() != standardGenres.size() || genres.stream().anyMatch(genre -> !genre.isActive())) {
-            throw badRequest("Mindestens ein Standardgenre wurde nicht gefunden");
+        // The API and party_series_genres store exact display names, never genre IDs.
+        var genres = genreRepository.findAllByDisplayNameInAndActiveTrue(standardGenres);
+        for (String name : standardGenres.stream().sorted().toList()) {
+            long matches = genres.stream().filter(genre -> genre.getDisplayName().equals(name)).count();
+            if (matches == 0) throw badRequest("Unbekanntes oder inaktives Standardgenre: „" + name + "“. Bitte ein aktives Genre auswählen oder den Eintrag entfernen.");
+            if (matches > 1) throw badRequest("Mehrdeutiges Standardgenre: „" + name + "“. Der Anzeigename ist mehreren aktiven Genres zugeordnet; bitte die Genreverwaltung korrigieren.");
         }
     }
 

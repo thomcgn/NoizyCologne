@@ -1,12 +1,14 @@
 package de.noizycologne.backend.editorial;
 
+import static java.util.Objects.requireNonNull;
+import org.jspecify.annotations.NonNull;
+import de.noizycologne.backend.json.JsonValues;
 import de.noizycologne.backend.actor.Actor;
 import de.noizycologne.backend.actor.ActorRepository;
 import de.noizycologne.backend.calendar.CalendarEntry;
 import de.noizycologne.backend.calendar.CalendarEntryRepository;
 import de.noizycologne.backend.party.PartySeries;
 import de.noizycologne.backend.party.PartySeriesRepository;
-import de.noizycologne.backend.genre.GenreRepository;
 import de.noizycologne.backend.venue.Venue;
 import de.noizycologne.backend.venue.VenueRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -44,13 +46,13 @@ class EditorialPostDraftControllerIntegrationTests {
     @Autowired private PartySeriesRepository partyRepository;
     @Autowired private VenueRepository venueRepository;
     @Autowired private ActorRepository actorRepository;
-    @Autowired private GenreRepository genreRepository;
+    @Autowired private de.noizycologne.backend.party.PartySeriesService partyService;
 
-    private final List<String> draftIds = new ArrayList<>();
-    private final List<String> entryIds = new ArrayList<>();
-    private final List<String> partyIds = new ArrayList<>();
-    private final List<String> venueIds = new ArrayList<>();
-    private final List<String> actorIds = new ArrayList<>();
+    private final @NonNull List<String> draftIds = new ArrayList<>();
+    private final @NonNull List<String> entryIds = new ArrayList<>();
+    private final @NonNull List<String> partyIds = new ArrayList<>();
+    private final @NonNull List<String> venueIds = new ArrayList<>();
+    private final @NonNull List<String> actorIds = new ArrayList<>();
 
     @AfterEach
     void cleanUp() {
@@ -73,12 +75,10 @@ class EditorialPostDraftControllerIntegrationTests {
         actorIds.add(dj.getId());
         Venue venue = venueRepository.saveAndFlush(new Venue("Draft Venue " + suffix, "draft_venue"));
         venueIds.add(venue.getId());
-        PartySeries party = partyRepository.saveAndFlush(new PartySeries(
-                "Draft Party " + suffix, "draft_party", "#123456", "manual", null,
-                null, null, null, Set.of(), Set.of()));
-        String standardGenre = genreRepository.findAllByActiveTrueOrderByCanonicalNameAsc().get(0).getDisplayName();
-        party.getStandardGenres().add(standardGenre);
-        party = partyRepository.saveAndFlush(party);
+        var savedParty=partyService.createParty(new de.noizycologne.backend.party.PartySeriesRequest(
+                "Draft Party "+suffix,"draft_party","#123456","manual",Set.of(),Set.of(),Set.of(),null,
+                Set.of("Emo","Metalcore","Hardcore")));
+        PartySeries party=requireNonNull(partyRepository.findById(savedParty.id()).orElseThrow());
         partyIds.add(party.getId());
         CalendarEntry entry = entryRepository.saveAndFlush(new CalendarEntry(
                 LocalDate.of(2027, 4, 12), venue.getId(), "event", "", party.getId(),
@@ -87,31 +87,47 @@ class EditorialPostDraftControllerIntegrationTests {
 
         EditorialPostDraftRequest createRequest = new EditorialPostDraftRequest(
                 "Caption für das Team", "#noizycologne", "DRAFT", Set.of(dj.getId()), Set.of("House", "Disco"));
-        EditorialPostDraftResponse created = objectMapper.readValue(
-                mockMvc.perform(post("/api/v1/calendar-entries/{id}/editorial-drafts", entry.getId())
+        EditorialPostDraftResponse created = JsonValues.readRequired(objectMapper,
+                mockMvc.perform(requireNonNull(post("/api/v1/calendar-entries/{id}/editorial-drafts", entry.getId())
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(objectMapper.writeValueAsString(createRequest)))
+                                .content(JsonValues.write(objectMapper,createRequest))))
                         .andExpect(status().isCreated())
                         .andReturn().getResponse().getContentAsString(),
                 EditorialPostDraftResponse.class);
         draftIds.add(created.id());
         assertThat(created.status()).isEqualTo("DRAFT");
         assertThat(created.mentionActorIds()).containsExactly(dj.getId());
-        assertThat(created.genres()).containsExactlyInAnyOrder("House", "Disco", standardGenre);
+        assertThat(created.genres()).containsExactlyInAnyOrder("House", "Disco", "Emo", "Metalcore", "Hardcore");
 
-        EditorialPostDraftResponse[] reloaded = objectMapper.readValue(
+        EditorialPostDraftResponse[] reloaded = JsonValues.readRequired(objectMapper,
                 mockMvc.perform(get("/api/v1/editorial-drafts"))
                         .andExpect(status().isOk())
                         .andReturn().getResponse().getContentAsString(),
                 EditorialPostDraftResponse[].class);
         assertThat(List.of(reloaded)).extracting(response -> response.id()).contains(created.id());
 
+        partyService.updateParty(party.getId(),new de.noizycologne.backend.party.PartySeriesRequest(
+                party.getName(),"draft_party","#123456","manual",Set.of(),Set.of(),Set.of(),null,Set.of("Punk")));
+        var oldDraft=draftRepository.findById(created.id()).orElseThrow();
+        assertThat(oldDraft.getGenres()).containsExactlyInAnyOrder("House","Disco","Emo","Metalcore","Hardcore");
+        assertThat(oldDraft.getCaption()).isEqualTo("Caption für das Team");
+        CalendarEntry nextEntry=entryRepository.saveAndFlush(new CalendarEntry(
+                LocalDate.of(2027,4,19),venue.getId(),"event","",party.getId(),LocalTime.of(22,0),null,Set.of()));
+        entryIds.add(nextEntry.getId());
+        var nextRequest=new EditorialPostDraftRequest("Special Caption","","DRAFT",Set.of(),Set.of("Synthwave"));
+        var nextDraft=JsonValues.readRequired(objectMapper,mockMvc.perform(requireNonNull(post("/api/v1/calendar-entries/{id}/editorial-drafts",nextEntry.getId())
+                .contentType(MediaType.APPLICATION_JSON).content(JsonValues.write(objectMapper,nextRequest))))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(),EditorialPostDraftResponse.class);
+        draftIds.add(nextDraft.id());
+        assertThat(nextDraft.genres()).containsExactlyInAnyOrder("Punk","Synthwave");
+        assertThat(requireNonNull(partyRepository.findById(party.getId()).orElseThrow()).getStandardGenres()).containsExactly("Punk");
+
         EditorialPostDraftRequest updateRequest = new EditorialPostDraftRequest(
                 "Überarbeitete Caption", "#team", "READY_FOR_REVIEW", Set.of(), Set.of("Techno"));
-        EditorialPostDraftResponse updated = objectMapper.readValue(
-                mockMvc.perform(put("/api/v1/editorial-drafts/{id}", created.id())
+        EditorialPostDraftResponse updated = JsonValues.readRequired(objectMapper,
+                mockMvc.perform(requireNonNull(put("/api/v1/editorial-drafts/{id}", created.id())
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(objectMapper.writeValueAsString(updateRequest)))
+                                .content(JsonValues.write(objectMapper,updateRequest))))
                         .andExpect(status().isOk())
                         .andReturn().getResponse().getContentAsString(),
                 EditorialPostDraftResponse.class);
@@ -140,16 +156,16 @@ class EditorialPostDraftControllerIntegrationTests {
 
         EditorialPostDraftRequest invalidMention = new EditorialPostDraftRequest(
                 "Caption", "", "DRAFT", Set.of(unrelatedDj.getId()), Set.of());
-        mockMvc.perform(post("/api/v1/calendar-entries/{id}/editorial-drafts", entry.getId())
+        mockMvc.perform(requireNonNull(post("/api/v1/calendar-entries/{id}/editorial-drafts", entry.getId())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(invalidMention)))
+                        .content(JsonValues.write(objectMapper,invalidMention))))
                 .andExpect(status().isBadRequest());
 
         EditorialPostDraftRequest approvalWithoutFlyer = new EditorialPostDraftRequest(
                 "Caption", "", "APPROVED", Set.of(selectedDj.getId()), Set.of("House"));
-        mockMvc.perform(post("/api/v1/calendar-entries/{id}/editorial-drafts", entry.getId())
+        mockMvc.perform(requireNonNull(post("/api/v1/calendar-entries/{id}/editorial-drafts", entry.getId())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(approvalWithoutFlyer)))
+                        .content(JsonValues.write(objectMapper,approvalWithoutFlyer))))
                 .andExpect(status().isBadRequest());
 
         assertThat(draftRepository.findByCalendarEntryId(entry.getId())).isEmpty();

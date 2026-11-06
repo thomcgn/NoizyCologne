@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useRef, type ReactNode, type RefObject } from "react";
 
 type DashboardModalProps = {
   title: string;
@@ -10,6 +10,76 @@ type DashboardModalProps = {
   children: ReactNode;
 };
 
+// Shared by standard modals and the calendar's custom dialog layouts.
+export function useModalFocus(
+  open: boolean,
+  dialogRef: RefObject<HTMLDivElement | null>,
+  onClose: () => void,
+) {
+  const close = useEffectEvent(onClose);
+
+  useEffect(() => {
+    if (!open) return;
+    const currentDialog = dialogRef.current;
+    if (!currentDialog) return;
+    const dialog = currentDialog;
+    const trigger = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+
+    function controls() {
+      return Array.from(dialog.querySelectorAll<HTMLElement>(
+        "a[href], button, input, select, textarea, summary, [tabindex]"
+      )).filter((element) => {
+        if (element.tabIndex < 0 || element.matches(":disabled, input[type='hidden']")) return false;
+        if (element.closest("[hidden], [inert]")) return false;
+        for (let parent = element.parentElement; parent && parent !== dialog; parent = parent.parentElement) {
+          const parentStyle = getComputedStyle(parent);
+          if (parentStyle.display === "none" || parentStyle.visibility === "hidden") return false;
+          if (parent instanceof HTMLDetailsElement && !parent.open &&
+              !parent.querySelector("summary")?.contains(element)) return false;
+        }
+        const style = getComputedStyle(element);
+        return style.display !== "none" && style.visibility !== "hidden";
+      });
+    }
+
+    const focusable = controls();
+    const initial = focusable.find((element) =>
+      element.matches("input, select, textarea, button:not([data-modal-close])")
+    );
+    (initial ?? focusable[0] ?? dialog).focus();
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = controls();
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) {
+        event.preventDefault();
+        dialog.focus();
+      } else if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog || !dialog.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      if (trigger?.isConnected) trigger.focus();
+    };
+  }, [open, dialogRef]);
+}
+
 export default function DashboardModal({
   title,
   description,
@@ -18,52 +88,7 @@ export default function DashboardModal({
   children,
 }: DashboardModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    if (!open) {
-      triggerRef.current?.focus();
-      return;
-    }
-
-    triggerRef.current = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null;
-
-    const dialog = dialogRef.current;
-    const firstControl = dialog?.querySelector<HTMLElement>(
-      "input, select, textarea, button:not([data-modal-close])"
-    );
-    firstControl?.focus();
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onClose();
-        return;
-      }
-
-      if (event.key !== "Tab" || !dialog) return;
-      const focusable = Array.from(
-        dialog.querySelectorAll<HTMLElement>(
-          "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
-        )
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose]);
+  useModalFocus(open, dialogRef, onClose);
 
   if (!open) return null;
 
@@ -71,6 +96,7 @@ export default function DashboardModal({
     <div className="dashboard-modal-backdrop" role="presentation">
       <div
         ref={dialogRef}
+        tabIndex={-1}
         className="dashboard-modal"
         role="dialog"
         aria-modal="true"

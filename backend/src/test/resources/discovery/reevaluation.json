@@ -1,0 +1,62 @@
+[
+  {
+    "title": "Unknown Night",
+    "evidence": "No description available",
+    "classification": "UNVERIFIED",
+    "status": "NEEDS_INQUIRY"
+  },
+  {
+    "title": "Unknown Night",
+    "evidence": "Emo / Metalcore mit DJs",
+    "classification": "POSSIBLE_MATCH",
+    "status": "NEEDS_REVIEW"
+  },
+  {
+    "title": "Classical Concert",
+    "evidence": "Orchestra concert",
+    "classification": "IGNORED",
+    "status": "IGNORED"
+  },
+  {
+    "title": "Poetry Slam",
+    "evidence": "Lesung",
+    "classification": "IGNORED",
+    "status": "IGNORED"
+  },
+  {
+    "title": "EMO—TION!",
+    "evidence": "",
+    "classification": "MATCH",
+    "status": "READY"
+  },
+  {
+    "title": "Emo Tion Halloween Special",
+    "evidence": "",
+    "classification": "MATCH",
+    "status": "READY"
+  },
+  {
+    "title": "Explicit Alias",
+    "evidence": "",
+    "classification": "MATCH",
+    "status": "READY"
+  },
+  {
+    "title": "Aftershowparty",
+    "evidence": "Separate Party nach dem Konzert. Emo und Metalcore DJs.",
+    "classification": "POSSIBLE_MATCH",
+    "status": "NEEDS_REVIEW"
+  },
+  {
+    "title": "Emo Tion",
+    "evidence": "Konzert mit anschließender Party",
+    "classification": "IGNORED",
+    "status": "IGNORED"
+  },
+  {
+    "title": "EMOTION Halloween Special",
+    "evidence": "",
+    "classification": "MATCH",
+    "status": "READY"
+  }
+]

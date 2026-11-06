@@ -1,5 +1,6 @@
 package de.noizycologne.backend.media;
 
+import org.jspecify.annotations.NonNull;
 import de.noizycologne.backend.genre.Genre;
 import de.noizycologne.backend.genre.GenreAlias;
 import de.noizycologne.backend.genre.GenreAliasRepository;
@@ -22,7 +23,7 @@ public class GenreLexicon {
     private final GenreRepository genreRepository;
     @Nullable
     private final GenreAliasRepository aliasRepository;
-    private volatile List<Entry> entries;
+    private volatile List<@NonNull Entry> entries;
 
     public GenreLexicon() {
         this.genreRepository = null;
@@ -35,14 +36,21 @@ public class GenreLexicon {
         this.genreRepository = genreRepository;
         this.aliasRepository = aliasRepository;
         this.entries = List.of();
-        refresh();
+        loadEntries();
     }
 
     public synchronized void refresh() {
-        if (genreRepository == null || aliasRepository == null) return;
-        List<Genre> genres = genreRepository.findAllByActiveTrueOrderByCanonicalNameAsc();
+        loadEntries();
+    }
+
+    // Constructors must not dispatch an overridable method on a partly initialized subclass.
+    private void loadEntries() {
+        var genreSource = genreRepository;
+        var aliasSource = aliasRepository;
+        if (genreSource == null || aliasSource == null) return;
+        List<@NonNull Genre> genres = genreSource.findAllByActiveTrueOrderByCanonicalNameAsc();
         Map<String, List<String>> aliases = new LinkedHashMap<>();
-        for (GenreAlias alias : aliasRepository.findAllByGenreIdIn(genres.stream().map(genre -> genre.getId()).toList())) {
+        for (GenreAlias alias : aliasSource.findAllByGenreIdIn(genres.stream().map(genre -> genre.getId()).toList())) {
             aliases.computeIfAbsent(alias.getGenreId(), ignored -> new java.util.ArrayList<>()).add(alias.getValue());
         }
         entries = genres.stream().map(genre -> {
@@ -58,7 +66,7 @@ public class GenreLexicon {
     }
 
     public List<GenreMatch> findGenreMatches(List<TesseractOcrService.OcrWord> words) {
-        List<TextLine> lines = lines(words);
+        List<@NonNull TextLine> lines = lines(words);
         String text = normalize(lines.stream().map(line -> line.text()).collect(Collectors.joining(" ")));
         Map<String, GenreMatch> found = new LinkedHashMap<>();
         entries.stream()
@@ -77,7 +85,7 @@ public class GenreLexicon {
         return List.copyOf(found.values());
     }
 
-    private GenreMatch bestMatch(String genre, List<String> aliases, String text, List<TextLine> lines) {
+    private GenreMatch bestMatch(String genre, List<String> aliases, String text, List<@NonNull TextLine> lines) {
         GenreMatch best = null;
         for (String aliasValue : aliases) {
             String alias = normalize(aliasValue);
@@ -116,7 +124,7 @@ public class GenreLexicon {
         return current == null || candidate.confidence() > current.confidence() ? candidate : current;
     }
 
-    private double evidenceConfidence(List<String> aliasTokens, List<TextLine> lines) {
+    private double evidenceConfidence(List<String> aliasTokens, List<@NonNull TextLine> lines) {
         return lines.stream().flatMap(line -> line.words().stream())
                 .filter(word -> aliasTokens.contains(normalize(word.text())))
                 .mapToDouble(word -> word.confidence())
@@ -124,7 +132,7 @@ public class GenreLexicon {
                 .average().orElse(0) / 100.0;
     }
 
-    private List<TextLine> lines(List<TesseractOcrService.OcrWord> words) {
+    private List<@NonNull TextLine> lines(List<TesseractOcrService.OcrWord> words) {
         Map<String, List<TesseractOcrService.OcrWord>> grouped = words.stream()
                 .filter(word -> word != null)
                 .sorted(java.util.Comparator.comparingInt((TesseractOcrService.OcrWord word) -> word.top())
@@ -183,7 +191,7 @@ public class GenreLexicon {
                 || value.contains(" genres ");
     }
 
-    private List<Entry> defaultEntries() {
+    private List<@NonNull Entry> defaultEntries() {
         Map<String, List<String>> values = new LinkedHashMap<>();
         add(values, "Rock", "rock"); add(values, "Alternative", "alternative"); add(values, "Indie", "indie"); add(values, "Punk", "punk");
         add(values, "Punkrock", "punkrock", "punk rock"); add(values, "Garage Rock", "garage rock", "garage-rock");

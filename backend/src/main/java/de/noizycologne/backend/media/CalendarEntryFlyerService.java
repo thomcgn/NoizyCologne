@@ -89,7 +89,7 @@ public class CalendarEntryFlyerService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Flyerdatei nicht gefunden");
         }
         try {
-            return new DownloadedFlyer(asset, new UrlResource(path.toUri()));
+            return new DownloadedFlyer(asset, new UrlResource(java.util.Objects.requireNonNull(path.toUri())));
         } catch (IOException exception) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Flyerdatei nicht gefunden", exception);
         }

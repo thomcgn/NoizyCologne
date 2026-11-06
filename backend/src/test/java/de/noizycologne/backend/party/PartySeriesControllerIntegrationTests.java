@@ -1,5 +1,8 @@
 package de.noizycologne.backend.party;
 
+import static java.util.Objects.requireNonNull;
+import org.jspecify.annotations.NonNull;
+import de.noizycologne.backend.json.JsonValues;
 import de.noizycologne.backend.actor.Actor;
 import de.noizycologne.backend.actor.ActorRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -40,8 +43,11 @@ class PartySeriesControllerIntegrationTests {
     @Autowired
     private PartySeriesRepository partySeriesRepository;
 
-    private final List<String> createdPartyIds = new ArrayList<>();
-    private final List<String> createdActorIds = new ArrayList<>();
+    @Autowired private de.noizycologne.backend.genre.GenreRepository genreRepository;
+    private final @NonNull List<String> createdGenreIds = new ArrayList<>();
+
+    private final @NonNull List<String> createdPartyIds = new ArrayList<>();
+    private final @NonNull List<String> createdActorIds = new ArrayList<>();
 
     @AfterEach
     void cleanUpTestData() {
@@ -49,6 +55,8 @@ class PartySeriesControllerIntegrationTests {
         partySeriesRepository.flush();
         actorRepository.deleteAllById(createdActorIds);
         actorRepository.flush();
+        genreRepository.deleteAllById(createdGenreIds);
+        genreRepository.flush();
     }
 
     @Test
@@ -102,10 +110,10 @@ class PartySeriesControllerIntegrationTests {
                 -1,
                 null
         );
-        PartySeriesResponse updated = objectMapper.readValue(
-                mockMvc.perform(put("/api/v1/parties/{id}", created.id())
+        PartySeriesResponse updated = JsonValues.readRequired(objectMapper,
+                mockMvc.perform(requireNonNull(put("/api/v1/parties/{id}", created.id())
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(objectMapper.writeValueAsString(updateRequest)))
+                                .content(JsonValues.write(objectMapper,updateRequest))))
                         .andExpect(status().isOk())
                         .andReturn().getResponse().getContentAsString(),
                 PartySeriesResponse.class
@@ -141,9 +149,9 @@ class PartySeriesControllerIntegrationTests {
         );
 
         long partyCount = partySeriesRepository.count();
-        assertThat(mockMvc.perform(post("/api/v1/parties")
+        assertThat(mockMvc.perform(requireNonNull(post("/api/v1/parties")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request(
+                        .content(JsonValues.write(objectMapper,request(
                                 "NC Unknown Actor Party " + suffix,
                                 "",
                                 "#123456",
@@ -154,14 +162,14 @@ class PartySeriesControllerIntegrationTests {
                                 null,
                                 null,
                                 null
-                        ))))
+                        )))))
                 .andExpect(status().isBadRequest())
                 .andReturn()).isNotNull();
         assertThat(partySeriesRepository.count()).isEqualTo(partyCount);
 
-        mockMvc.perform(post("/api/v1/parties")
+        mockMvc.perform(requireNonNull(post("/api/v1/parties")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request(
+                        .content(JsonValues.write(objectMapper,request(
                                 "NC Wrong Role Party " + suffix,
                                 "",
                                 "#123456",
@@ -172,13 +180,13 @@ class PartySeriesControllerIntegrationTests {
                                 null,
                                 null,
                                 null
-                        ))))
+                        )))))
                 .andExpect(status().isBadRequest());
         assertThat(partySeriesRepository.count()).isEqualTo(partyCount);
 
-        mockMvc.perform(post("/api/v1/parties")
+        mockMvc.perform(requireNonNull(post("/api/v1/parties")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request(
+                        .content(JsonValues.write(objectMapper,request(
                                 "NC Duplicate DJ Party " + suffix,
                                 "",
                                 "#123456",
@@ -189,9 +197,65 @@ class PartySeriesControllerIntegrationTests {
                                 null,
                                 null,
                                 null
-                        ))))
+                        )))))
                 .andExpect(status().isBadRequest());
         assertThat(partySeriesRepository.count()).isEqualTo(partyCount);
+    }
+
+    @Test
+    void savesDisplayNamesAndSupportsReloadAddRemoveAndDuplicateValues() throws Exception {
+        String name="Genre Contract "+UUID.randomUUID();
+        var request=new PartySeriesRequest(name,"","#123456","manual",Set.of(),Set.of(),Set.of(),null,Set.of("Emo","Metalcore","Hardcore"));
+        var created=createParty(request);
+        createdPartyIds.add(created.id());
+        assertThat(created.standardGenres()).containsExactlyInAnyOrder("Emo","Metalcore","Hardcore");
+        var reloaded=List.of(getParties()).stream().filter(p -> p.id().equals(created.id())).findFirst().orElseThrow();
+        assertThat(reloaded.standardGenres()).containsExactlyInAnyOrder("Emo","Metalcore","Hardcore");
+        String update="""
+            {"name":"%s","color":"#123456","djMentionDefault":"manual","standardGenres":["Emo","Emo"," Metalcore ","Punk"]}
+            """.formatted(name);
+        var updated=JsonValues.readRequired(objectMapper,mockMvc.perform(requireNonNull(put("/api/v1/parties/{id}",created.id())
+            .contentType(MediaType.APPLICATION_JSON).content(requireNonNull(update)))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString(),PartySeriesResponse.class);
+        assertThat(updated.standardGenres()).containsExactlyInAnyOrder("Emo","Metalcore","Punk");
+        assertThat(requireNonNull(partySeriesRepository.findById(created.id()).orElseThrow()).getStandardGenres()).containsExactlyInAnyOrder("Emo","Metalcore","Punk");
+    }
+
+    @Test
+    void rejectsUnknownInactiveAndAmbiguousDisplayNamesWithoutChangingStoredGenres() throws Exception {
+        String suffix=UUID.randomUUID().toString();
+        String inactive="Inactive "+suffix, ambiguous="Ambiguous "+suffix;
+        for (var genre:List.of(
+            new de.noizycologne.backend.genre.Genre("inactive-"+suffix,inactive,false),
+            new de.noizycologne.backend.genre.Genre("duplicate-a-"+suffix,ambiguous,true),
+            new de.noizycologne.backend.genre.Genre("duplicate-b-"+suffix,ambiguous,true))) {
+            createdGenreIds.add(genreRepository.saveAndFlush(genre).getId());
+        }
+        var created=createParty(new PartySeriesRequest("Invalid Genres "+suffix,"","#123456","manual",Set.of(),Set.of(),Set.of(),null,Set.of("Emo")));
+        createdPartyIds.add(created.id());
+        for (String invalid:List.of("Missing "+suffix,inactive,ambiguous,"emo")) {
+            var update=new PartySeriesRequest(created.name(),"","#123456","manual",Set.of(),Set.of(),Set.of(),null,Set.of("Emo",invalid));
+            String body=mockMvc.perform(requireNonNull(put("/api/v1/parties/{id}",created.id()).contentType(MediaType.APPLICATION_JSON)
+                .content(JsonValues.write(objectMapper,update)))).andExpect(status().isBadRequest()).andReturn().getResponse().getContentAsString();
+            assertThat(objectMapper.readTree(body).get("message").asString()).contains(invalid);
+            assertThat(requireNonNull(partySeriesRepository.findById(created.id()).orElseThrow()).getStandardGenres()).containsExactly("Emo");
+        }
+        // Historical inactive names are readable; saving them again requires an explicit removal.
+        var historical=requireNonNull(partySeriesRepository.findById(created.id()).orElseThrow());
+        historical.getStandardGenres().add(inactive);partySeriesRepository.saveAndFlush(historical);
+        assertThat(List.of(getParties()).stream().filter(p -> p.id().equals(created.id())).findFirst().orElseThrow().standardGenres())
+            .containsExactlyInAnyOrder("Emo",inactive);
+    }
+
+    @Test
+    void inactiveDuplicateDoesNotMakeAnActiveDisplayNameAmbiguous() throws Exception {
+        String suffix=UUID.randomUUID().toString(), display="Unique Active "+suffix;
+        for (boolean active:List.of(true,false)) {
+            var genre=new de.noizycologne.backend.genre.Genre("active-"+active+"-"+suffix,display,active);
+            createdGenreIds.add(genreRepository.saveAndFlush(genre).getId());
+        }
+        var created=createParty(new PartySeriesRequest("Active Genre "+suffix,"","#123456","manual",Set.of(),Set.of(),Set.of(),null,Set.of(display)));
+        createdPartyIds.add(created.id());
+        assertThat(created.standardGenres()).containsExactly(display);
     }
 
     private Actor createActor(String name, String kind, Set<String> roles) {
@@ -201,19 +265,19 @@ class PartySeriesControllerIntegrationTests {
     }
 
     private PartySeriesResponse createParty(PartySeriesRequest request) throws Exception {
-        String body = mockMvc.perform(post("/api/v1/parties")
+        String body = mockMvc.perform(requireNonNull(post("/api/v1/parties")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                        .content(JsonValues.write(objectMapper,request))))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
-        return objectMapper.readValue(body, PartySeriesResponse.class);
+        return JsonValues.readRequired(objectMapper,body, PartySeriesResponse.class);
     }
 
     private PartySeriesResponse[] getParties() throws Exception {
         String body = mockMvc.perform(get("/api/v1/parties"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-        return objectMapper.readValue(body, PartySeriesResponse[].class);
+        return JsonValues.readRequired(objectMapper,body, PartySeriesResponse[].class);
     }
 
     private PartySeriesRequest request(

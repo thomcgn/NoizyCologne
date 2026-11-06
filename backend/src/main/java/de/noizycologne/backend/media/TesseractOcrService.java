@@ -1,5 +1,6 @@
 package de.noizycologne.backend.media;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -47,12 +48,12 @@ public class TesseractOcrService {
             processBuilder.environment().put("OMP_THREAD_LIMIT", "1");
             process = processBuilder.start();
             Process running = process;
-            Future<String> output = reader.submit(() -> new String(running.getInputStream().readAllBytes(), StandardCharsets.UTF_8));
+            Future<@NonNull String> output = reader.submit(() -> new String(running.getInputStream().readAllBytes(), StandardCharsets.UTF_8));
             if (!process.waitFor(timeoutMillis, TimeUnit.MILLISECONDS)) {
                 process.destroyForcibly();
                 throw new ResponseStatusException(HttpStatus.GATEWAY_TIMEOUT, "Die lokale Flyer-Texterkennung hat zu lange gedauert.");
             }
-            String tsv = output.get(2, TimeUnit.SECONDS);
+            String tsv = java.util.Objects.requireNonNull(output.get(2, TimeUnit.SECONDS), "Tesseract lieferte keinen Ausgabetext");
             if (process.exitValue() != 0) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "Die lokale Flyer-Texterkennung ist nicht verfügbar.");
             return parse(tsv, image, psm, pass);

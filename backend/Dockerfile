@@ -1,4 +1,4 @@
-FROM maven:3.9-eclipse-temurin-25 AS build
+FROM maven:3.9-eclipse-temurin-21 AS build
 
 WORKDIR /build
 COPY .mvn .mvn
@@ -6,11 +6,11 @@ COPY mvnw pom.xml ./
 COPY src src
 RUN ./mvnw -B -Dmaven.test.skip=true package
 
-FROM eclipse-temurin:25-jre
+FROM eclipse-temurin:21-jre
 
 WORKDIR /app
 RUN apt-get update \
-  && apt-get install --no-install-recommends -y wget tesseract-ocr tesseract-ocr-deu tesseract-ocr-eng \
+  && apt-get install --no-install-recommends -y wget tesseract-ocr tesseract-ocr-deu tesseract-ocr-eng fontconfig fonts-dejavu-core \
   && rm -rf /var/lib/apt/lists/* \
   && useradd --system --create-home --uid 10001 appuser
 COPY --from=build /build/target/*.jar /app/app.jar
