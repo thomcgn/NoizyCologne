@@ -11,7 +11,7 @@ Bestehende APIs, Authentifizierung, Redaktion und Absageabläufe bleiben erhalte
 2. Discovery als kompakte Arbeitsliste – umgesetzt und lokal geprüft.
 3. Portfolio/Kalender, Tabellen und Detailbereiche – umgesetzt und lokal geprüft.
 4. Globale Suche und Command-Palette – umgesetzt und lokal geprüft.
-5. Redaktion und mobile PWA – ausstehend.
+5. Redaktion und mobile PWA – umgesetzt und lokal geprüft.
 
 Jede Phase erhält einen eigenen Commit mit regulärem QUICK-Hook und Push auf
 `feat/control-center`. Der PR bleibt bis zum Abschluss aller Phasen ein Entwurf.
@@ -126,3 +126,30 @@ Shortcut, Escape sowie tatsächlicher Wechsel vom Treffer zum passenden
 Akteurseditor geprüft. Screenshot der Desktop-Suche gesichtet; Artefakte unter
 `.quality/control-center/phase-4/`. Regulärer QUICK-Hook prüft den Commitstand.
 Bestehende Live-IDE-/Geräte-/CI-Grenzen bleiben bestehen.
+
+
+## Phase 5
+
+Desktop-Redaktion zeigt Feed-Anordnung, Post-Vorschau und Editor ab 1400 px
+nebeneinander; mittlere Breiten verwenden zwei Spalten. Der Feed scrollt in
+begrenzter Höhe, Vorschau und Planung bleiben am Desktop erreichbar. Unter
+1024 px wechseln Planung/Vorschau/Bearbeiten ohne Verlust der lokalen Entwürfe.
+Datensatzlinks wählen den passenden Termin. Der Header bietet die vorhandene
+Speicheraktion; Status und ungespeicherte Eingaben sind sichtbar. Verlassen über
+Links und Browser-Neuladen schützen ungespeicherte Entwürfe. Manuelle Reihenfolge,
+Flyer, Musik, Caption, Mentions und bestehende Freigabesperren bleiben erhalten.
+Der mobile Ausbau betrifft die vorhandene Weboberfläche; Offline-Synchronisation,
+Push und native Gerätefunktionen werden dadurch nicht als verfügbar behauptet.
+
+Prüfungen: STANDARD-Frontend mit TypeScript, ESLint, 63 Tests und Produktionsbuild
+erfolgreich. DOM-Regression prüft Caption-Erhalt, mobile Bereichswechsel,
+Navigations-/Neuladeschutz und erfolgreiches Speichern. Neun Chrome-Szenarien bei
+1440/768/390/320 px, drei Themes, beiden Dichten und leeren/fehlerhaften Daten
+erfolgreich; direkte Terminwahl, editierte Caption mit Live-Vorschau und mobile
+Bereichswechsel geprüft. Ein expliziter zugänglicher Name für die Caption behebt
+die im Browser gefundene Label-Mehrdeutigkeit; der abschließende QUICK-Hook prüft
+diesen letzten Stand erneut. Desktop und mobile Light-Vorschau gesichtet,
+Artefakte unter `.quality/control-center/phase-5/`. Keine echten Daten-/Instagram-
+Schreibvorgänge. Live-IDE-/Geräteabnahme und verpflichtendes CI-FULL bleiben offen.
+Alle fünf Implementierungsphasen sind abgeschlossen; fachliche PR-Abnahme bleibt
+beim Nutzer. Der nachfolgende Discovery-Fachauftrag wird getrennt bearbeitet.

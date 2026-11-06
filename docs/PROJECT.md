@@ -3809,5 +3809,7 @@ Backend oder Discovery-Logik. Arbeitsnachweis und Grenzen:
 
 Das bestehende Frontend wird in fünf einzeln geprüften Phasen zu einer
 Desktop-orientierten Arbeitsoberfläche mit ergänzender mobiler PWA umgebaut.
-Geschäftslogik, APIs und Daten bleiben erhalten. Fortschritt, Prüfungen und
+Geschäftslogik, APIs und Daten bleiben erhalten. Die fünf Phasen sind lokal
+umgesetzt: kompakte Tabellen/Drawer, globale Katalogsuche mit Strg/⌘ K sowie
+Desktop-Redaktion und mobile Bereichswechsel. Fortschritt, Prüfungen und
 Abnahmegrenzen stehen in [CONTROL-CENTER.md](CONTROL-CENTER.md).

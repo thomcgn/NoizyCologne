@@ -80,6 +80,7 @@ try {
     }
     for (const route of ['/dashboard/vorschlaege', '/dashboard/partys', '/dashboard/djs', '/dashboard/locations', '/dashboard/kalender', '/dashboard/redaktion', '/dashboard/settings', '/dashboard/automatisierung']) {
       if (phase === 4) continue;
+      if (phase === 5 && route !== '/dashboard/redaktion') continue;
       if (phase === 1 && !['/dashboard/settings', '/dashboard/automatisierung'].includes(route)) continue;
       if (phase === 2 && route !== '/dashboard/vorschlaege') continue;
       if (phase === 3 && !['/dashboard/partys', '/dashboard/djs', '/dashboard/locations', '/dashboard/kalender'].includes(route)) continue;
@@ -87,6 +88,29 @@ try {
       await page.locator('main h1').waitFor();
       await page.waitForTimeout(180);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} ${route}: horizontal overflow`);
+      if (phase === 5 && route === '/dashboard/redaktion') {
+        if (state === 'populated') {
+          await page.goto(`${origin}/dashboard/redaktion#record=entry-0`);
+          const editor = page.locator('#editorial-editor');
+          const tabs = page.getByRole('navigation', {name: 'Redaktionsansicht'});
+          const caption = editor.getByLabel('Caption', {exact: true});
+          await caption.waitFor({state: 'visible'});
+          assert.equal(await caption.inputValue(), data.drafts[0].caption);
+          await caption.fill('Manuell geändert\nZeilen bleiben erhalten.');
+          await editor.getByRole('status').filter({hasText: 'Ungespeicherte Änderungen'}).waitFor();
+          if (width < 1024) {
+            await tabs.getByRole('button', {name: 'Vorschau', exact: true}).click();
+            assert.equal(await editor.isVisible(), false);
+          }
+          assert.ok((await page.locator('#editorial-preview').innerText()).includes('Manuell geändert'));
+          await page.evaluate(() => window.scrollTo(0, 0));
+          await page.screenshot({path: `${out}/${name}-editorial.png`, fullPage: true});
+          if (width < 1024) await tabs.getByRole('button', {name: 'Bearbeiten', exact: true}).click();
+          assert.equal(await caption.inputValue(), 'Manuell geändert\nZeilen bleiben erhalten.');
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+        } else if (state === 'error') await page.getByRole('alert').first().waitFor();
+        else await page.getByText('Noch keine Veranstaltungen vorhanden.', {exact: true}).waitFor();
+      }
       if (phase === 3) {
         const collection = page.locator('.cc-collection');
         if (state === 'populated') {

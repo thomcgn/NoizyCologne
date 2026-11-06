@@ -548,7 +548,20 @@ test('editorial monitoring warnings preserve multiline captions and deliberately
   await act(async () => { root.render(h(StrictMode, null, h(Page))); });
   assert.equal(caption.value, persisted.caption, 'A calendar refresh must never regenerate a saved caption');
   type(caption, ' redaktionell ergänzt');
+  assert.match(document.querySelector('#editorial-editor').textContent, /Ungespeicherte Änderungen/);
+  click(button('Vorschau'));
+  assert.equal(document.querySelector('.cc-editorial-layout').dataset.panel, 'preview');
+  click(button('Bearbeiten'));
+  assert.equal(caption.value, persisted.caption + ' redaktionell ergänzt');
+  const unload = new Event('beforeunload', {cancelable: true}); window.dispatchEvent(unload);
+  assert.equal(unload.defaultPrevented, true);
+  let prompts = 0; window.confirm = () => {prompts++; return false;};
+  try { click(document.querySelector('#editorial-editor a')); assert.equal(prompts, 1); }
+  finally {window.confirm = () => true;}
   await act(async () => { button('Entwurf speichern').click(); });
+  const afterSave = new Event('beforeunload', {cancelable: true}); window.dispatchEvent(afterSave);
+  assert.equal(afterSave.defaultPrevented, false);
+  assert.doesNotMatch(document.querySelector('#editorial-editor').textContent, /Ungespeicherte Änderungen/);
   assert.equal(saved.length, 1);
   assert.equal(saved[0].caption, persisted.caption + ' redaktionell ergänzt');
   assert.deepEqual(saved[0].mentionActorIds, []);

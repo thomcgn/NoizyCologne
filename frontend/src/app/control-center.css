@@ -219,3 +219,27 @@ html[data-density="compact"] .cc-description { max-width: 75ch; }
 .cc-command-result small { color: var(--muted); }
 .cc-command-result:hover, .cc-command-result:focus-visible { background: var(--surface-muted); border-color: var(--focus); outline: none; }
 @media (max-width: 767px) { .cc-search-trigger { min-width: 44px; min-height: 44px; } .cc-search-trigger span, .cc-search-trigger kbd { display: none; } }
+.cc-editorial-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: var(--ui-section-gap); align-items: start; margin-top: var(--ui-section-gap); }
+.cc-editorial-layout > section { min-width: 0; border-color: var(--line); border-radius: var(--cc-radius); }
+.cc-editorial-feed { grid-column: 1/-1; }
+.cc-feed-tiles { max-height: 420px; overflow-y: auto; overscroll-behavior: contain; }
+.cc-editorial-tabs { display: none; }
+.cc-editorial-preview { position: sticky; top: calc(var(--cc-header-height) + 16px); }
+.cc-editorial-editor :is(input, select, textarea) { max-width: 100%; }
+@media (min-width: 1400px) {
+  .cc-editorial-layout { grid-template-columns: minmax(220px, 0.8fr) minmax(280px, 1fr) minmax(360px, 1.3fr); }
+  .cc-editorial-feed { grid-column: auto; position: sticky; top: calc(var(--cc-header-height) + 16px); }
+  .cc-editorial-feed > div:first-child { padding: 16px; }
+  .cc-editorial-feed p { font-size: 0.75rem; line-height: 1.6; }
+}
+@media (max-width: 1023px) {
+  .cc-editorial-layout { grid-template-columns: minmax(0, 1fr); }
+  .cc-editorial-tabs { display: flex; gap: 6px; position: sticky; top: var(--cc-header-height); z-index: 10; padding-block: 8px; background: var(--background); }
+  .cc-editorial-tabs .cc-button { flex: 1; min-height: 44px; padding-inline: 6px; }
+  .cc-editorial-tabs [aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  .cc-editorial-preview { position: static; }
+  .cc-editorial-layout:not([data-panel="feed"]) .cc-editorial-feed,
+  .cc-editorial-layout:not([data-panel="preview"]) .cc-editorial-preview,
+  .cc-editorial-layout:not([data-panel="editor"]) .cc-editorial-editor { display: none; }
+  .cc-editorial-page :is(input:not([type="checkbox"]), textarea, select) { font-size: 16px; }
+}
