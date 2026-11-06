@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   toDateKey,
   useCatalog,
   type CalendarEntry,
 } from "../CatalogProvider";
 import EntryEditor from "./EntryEditor";
-import { useModalFocus } from "../DashboardModal";
+import DashboardModal from "../DashboardModal";
+import DataCollection, { type CollectionColumn } from "../DataCollection";
+import { useWorkspaceAction } from "../workspaceActions";
 
 const weekdays = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 
@@ -35,57 +37,8 @@ export default function CalendarPage() {
   const [entrySearch, setEntrySearch] = useState("");
   const [calendarOpen, setCalendarOpen] = useState(true);
   const [infoEntryId, setInfoEntryId] = useState<string | null>(null);
-  const [viewport, setViewport] = useState({ width: 0, height: 0 });
-  const [editorScale, setEditorScale] = useState(1);
-  const editorModalRef = useRef<HTMLDivElement | null>(null);
-
-  const infoModalRef = useRef<HTMLDivElement | null>(null);
-  useModalFocus(editorOpen && selectedDate !== null, editorModalRef, () => {
-    setEditorOpen(false);
-    setEditingId(null);
-  });
-  useModalFocus(entries.some((entry) => entry.id === infoEntryId), infoModalRef, () => setInfoEntryId(null));
-
-  useEffect(() => {
-    const updateViewport = () => {
-      const visualViewport = window.visualViewport;
-      setViewport({
-        width: Math.round(visualViewport?.width ?? window.innerWidth),
-        height: Math.round(visualViewport?.height ?? window.innerHeight),
-      });
-    };
-    updateViewport();
-    window.addEventListener("resize", updateViewport);
-    window.visualViewport?.addEventListener("resize", updateViewport);
-    return () => {
-      window.removeEventListener("resize", updateViewport);
-      window.visualViewport?.removeEventListener("resize", updateViewport);
-    };
-  }, []);
-
-  useLayoutEffect(() => {
-    const modal = editorModalRef.current;
-    if (!editorOpen || !modal || viewport.width === 0 || viewport.height === 0) {
-      setEditorScale(1);
-      return;
-    }
-
-    const updateScale = () => {
-      const availableWidth = Math.max(1, viewport.width - 32);
-      const availableHeight = Math.max(1, viewport.height - 32);
-      const scale = Math.min(
-        1,
-        availableWidth / modal.offsetWidth,
-        availableHeight / modal.offsetHeight,
-      );
-      setEditorScale(scale);
-    };
-
-    updateScale();
-    const observer = new ResizeObserver(updateScale);
-    observer.observe(modal);
-    return () => observer.disconnect();
-  }, [editorOpen, editingId, selectedDate, viewport.width, viewport.height]);
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [locationFilter, setLocationFilter] = useState("");
 
   const days = useMemo(() => {
     const year = month.getFullYear();
@@ -131,6 +84,8 @@ export default function CalendarPage() {
   const filteredEntries = useMemo(() => {
     const query = entrySearch.trim().toLocaleLowerCase("de-DE");
     const matchingEntries = entries.filter((entry) => {
+      if (typeFilter !== "all" && entry.type !== typeFilter) return false;
+      if (locationFilter && entry.locationId !== locationFilter) return false;
       if (!query) return true;
 
       const partyName =
@@ -166,7 +121,7 @@ export default function CalendarPage() {
       const secondKey = `${second.date} ${second.type === "event" ? second.startTime : "23:59"}`;
       return firstKey.localeCompare(secondKey);
     });
-  }, [actors, entrySearch, entries, parties, venues]);
+  }, [actors, entrySearch, entries, parties, venues, typeFilter, locationFilter]);
 
   function dateFromKey(dateKey: string): Date {
     const [year, monthIndex, day] = dateKey.split("-").map(Number);
@@ -251,6 +206,16 @@ export default function CalendarPage() {
       setDeletingId(null);
     }
   }
+
+  useWorkspaceAction("Neuer Eintrag", openNewEntry, entriesLoading || !!entriesError);
+  const columns: CollectionColumn<CalendarEntry>[] = [
+    {key: "name", label: "Veranstaltung / Sperre", sortValue: getEntryName, render: entry => <strong className="cc-calendar-name"><span aria-hidden="true" className="cc-color-dot" style={{backgroundColor: getEntryColor(entry)}} />{getEntryName(entry)}</strong>},
+    {key: "date", label: "Datum", sortValue: entry => `${entry.date} ${entry.type === "event" ? entry.startTime : "23:59"}`, render: entry => dateFromKey(entry.date).toLocaleDateString("de-DE", {weekday: "short", day: "2-digit", month: "2-digit", year: "numeric"})},
+    {key: "location", label: "Location", sortValue: entry => venues.find(venue => venue.id === entry.locationId)?.name ?? "", render: entry => venues.find(venue => venue.id === entry.locationId)?.name ?? "Unbekannte Location"},
+    {key: "time", label: "Beginn", render: entry => entry.type === "event" ? entry.startTime || "Noch offen" : "–"},
+    {key: "type", label: "Art / Status", render: entry => <span className={`cc-status ${entry.eventStatus === "CANCELLED" ? "cc-status-danger" : ""}`}>{entry.eventStatus === "CANCELLED" ? "ABGESAGT" : entry.type === "closure" ? "Sperre" : "Party"}</span>},
+    {key: "price", label: "Eintritt", render: entry => entry.type === "event" ? entry.entryPrice || "Noch offen" : "–"},
+  ];
 
   return (
     <main className="app-page min-h-dvh bg-black px-4 py-6 text-white sm:py-8 md:px-10">
@@ -375,6 +340,7 @@ export default function CalendarPage() {
                       onClick={() => selectDay(date)}
                       onDoubleClick={() => openNewEntryForDay(date)}
                       onKeyDown={(event) => {
+                        if (event.target !== event.currentTarget) return;
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();
                           selectDay(date);
@@ -447,186 +413,19 @@ export default function CalendarPage() {
           )}
         </section>
 
-        <section className="mt-6 rounded-2xl border border-white/10 bg-neutral-950 p-4 sm:p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-xl font-semibold sm:text-2xl">
-                Eingetragene Parties
-              </h2>
-              <p className="mt-1 text-sm text-neutral-400">
-                Alle Veranstaltungen und Location-Sperren direkt bearbeiten oder löschen.
-              </p>
-            </div>
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-              <label className="w-full sm:w-72">
-                <span className="sr-only">Kalendereinträge durchsuchen</span>
-                <input
-                  type="search"
-                  value={entrySearch}
-                  onChange={(event) => setEntrySearch(event.target.value)}
-                  placeholder="Partys, Locations oder Datum suchen ..."
-                  className="min-h-12 w-full rounded-lg border border-white/15 bg-neutral-900 px-3 py-2.5 text-sm text-white outline-none focus:border-white/60"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={openNewEntry}
-                className="min-h-11 rounded-lg border border-white/15 px-4 py-2 text-sm hover:bg-white/10"
-              >
-                + Neuer Eintrag
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-5 space-y-3">
-            {entriesLoading ? (
-              <p className="text-sm text-neutral-400" role="status">
-                Einträge werden geladen ...
-              </p>
-            ) : entriesError ? (
-              <p className="text-sm text-red-300" role="alert">
-                Die Liste ist wegen des Ladefehlers nicht verfügbar.
-              </p>
-            ) : filteredEntries.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-white/10 p-4 text-sm text-neutral-400">
-                {entrySearch.trim()
-                  ? "Keine passenden Einträge gefunden."
-                  : "Noch keine Einträge vorhanden."}
-              </p>
-            ) : (
-              filteredEntries.map((entry) => {
-                const locationName =
-                  venues.find((venue) => venue.id === entry.locationId)?.name ??
-                  "Unbekannte Location";
-                const entryDate = dateFromKey(entry.date).toLocaleDateString("de-DE", {
-                  weekday: "short",
-                  day: "2-digit",
-                  month: "2-digit",
-                  year: "numeric",
-                });
-
-                return (
-                  <article
-                    key={entry.id}
-                    className="flex flex-col gap-4 rounded-xl border border-white/10 bg-neutral-900 p-4 sm:flex-row sm:items-center sm:justify-between"
-                    style={{ borderLeftColor: getEntryColor(entry), borderLeftWidth: 4 }}
-                  >
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-medium">
-                          {getEntryName(entry)}
-                        </p>
-                        <span className="rounded-full border border-white/15 px-2 py-0.5 text-[11px] text-neutral-400">
-                          {entry.type === "event" ? "Party" : "Sperre"}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-sm text-neutral-300">
-                        {entryDate} · {locationName}
-                        {entry.eventStatus === "CANCELLED" && <strong className="text-red-400">ABGESAGT · </strong>}
-                            {entry.type === "event" && entry.startTime
-                          ? ` · ${entry.startTime} Uhr`
-                          : ""}
-                      </p>
-                      {entry.type === "closure" && (
-                        <p className="mt-1 text-xs text-neutral-500">
-                          Grund: {entry.reason}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex shrink-0 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => editFromList(entry)}
-                        className="min-h-11 rounded-lg border border-white/20 px-3 py-2 text-xs hover:bg-white/10"
-                      >
-                        Bearbeiten
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void deleteEntry(entry)}
-                        disabled={deletingId === entry.id}
-                        className="min-h-11 rounded-lg border border-white/20 px-3 py-2 text-xs hover:bg-white/10 disabled:cursor-wait disabled:opacity-50"
-                      >
-                        {deletingId === entry.id ? "Löschen ..." : "Löschen"}
-                      </button>
-                    </div>
-                  </article>
-                );
-              })
-            )}
-          </div>
+        <section className="cc-catalog-list" aria-label="Kalendereinträge">
+          <div className="cc-section-title cc-list-heading"><div><h2>Eingetragene Partys &amp; Sperren</h2><p className="cc-description">Alle Termine suchen, prüfen und bearbeiten.</p></div><button type="button" className="cc-button cc-button-primary cc-page-primary" onClick={openNewEntry} disabled={entriesLoading || !!entriesError}>+ Neuer Eintrag</button></div>
+          {entriesLoading ? <p className="cc-empty" role="status">Einträge werden geladen …</p>
+          : entriesError ? <p className="cc-message" role="alert">Die Liste ist wegen des Ladefehlers nicht verfügbar.</p>
+          : <DataCollection items={filteredEntries} columns={columns} label="Kalendereinträge" storageKey="noizy-view-calendar" getName={getEntryName} onOpen={entry => setInfoEntryId(entry.id)} openDisabled={deletingId !== null} initialSortKey="date" query={entrySearch} onQueryChange={setEntrySearch} searchLabel="Kalendereinträge durchsuchen" empty={entries.length ? "Keine passenden Einträge gefunden." : "Noch keine Einträge vorhanden."} toolbar={<><label className="cc-inline-filter">Art<select className="cc-input" value={typeFilter} onChange={event => setTypeFilter(event.target.value)}><option value="all">Alle</option><option value="event">Partys</option><option value="closure">Sperren</option></select></label><label className="cc-inline-filter">Location<select className="cc-input" value={locationFilter} onChange={event => setLocationFilter(event.target.value)}><option value="">Alle</option>{venues.map(venue => <option key={venue.id} value={venue.id}>{venue.name}</option>)}</select></label></>} actions={entry => <div className="cc-inline-actions"><button type="button" className="cc-button" disabled={deletingId !== null} onClick={() => editFromList(entry)}>Bearbeiten</button><button type="button" className="cc-button cc-button-danger" onClick={() => void deleteEntry(entry)} disabled={deletingId !== null}>{deletingId === entry.id ? "Löschen ..." : "Löschen"}</button></div>} />}
         </section>
 
-        {editorOpen && selectedDate && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black/80 p-4 backdrop-blur-sm sm:p-8"
-            role="presentation"
-          >
-            <div
-              ref={editorModalRef}
-              tabIndex={-1}
-              className="w-full max-w-3xl rounded-2xl border border-white/15 bg-black p-1 shadow-2xl"
-              style={{ transform: `scale(${editorScale})`, transformOrigin: "center center" }}
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="calendar-entry-dialog-title"
-            >
-              <div className="flex justify-end px-4 pt-4 sm:px-6">
-                <button
-                  type="button"
-                  data-modal-close
-                  onClick={() => {
-                    setEditorOpen(false);
-                    setEditingId(null);
-                  }}
-                  className="rounded-lg border border-white/20 px-3 py-2 text-sm text-neutral-300 hover:bg-white/10 hover:text-white"
-                >
-                  Schließen
-                </button>
-              </div>
-              <div id="calendar-entry-dialog-title" className="sr-only">
-                Kalendereintrag {editingEntry ? "bearbeiten" : "anlegen"}
-              </div>
-              <EntryEditor
-                key={`${toDateKey(selectedDate)}-${editingId ?? "new"}`}
-                date={selectedDate}
-                entry={editingEntry}
-                onSaved={() => {
-                  setEditorOpen(false);
-                  setEditingId(null);
-                }}
-                onCancel={() => {
-                  setEditorOpen(false);
-                  setEditingId(null);
-                }}
-              />
-            </div>
-          </div>
-        )}
+        {editorOpen && selectedDate && <DashboardModal variant="drawer" protectChanges open onClose={() => {setEditorOpen(false); setEditingId(null);}} title={editingEntry ? "Kalendereintrag bearbeiten" : "Neuer Kalendereintrag"}>
+          <EntryEditor key={`${toDateKey(selectedDate)}-${editingId ?? "new"}`} date={selectedDate} entry={editingEntry} onSaved={() => {setEditorOpen(false); setEditingId(null);}} onCancel={() => {setEditorOpen(false); setEditingId(null);}} />
+        </DashboardModal>}
 
-        {infoEntry && (
-          <div
-            className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
-            role="presentation"
-            onClick={() => setInfoEntryId(null)}
-          >
-            <div
-              ref={infoModalRef}
-              tabIndex={-1}
-              className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/15 bg-neutral-950 p-5 shadow-2xl sm:p-6"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="calendar-entry-info-title"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">{infoEntry.type === "event" ? "Veranstaltung" : "Location-Sperre"}</p>
-                  <h2 id="calendar-entry-info-title" className="mt-1 text-2xl font-semibold">{getEntryName(infoEntry)}</h2>
-                  <p className="mt-1 text-sm text-neutral-400">{dateFromKey(infoEntry.date).toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "long", year: "numeric" })}</p>
-                </div>
-                <button type="button" onClick={() => setInfoEntryId(null)} className="rounded-lg border border-white/20 px-3 py-2 text-sm hover:bg-white/10">Schließen</button>
-              </div>
+        {infoEntry && <DashboardModal variant="drawer" open onClose={() => setInfoEntryId(null)} title={getEntryName(infoEntry)} description={dateFromKey(infoEntry.date).toLocaleDateString("de-DE", {weekday: "long", day: "2-digit", month: "long", year: "numeric"})}>
+          <span className={`cc-status ${infoEntry.eventStatus === "CANCELLED" ? "cc-status-danger" : ""}`}>{infoEntry.eventStatus === "CANCELLED" ? "ABGESAGT" : infoEntry.type === "closure" ? "Location-Sperre" : "Veranstaltung"}</span>
               <dl className="mt-5 space-y-3 text-sm">
                 <div><dt className="text-neutral-500">Location</dt><dd className="mt-1 text-white">{infoVenue?.name ?? "Unbekannte Location"}</dd></div>
                 {infoEntry.type === "event" && infoEntry.startTime && <div><dt className="text-neutral-500">Beginn</dt><dd className="mt-1 text-white">{infoEntry.startTime} Uhr</dd></div>}
@@ -635,12 +434,8 @@ export default function CalendarPage() {
                 {infoEntry.type === "closure" && <div><dt className="text-neutral-500">Grund</dt><dd className="mt-1 text-white">{infoEntry.reason}</dd></div>}
                 {infoEntry.notes && <div><dt className="text-neutral-500">Notizen</dt><dd className="mt-1 whitespace-pre-wrap text-white">{infoEntry.notes}</dd></div>}
               </dl>
-              <div className="mt-6 flex justify-end gap-2">
-                <button type="button" onClick={() => { setInfoEntryId(null); editFromList(infoEntry); }} className="min-h-11 rounded-lg border border-white/15 px-4 py-2 text-sm hover:bg-white/10">Bearbeiten</button>
-              </div>
-            </div>
-          </div>
-        )}
+          <div className="mt-6 flex justify-end"><button type="button" className="cc-button cc-button-primary" onClick={() => {setInfoEntryId(null); editFromList(infoEntry);}}>Bearbeiten</button></div>
+        </DashboardModal>}
 
         <p className="mt-6 text-xs text-neutral-500">
           Automatische Termine aus dem Turnus werden nicht erzeugt.

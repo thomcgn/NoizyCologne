@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import "./control-center.css";
+import { preferenceBootstrap } from "./uiPreferences";
 import { ThemeProvider } from "./ThemeProvider";
 
 const geistSans = Geist({
@@ -28,10 +30,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="de"
+      suppressHydrationWarning
       data-theme="graphite"
       data-density="compact"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head><script dangerouslySetInnerHTML={{ __html: preferenceBootstrap }} /></head>
       <body className="min-h-full flex flex-col">
         <ThemeProvider>{children}</ThemeProvider>
       </body>

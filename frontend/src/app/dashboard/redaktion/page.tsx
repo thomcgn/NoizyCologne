@@ -15,6 +15,8 @@ import {
   CAPTION_PRETEXT_STORAGE_KEY,
   DEFAULT_CAPTION_PRETEXT,
 } from "../captionSettings";
+import { useWorkspaceAction } from "../workspaceActions";
+import { useRecordLink } from "../useRecordLink";
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat("de-DE", {
@@ -238,6 +240,24 @@ export default function RedaktionPage() {
     return eventEntries.filter((entry) => entry.date >= range.start && entry.date <= range.end);
   }, [eventEntries, feedView, today]);
   const [selectedId, setSelectedId] = useState("");
+  const [mobilePanel, setMobilePanel] = useState("feed");
+  const [unsavedIds, setUnsavedIds] = useState<string[]>([]);
+  useRecordLink(eventEntries, entry => {setSelectedId(entry.id); setMobilePanel("editor");});
+  useEffect(() => {
+    if (!unsavedIds.length) return;
+    function unload(event: BeforeUnloadEvent) {event.preventDefault(); event.returnValue = "";}
+    function navigate(event: MouseEvent) {
+      if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      const link = event.target instanceof window.Element ? event.target.closest("a[href]") : null;
+      if (!(link instanceof window.HTMLAnchorElement) || link.target === "_blank") return;
+      const destination = new URL(link.href);
+      if (destination.origin === window.location.origin && destination.pathname === window.location.pathname && destination.search === window.location.search) return;
+      if (!window.confirm("Ungespeicherte Redaktionsentwürfe verwerfen und die Seite verlassen?")) {event.preventDefault(); event.stopPropagation();}
+    }
+    window.addEventListener("beforeunload", unload);
+    document.addEventListener("click", navigate, true);
+    return () => {window.removeEventListener("beforeunload", unload); document.removeEventListener("click", navigate, true);};
+  }, [unsavedIds]);
   const [localDrafts, setLocalDrafts] = useState<Record<string, DraftState>>({});
   const [gateStates, setGateStates] = useState<Record<string, GateState>>({});
   const [eventFlyerSaving, setEventFlyerSaving] = useState(false);
@@ -458,6 +478,7 @@ export default function RedaktionPage() {
 
   function updateDraft(patch: Partial<DraftState>) {
     if (!activeId) return;
+    setUnsavedIds(current => current.includes(activeId) ? current : [...current, activeId]);
     setLocalDrafts((current) => ({
       ...current,
       [activeId]: { ...draft, ...patch },
@@ -531,6 +552,7 @@ export default function RedaktionPage() {
           musicTrackId: saved.musicTrackId,
         },
       }));
+      setUnsavedIds(current => current.filter(id => id !== selectedEntry.id));
     } catch (cause) {
       setDraftError(cause instanceof Error ? cause.message : "Der Redaktionsentwurf konnte nicht gespeichert werden.");
     } finally {
@@ -740,8 +762,10 @@ export default function RedaktionPage() {
     setHoveredPreviewId((current) => current === entryId ? null : current);
   }
 
+  useWorkspaceAction(persistedDraft ? "Entwurf speichern" : "Entwurf anlegen", () => void saveDraft(), !selectedEntry || draftSaving || draftsLoading || Boolean(draftsError) || entriesLoading || Boolean(entriesError));
+
   return (
-    <main className="app-page min-h-dvh bg-black px-4 py-6 text-white sm:py-8 md:px-10">
+    <main className="app-page cc-editorial-page min-h-dvh bg-black px-4 py-6 text-white sm:py-8 md:px-10">
       <div className="mx-auto max-w-7xl">
         <header className="mt-6 border-b border-white/10 pb-8">
           <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">
@@ -806,8 +830,9 @@ export default function RedaktionPage() {
         )}
 
         {eventEntries.length > 0 && (
-          <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(300px,420px)]">
-            <section className="overflow-hidden rounded-xl border border-white/10 bg-black xl:col-span-2">
+          <div className="cc-editorial-layout" data-panel={mobilePanel}>
+            <nav className="cc-editorial-tabs" aria-label="Redaktionsansicht">{[["feed", "Planung"], ["preview", "Vorschau"], ["editor", "Bearbeiten"]].map(([panel, label]) => <button type="button" key={panel} aria-pressed={mobilePanel === panel} aria-controls={`editorial-${panel}`} className="cc-button" onClick={() => setMobilePanel(panel)}>{label}</button>)}</nav>
+            <section id="editorial-feed" className="cc-editorial-feed overflow-hidden rounded-xl border border-white/10 bg-black">
               <div className="flex flex-wrap items-start justify-between gap-3 p-4 sm:p-6">
                 <div>
                   <h2 className="text-lg font-semibold">Feed-Anordnung</h2>
@@ -835,7 +860,7 @@ export default function RedaktionPage() {
                 Tastatur: Pfeiltasten verschieben die ausgewählte Kachel, Home und Ende setzen sie an den Anfang oder das Ende. Enter öffnet den zugehörigen Entwurf.
               </p>
               <div
-                className={`grid grid-cols-3 gap-px bg-neutral-800 ${isDragging ? "select-none" : ""}`}
+                className={`cc-feed-tiles grid grid-cols-3 gap-px bg-neutral-800 ${isDragging ? "select-none" : ""}`}
                 aria-describedby="feed-order-help"
               >
                 {orderedEventEntries.map((entry, index) => {
@@ -868,6 +893,7 @@ export default function RedaktionPage() {
                           return;
                         }
                         setSelectedId(entry.id);
+                        setMobilePanel("editor");
                       }}
                       onKeyDown={(event) => {
                         if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
@@ -956,14 +982,14 @@ export default function RedaktionPage() {
               </div>
             )}
 
-            <section className="rounded-xl border border-white/10 bg-neutral-950 p-4 sm:p-6">
+            <section id="editorial-preview" className="cc-editorial-preview rounded-xl border border-white/10 bg-neutral-950 p-4 sm:p-6">
               <div className="mb-5 flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-semibold">Post-Vorschau</h2>
                   <p className="mt-1 text-xs text-neutral-500">Nur lokale Vorschau</p>
                 </div>
                 <span className="rounded-full border border-amber-400/30 px-3 py-1 text-xs text-amber-300">
-                  Entwurf
+                  {draft.status === "APPROVED" ? "Freigegeben · unveröffentlicht" : draft.status === "READY_FOR_REVIEW" ? "Zur Prüfung" : "Entwurf"}
                 </span>
               </div>
 
@@ -975,8 +1001,9 @@ export default function RedaktionPage() {
               />
             </section>
 
-            <section className="rounded-xl border border-white/10 bg-neutral-950 p-4 sm:p-6">
+            <section id="editorial-editor" className="cc-editorial-editor rounded-xl border border-white/10 bg-neutral-950 p-4 sm:p-6">
               <h2 className="text-lg font-semibold">Entwurf bearbeiten</h2>
+              <p className="cc-description" role="status">{selectedParty?.name ?? "Unbekannte Partyreihe"} · {selectedEntry ? formatDate(selectedEntry.date) : "Termin fehlt"}{unsavedIds.includes(activeId) ? " · Ungespeicherte Änderungen" : ""}</p>
               {(selectedEntry?.eventStatus === "CANCELLED" || persistedDraft?.approvalNeedsReview || Boolean(persistedDraft?.publicationBlockers?.length)) && <div role="alert" className="mt-4 rounded-lg border border-amber-400 p-4 text-amber-300"><p>Veranstaltungsänderung: Originalpost gesperrt beziehungsweise Freigabe erneut prüfen.</p>{persistedDraft?.publicationBlockers?.map((message, index) => <p key={index}>{message}</p>)}<a className="underline" href="/dashboard/vorschlaege">Änderungen &amp; Absagen im Cancellation-Workflow prüfen</a><p>Caption, Flyer, Genres und Musik bleiben erhalten. Bereits veröffentlichte Inhalte in Instagram manuell prüfen.</p></div>}
               <p className="mt-2 text-sm leading-6 text-neutral-400">
                 Änderungen werden erst mit „Entwurf speichern“ dauerhaft in PostgreSQL gespeichert.
@@ -1147,6 +1174,7 @@ export default function RedaktionPage() {
               <label className="mt-5 block">
                 <span className="mb-2 block text-sm text-neutral-300">Caption</span>
                 <textarea
+                  aria-label="Caption"
                   className="min-h-44 w-full rounded-lg border border-white/15 bg-neutral-900 px-3 py-2.5 text-sm text-white outline-none focus:border-white/60"
                   value={draft.caption}
                   onChange={(event) => updateDraft({ caption: event.target.value })}

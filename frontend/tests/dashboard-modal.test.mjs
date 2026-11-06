@@ -11,6 +11,7 @@ for (const name of ['window', 'document', 'HTMLElement', 'HTMLDetailsElement', '
 }
 globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+window.confirm = () => true;
 // Browser code uses window.setInterval and the global clearInterval interchangeably.
 window.setInterval = globalThis.setInterval;
 window.clearInterval = globalThis.clearInterval;
@@ -351,7 +352,7 @@ test('calendar information → editor → Escape restores the original page trig
   trigger.focus();
   click(trigger);
   click(button('Bearbeiten'));
-  assert.ok(document.querySelector('#calendar-entry-dialog-title'));
+  assert.equal(document.querySelector('[role="dialog"] h2').textContent, 'Kalendereintrag bearbeiten');
   key('Escape');
   assert.equal(document.querySelector('[role="dialog"]'), null);
   assert.equal(document.activeElement, trigger);
@@ -547,7 +548,20 @@ test('editorial monitoring warnings preserve multiline captions and deliberately
   await act(async () => { root.render(h(StrictMode, null, h(Page))); });
   assert.equal(caption.value, persisted.caption, 'A calendar refresh must never regenerate a saved caption');
   type(caption, ' redaktionell ergänzt');
+  assert.match(document.querySelector('#editorial-editor').textContent, /Ungespeicherte Änderungen/);
+  click(button('Vorschau'));
+  assert.equal(document.querySelector('.cc-editorial-layout').dataset.panel, 'preview');
+  click(button('Bearbeiten'));
+  assert.equal(caption.value, persisted.caption + ' redaktionell ergänzt');
+  const unload = new Event('beforeunload', {cancelable: true}); window.dispatchEvent(unload);
+  assert.equal(unload.defaultPrevented, true);
+  let prompts = 0; window.confirm = () => {prompts++; return false;};
+  try { click(document.querySelector('#editorial-editor a')); assert.equal(prompts, 1); }
+  finally {window.confirm = () => true;}
   await act(async () => { button('Entwurf speichern').click(); });
+  const afterSave = new Event('beforeunload', {cancelable: true}); window.dispatchEvent(afterSave);
+  assert.equal(afterSave.defaultPrevented, false);
+  assert.doesNotMatch(document.querySelector('#editorial-editor').textContent, /Ungespeicherte Änderungen/);
   assert.equal(saved.length, 1);
   assert.equal(saved[0].caption, persisted.caption + ' redaktionell ergänzt');
   assert.deepEqual(saved[0].mentionActorIds, []);
@@ -611,4 +625,166 @@ test('unreadable website reports an unknown count rather than a confirmed zero e
   await act(async()=>{button('Website automatisch prüfen').click();await new Promise(resolve=>setTimeout(resolve,20));});
   const text=document.querySelector('[role="dialog"]').textContent;
   assert.match(text,/Keine verlässliche Veranstaltungszahl ermittelbar/);assert.match(text,/Browser-Zeitlimit/);assert.doesNotMatch(text,/0 Veranstaltungen gefunden/);
+});
+
+function changeField(element, value) {
+  element.focus();
+  act(() => {
+    if (element.tagName === 'SELECT') {
+      element.value = value;
+      element.dispatchEvent(new Event('change', {bubbles: true}));
+    } else {
+      const prototype = element.tagName === 'TEXTAREA' ? dom.window.HTMLTextAreaElement.prototype : dom.window.HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(prototype, 'value').set.call(element, value);
+      element.dispatchEvent(new Event('input', {bubbles: true}));
+    }
+  });
+}
+
+test('portfolio tables paginate and search genres and related actors without modifying records', async () => {
+  const rows = Array.from({length: 60}, (_, index) => ({...party, id: `party-${index}`, name: `Party ${index}`, standardGenres: index === 40 ? ['Emo'] : ['Indie'], residentDjIds: index === 40 ? ['actor'] : []}));
+  catalogue = {parties: rows, venues: [venue], actors: [actor]};
+  globalThis.fetch = async () => new Response(JSON.stringify([genre]));
+  const Page = loadSource(new URL('../src/app/dashboard/portfolio/page.tsx', import.meta.url)).default;
+  await act(async () => mount(h(Page, {standalone: true})));
+  assert.equal(document.querySelectorAll('[data-record-id]').length, 25);
+  click(button('Weiter'));
+  assert.equal(document.querySelectorAll('[data-record-id]').length, 25);
+  changeField(document.querySelector('input[type="search"]'), 'Emo');
+  assert.deepEqual([...document.querySelectorAll('[data-record-id]')].map(row => row.dataset.recordId), ['party-40']);
+  changeField(document.querySelector('input[type="search"]'), 'Test DJ');
+  assert.equal(document.querySelector('[data-record-id]').dataset.recordId, 'party-40');
+  const trigger = document.querySelector('[data-record-open]');
+  trigger.focus();
+  await act(async () => trigger.click());
+  assert.ok(document.querySelector('[role="dialog"].cc-drawer'));
+  assert.equal(document.querySelector('[role="dialog"] input').value, 'Party 40');
+  key('Escape');
+  assert.equal(document.activeElement, trigger);
+  assert.equal(rows[40].name, 'Party 40');
+});
+
+test('actor filters use real roles and retain collective membership in search and editor', async () => {
+  const collective = {...actor, id: 'collective', name: 'Crew Beispiel', kind: 'collective', roles: ['organizer']};
+  catalogue = {actors: [{...actor, collectiveIds: ['collective']}, collective, {...actor, id: 'guest', name: 'Gast', roles: []}]};
+  const Page = loadSource(new URL('../src/app/dashboard/portfolio/akteure/page.tsx', import.meta.url)).default;
+  await act(async () => mount(h(Page)));
+  const filters = document.querySelectorAll('.cc-collection-toolbar select');
+  changeField(filters[1], 'dj');
+  assert.deepEqual([...document.querySelectorAll('[data-record-id]')].map(row => row.dataset.recordId), ['actor']);
+  changeField(document.querySelector('input[type="search"]'), 'Crew Beispiel');
+  assert.equal(document.querySelectorAll('[data-record-id]').length, 1);
+  changeField(filters[0], 'collective');
+  assert.match(document.body.textContent, /Keine passenden DJs oder Kollektive/);
+  changeField(filters[1], 'organizer');
+  assert.equal(document.querySelector('[data-record-id]').dataset.recordId, 'collective');
+  click(document.querySelector('[data-record-open]'));
+  assert.equal(document.querySelector('[role="dialog"] input').value, 'Crew Beispiel');
+});
+
+test('calendar table keeps chronological order, cancellations and closure/location filters', async () => {
+  catalogue = {parties: [party], venues: [venue, {...venue, id: 'other', name: 'Andere Location'}], actors: [actor], entries: [
+    {...entry, id: 'late', date: '2027-01-05', eventStatus: 'CANCELLED', notes: 'Geprüfter Hinweis'},
+    {...entry, id: 'early', date: '2027-01-02', mentionDjIds: ['actor']},
+    {id: 'closure', date: '2027-01-03', type: 'closure', reason: 'Geschlossen', locationId: 'other', notes: ''},
+  ]};
+  const Page = loadSource(new URL('../src/app/dashboard/kalender/page.tsx', import.meta.url)).default;
+  await act(async () => mount(h(Page)));
+  const ids = () => [...document.querySelectorAll('[data-record-id]')].map(row => row.dataset.recordId);
+  assert.deepEqual(ids(), ['early', 'closure', 'late']);
+  assert.match(document.querySelector('[data-record-id="late"]').textContent, /ABGESAGT/);
+  changeField(document.querySelector('input[type="search"]'), 'Geprüfter Hinweis');
+  assert.deepEqual(ids(), ['late']);
+  changeField(document.querySelector('input[type="search"]'), 'Test DJ');
+  assert.deepEqual(ids(), ['early']);
+  changeField(document.querySelector('input[type="search"]'), '');
+  const filters = document.querySelectorAll('.cc-collection-toolbar select');
+  changeField(filters[0], 'closure');
+  assert.deepEqual(ids(), ['closure']);
+  changeField(filters[1], 'venue');
+  assert.equal(ids().length, 0);
+  assert.match(document.body.textContent, /Keine passenden Einträge/);
+  changeField(filters[1], 'other');
+  click(document.querySelector('[data-record-open]'));
+  assert.match(document.querySelector('[role="dialog"]').textContent, /Location-Sperre/);
+  click(button('Bearbeiten'));
+  assert.equal(document.querySelector('[role="dialog"] select').value, 'other');
+  assert.equal(document.querySelector('button[aria-pressed="true"]').textContent.trim(), 'Location-Sperre');
+});
+
+for (const [file, props] of [['portfolio/page.tsx', {standalone: true}], ['portfolio/akteure/page.tsx', {}], ['kalender/page.tsx', {}]]) {
+  test(`${file}: drawer cancel protects changes and successful saving closes without a discard prompt`, async () => {
+    let saved;
+    const update = async value => {saved = value; return value;};
+    catalogue = {parties: [party], venues: [venue], actors: [actor], entries: [entry], updateParty: update, updateActor: update, updateEntry: update};
+    globalThis.fetch = async url => new Response(JSON.stringify(url.includes('aliases') ? [] : [genre]));
+    const Page = loadSource(new URL(`../src/app/dashboard/${file}`, import.meta.url)).default;
+    await act(async () => mount(h(Page, props)));
+    const trigger = button('Bearbeiten');
+    trigger.focus();
+    await act(async () => trigger.click());
+    const dialog = document.querySelector('[role="dialog"]');
+    const input = dialog.querySelector(file.startsWith('kalender') ? 'textarea' : 'input');
+    type(input, ' geändert');
+    let prompts = 0;
+    window.confirm = () => {prompts++; return false;};
+    try {
+      click(button('Abbrechen'));
+      assert.equal(document.querySelector('[role="dialog"]'), dialog);
+      assert.equal(prompts, 1);
+      await act(async () => {dialog.querySelector('form').dispatchEvent(new Event('submit', {bubbles: true, cancelable: true}));});
+      assert.ok(saved);
+      if (file.startsWith('kalender')) {
+        assert.equal(saved.notes, 'geändert');
+        assert.equal(saved.date, entry.date);
+        assert.equal(saved.locationId, entry.locationId);
+        assert.equal(saved.partyId, entry.partyId);
+        assert.deepEqual(saved.mentionDjIds, []);
+      } else assert.match(saved.name, / geändert$/);
+      assert.equal(prompts, 1);
+      assert.equal(document.querySelector('[role="dialog"]'), null);
+      assert.equal(document.activeElement, trigger);
+    } finally {window.confirm = () => true;}
+  });
+}
+
+test('global search filters real catalogue data, supports keyboard commands and protects active editors', async () => {
+  catalogue = {parties: [party], venues: [venue], actors: [actor], entries: [entry]};
+  const Palette = loadSource(new URL('../src/app/dashboard/CommandPalette.tsx', import.meta.url)).default;
+  let runs = 0;
+  mount(h(Palette, {action: {id: 'create', label: 'Neuer Eintrag', run: () => runs++}}));
+  const trigger = document.querySelector('button'); trigger.focus();
+  act(() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'k', ctrlKey: true, bubbles: true, cancelable: true})));
+  const search = document.querySelector('input[type="search"]');
+  assert.equal(document.activeElement, search);
+  changeField(search, 'Test DJ');
+  assert.equal(document.querySelectorAll('.cc-command-result').length, 1);
+  const result = document.querySelector('.cc-command-result');
+  assert.equal(result.getAttribute('href'), '/dashboard/djs#record=actor');
+  key('ArrowDown'); assert.equal(document.activeElement, result);
+  key('Escape'); assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.equal(document.activeElement, trigger);
+  click(trigger);
+  changeField(document.querySelector('input[type="search"]'), 'Neuer Eintrag');
+  click([...document.querySelectorAll('button')].find(button => button.textContent === 'Neuer Eintrag'));
+  assert.equal(runs, 1); assert.equal(document.querySelector('[role="dialog"]'), null);
+  const editor = document.createElement('div'); editor.setAttribute('role', 'dialog'); document.body.append(editor);
+  act(() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'k', metaKey: true, bubbles: true})));
+  assert.equal(document.querySelectorAll('[role="dialog"]').length, 1);
+});
+
+test('record links resolve after catalogue loading and reopen on same-page hash navigation', async () => {
+  const {useRecordLink, recordLink} = loadSource(new URL('../src/app/dashboard/useRecordLink.ts', import.meta.url));
+  const opened = [];
+  function Links({items}) {useRecordLink(items, item => opened.push(item.id)); return null;}
+  window.history.replaceState(null, '', recordLink('/dashboard/partys', 'party:40'));
+  try {
+    mount(h(Links, {items: []})); assert.deepEqual(opened, []);
+    act(() => root.render(h(Links, {items: [{id: 'party:40'}, {id: 'other'}]})));
+    assert.deepEqual(opened, ['party:40']);
+    act(() => root.render(h(Links, {items: [{id: 'party:40'}, {id: 'other'}]})));
+    assert.deepEqual(opened, ['party:40']);
+    act(() => {window.history.replaceState(null, '', recordLink('/dashboard/partys', 'other')); window.dispatchEvent(new Event('hashchange'));});
+    assert.deepEqual(opened, ['party:40', 'other']);
+  } finally {window.history.replaceState(null, '', '/');}
 });

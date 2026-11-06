@@ -1,9 +1,9 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useContext, useLayoutEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
 
-export type Theme = "graphite" | "dark" | "light";
-export type Density = "compact" | "comfortable";
+import { themes, densities, defaultTheme, defaultDensity, type Theme, type Density } from "./uiPreferences";
+export type { Theme, Density } from "./uiPreferences";
 
 interface ThemeContextValue {
   theme: Theme;
@@ -15,14 +15,14 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-function preferenceStore<T extends string>(key: string, values: readonly T[], defaultValue: T, eventName: string) {
+export function preferenceStore<T extends string>(key: string, values: readonly T[], defaultValue: T, eventName: string, normalize: (value: string | null) => string | null = value => value) {
   // Keep the current selection usable when browser storage is unavailable/full.
   let sessionValue: T | null = null;
   return {
     getSnapshot: (): T => {
       if (sessionValue !== null) return sessionValue;
       try {
-        const stored = window.localStorage.getItem(key);
+        const stored = normalize(window.localStorage.getItem(key));
         return values.find(value => value === stored) ?? defaultValue;
       } catch { return defaultValue; }
     },
@@ -51,23 +51,23 @@ function preferenceStore<T extends string>(key: string, values: readonly T[], de
   };
 }
 
-const themeStore = preferenceStore<Theme>("noizy-theme", ["graphite", "dark", "light"], "graphite", "noizy-theme-change");
-const densityStore = preferenceStore<Density>("noizy-density", ["compact", "comfortable"], "compact", "noizy-density-change");
+const themeStore = preferenceStore<Theme>("noizy-theme", themes, defaultTheme, "noizy-theme-change", value => value === "dark" ? "midnight" : value);
+const densityStore = preferenceStore<Density>("noizy-density", densities, defaultDensity, "noizy-density-change");
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const theme = useSyncExternalStore(themeStore.subscribe, themeStore.getSnapshot, themeStore.getServerSnapshot);
   const density = useSyncExternalStore(densityStore.subscribe, densityStore.getSnapshot, densityStore.getServerSnapshot);
 
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    document.documentElement.dataset.density = density;
+  useLayoutEffect(() => {
+    document.documentElement.dataset.theme = themeStore.getSnapshot();
+    document.documentElement.dataset.density = densityStore.getSnapshot();
   }, [theme, density]);
 
   const value = useMemo(() => ({
     theme, density,
     setTheme: themeStore.set,
     setDensity: densityStore.set,
-    toggleTheme: () => themeStore.set(theme === "graphite" ? "light" : theme === "light" ? "dark" : "graphite"),
+    toggleTheme: () => themeStore.set(theme === "graphite" ? "midnight" : theme === "midnight" ? "light" : "graphite"),
   }), [theme, density]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
