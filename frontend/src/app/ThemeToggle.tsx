@@ -5,13 +5,13 @@ import { useTheme } from "./ThemeProvider";
 export default function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
   const light = theme === "light";
-  const nextLabel = theme === "dark" ? "Graphit" : light ? "Dunkel" : "Hell";
+  const nextLabel = theme === "graphite" ? "Midnight" : light ? "Graphit" : "Hell";
 
   return (
     <button
       type="button"
       onClick={toggleTheme}
-      aria-label={theme === "dark" ? "Graphit-Layout aktivieren" : light ? "Dunkles Layout aktivieren" : "Helles Layout aktivieren"}
+      aria-label={theme === "graphite" ? "Midnight-Layout aktivieren" : light ? "Graphit-Layout aktivieren" : "Helles Layout aktivieren"}
       aria-pressed={light}
       className="theme-toggle control-button control-button-secondary"
     >

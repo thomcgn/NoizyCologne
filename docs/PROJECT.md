@@ -3804,3 +3804,10 @@ Die vorhandene Hell-/Dunkel-Auswahl bleibt kompatibel. Speicherung erfolgt lokal
 im Browser; CSS-Variablen steuern Farben, Abstände und Größen. Keine Änderung an
 Backend oder Discovery-Logik. Arbeitsnachweis und Grenzen:
 [UI-PREFERENCES.md](UI-PREFERENCES.md).
+
+# 31. Control Center 2.0 (06.11.2026)
+
+Das bestehende Frontend wird in fünf einzeln geprüften Phasen zu einer
+Desktop-orientierten Arbeitsoberfläche mit ergänzender mobiler PWA umgebaut.
+Geschäftslogik, APIs und Daten bleiben erhalten. Fortschritt, Prüfungen und
+Abnahmegrenzen stehen in [CONTROL-CENTER.md](CONTROL-CENTER.md).

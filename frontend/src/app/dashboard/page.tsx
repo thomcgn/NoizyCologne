@@ -1,91 +1,17 @@
+"use client";
 import Link from "next/link";
-
-const modules = [
-  {
-    title: "Kalender",
-    description: "Veranstaltungen, Wiederholungen und Location-Sperren verwalten.",
-    status: "In Vorbereitung",
-  },
-  {
-    title: "Partys",
-    description: "Partyreihen, Farben, Turnus und Beteiligte verwalten.",
-    status: "In Vorbereitung",
-  },
-  {
-    title: "Redaktionsplanung",
-    description: "Flyer, Captions, Mentions und Feed-Reihenfolge organisieren.",
-    status: "Entwurfsansicht verfügbar",
-  },
-];
+import { useCatalog } from "./CatalogProvider";
+import WorkspaceIcon from "./WorkspaceIcon";
 
 export default function DashboardPage() {
-  return (
-    <main className="app-page min-h-dvh bg-black p-6 text-white md:p-10">
-          <header className="border-b border-white/10 pb-8">
-            <p className="text-xs tracking-[0.2em] text-neutral-500 uppercase">
-              NoizyCologne / Dashboard
-            </p>
-
-            <h1 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">
-              Übersicht
-            </h1>
-
-            <p className="mt-3 text-neutral-400">
-              Deine zentrale Verwaltung für Kölns Partyszene.
-            </p>
-          </header>
-
-          {/* Module */}
-          <section className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {modules.map((module) => (
-              <article
-                key={module.title}
-                className="rounded-xl border border-white/10 bg-neutral-950 p-6"
-              >
-                <h2 className="text-xl font-semibold">
-                  {module.title}
-                </h2>
-
-                <p className="mt-3 min-h-20 text-sm leading-6 text-neutral-400">
-                  {module.description}
-                </p>
-
-                <div className="mt-5 border-t border-white/10 pt-4 text-xs text-neutral-500">
-                  {module.title === "Redaktionsplanung" ? (
-                    <Link href="/dashboard/redaktion" className="text-neutral-300 hover:text-white">
-                      {module.status} →
-                    </Link>
-                  ) : module.status}
-                </div>
-              </article>
-            ))}
-          </section>
-
-          {/* Kalenderbereich */}
-          <section className="mt-10 rounded-xl border border-white/10 bg-neutral-950 p-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-xl font-semibold">
-                Veranstaltungskalender
-              </h2>
-
-              <span className="text-sm text-neutral-500">
-                Noch keine Daten
-              </span>
-            </div>
-
-            <div className="mt-6 flex min-h-64 items-center justify-center rounded-lg border border-dashed border-white/10 p-6 text-center">
-              <div>
-                <p className="font-medium">
-                  Dein Kalender entsteht hier.
-                </p>
-
-                <p className="mt-2 max-w-sm text-sm leading-6 text-neutral-500">
-                  Künftig kannst du Veranstaltungen, regelmäßige
-                  Partys und Location-Sperren direkt verwalten.
-                </p>
-              </div>
-            </div>
-          </section>
-    </main>
-  );
+  const {parties, partiesLoading, partiesError, venues, venuesLoading, venuesError, actors, entries, entriesLoading, entriesError, reloadEntries, drafts, draftsLoading, draftsError} = useCatalog();
+  const today = new Intl.DateTimeFormat("sv-SE", {timeZone: "Europe/Berlin"}).format(new Date());
+  const upcoming = entries.filter(entry => entry.type === "event" && entry.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+  const review = drafts.filter(draft => draft.approvalNeedsReview || draft.publicationBlockers?.length);
+  return <main className="cc-page"><header className="cc-page-heading"><p className="cc-eyebrow">NoizyCologne / Control Center</p><h1>Dein Arbeitsbereich</h1><p className="cc-description">Termine, Portfolio und Redaktion an einem Ort.</p></header>
+    <div className="cc-overview-stats">{[["Anstehende Termine", entriesLoading || entriesError ? "–" : upcoming.length, "/dashboard/kalender"], ["Partyreihen", partiesLoading || partiesError ? "–" : parties.length, "/dashboard/partys"], ["Locations", venuesLoading || venuesError ? "–" : venues.length, "/dashboard/locations"], ["Entwürfe mit Prüfhinweis", draftsLoading || draftsError ? "–" : review.length, "/dashboard/redaktion"]].map(([label, count, href]) => <Link key={label} href={String(href)} className="cc-panel cc-stat"><span>{label}</span><strong>{count}</strong><WorkspaceIcon name="arrow" /></Link>)}</div>
+    {review.length > 0 && <p className="cc-message">{review.length} {review.length === 1 ? "Redaktionsentwurf hat" : "Redaktionsentwürfe haben"} einen Prüfhinweis. <Link href="/dashboard/redaktion">In der Redaktion öffnen →</Link></p>}
+    {(partiesError || venuesError || draftsError) && <p className="cc-message" role="alert">Einige Bereiche konnten nicht geladen werden. Bitte im jeweiligen Arbeitsbereich erneut versuchen.</p>}
+    <div className="cc-overview-grid"><section className="cc-panel"><div className="cc-section-title"><h2>Nächste Termine</h2><Link href="/dashboard/kalender">Zum Kalender →</Link></div>{entriesLoading ? <p role="status">Termine werden geladen …</p> : entriesError ? <div role="alert"><p>{entriesError}</p><button className="cc-button" onClick={() => void reloadEntries()}>Erneut versuchen</button></div> : upcoming.length === 0 ? <p className="cc-empty">Noch keine anstehenden Termine. Lege einen Termin im Kalender an oder prüfe neue Reihen in Discovery.</p> : <ul className="cc-record-list">{upcoming.slice(0, 8).map(entry => <li key={entry.id}><Link href={`/dashboard/kalender?record=${encodeURIComponent(entry.id)}`}><strong>{entry.type === "event" ? parties.find(party => party.id === entry.partyId)?.name ?? "Partytermin" : "Termin"}</strong><span>{entry.date} · {venues.find(venue => venue.id === entry.locationId)?.name ?? "Location"}{entry.eventStatus === "CANCELLED" ? " · Abgesagt" : ""}</span></Link></li>)}</ul>}</section><section className="cc-panel"><h2>Direkt weiterarbeiten</h2><div className="cc-quick-links">{[["Discovery", "Neue Reihen und Ausnahmefälle", "/dashboard/vorschlaege", "discovery"], ["Redaktion", "Entwürfe und Feed-Reihenfolge", "/dashboard/redaktion", "editorial"], ["Portfolio", `${actors.length} Akteure · Genres und Stammdaten`, "/dashboard/partys", "parties"]].map(([title, text, href, icon]) => <Link key={href} href={href}><WorkspaceIcon name={icon as "discovery" | "editorial" | "parties"} /><div><strong>{title}</strong><span>{text}</span></div><WorkspaceIcon name="arrow" /></Link>)}</div></section></div>
+  </main>;
 }

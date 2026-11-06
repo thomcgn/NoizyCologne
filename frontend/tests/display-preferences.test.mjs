@@ -84,14 +84,14 @@ test('settings apply immediately, retain focus, persist and survive a remount', 
 
 for (const legacy of ['light', 'dark']) test(`existing ${legacy} selection remains and density stays independent`, () => {
   window.localStorage.setItem('noizy-theme', legacy);
-  mount(); assert.equal(selection(), `${legacy}/compact`);
+  mount(); assert.equal(selection(), `${legacy === 'dark' ? 'midnight' : legacy}/compact`);
   open(); select('Informationsdichte', 'comfortable');
-  assert.equal(selection(), `${legacy}/comfortable`);
+  assert.equal(selection(), `${legacy === 'dark' ? 'midnight' : legacy}/comfortable`);
 });
 
 test('all three themes are reachable through the existing quick toggle', () => {
   mount();
-  for (const [name, expected] of [['Hell', 'light'], ['Dunkel', 'dark'], ['Graphit', 'graphite']]) {
+  for (const [name, expected] of [['Midnight', 'midnight'], ['Hell', 'light'], ['Graphit', 'graphite']]) {
     const toggle = document.querySelector(".theme-toggle");
     assert.ok(toggle.textContent.endsWith(name));
     act(() => toggle.click());
@@ -128,4 +128,16 @@ test('display dialog closes by Escape and returns focus to its trigger', () => {
   act(() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true, cancelable: true})));
   assert.equal(document.querySelector('[role="dialog"]'), null);
   assert.equal(document.activeElement, trigger);
+});
+
+test('bootstrap applies validated stored preferences before provider hydration and migrates legacy dark', () => {
+  window.localStorage.setItem('noizy-theme', 'dark');
+  window.localStorage.setItem('noizy-density', 'comfortable');
+  const {preferenceBootstrap} = loadSource(new URL('../src/app/uiPreferences.ts', import.meta.url));
+  new Function('localStorage', 'document', preferenceBootstrap)(window.localStorage, document);
+  assert.equal(document.documentElement.dataset.theme, 'midnight');
+  assert.equal(document.documentElement.dataset.density, 'comfortable');
+  mount();
+  assert.equal(document.documentElement.dataset.theme, 'midnight');
+  assert.equal(selection(), 'midnight/comfortable');
 });

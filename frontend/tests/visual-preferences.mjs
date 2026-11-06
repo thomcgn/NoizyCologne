@@ -40,7 +40,7 @@ try {
     assert.equal(await page.locator('html').getAttribute('data-theme'), 'graphite');
     assert.equal(await page.locator('html').getAttribute('data-density'), 'compact');
     const sizes = {};
-    for (const theme of ['graphite', 'light', 'dark']) for (const density of ['compact', 'comfortable']) {
+    for (const theme of ['graphite', 'light', 'midnight']) for (const density of ['compact', 'comfortable']) {
       await page.getByRole('button', {name: 'Darstellung', exact: true}).click();
       await page.getByLabel('Theme', {exact: true}).selectOption(theme);
       await page.getByLabel('Informationsdichte', {exact: true}).selectOption(density);
@@ -60,7 +60,7 @@ try {
       assert.ok(metrics.textContrast >= 4.5);
       if (width === 390) assert.ok(metrics.buttonHeight >= 44, 'Touch targets remain at least 44px tall');
       if (theme === 'graphite') {
-        assert.equal(metrics.pageBackground, 'rgb(28, 30, 34)');
+        assert.equal(metrics.pageBackground, 'rgb(17, 21, 28)');
         sizes[density] = metrics.cardHeight;
         await page.screenshot({path: `${out}/graphite-${density}-${width}.png`, fullPage: true});
       }
