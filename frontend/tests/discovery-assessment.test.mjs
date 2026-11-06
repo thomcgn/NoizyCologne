@@ -24,11 +24,14 @@ const calls = [];
 let candidates;
 let sourceRows=[];
 let reloadedEntries;
+let reloadedParties;
+let reloadedDrafts;
 const catalogue = {
   parties: [{ id: 'paradise', name: 'NEON PARADISE' }, { id: 'kult', name: 'NEON KULT' }],
   venues: [{ id: 'blue-shell', name: 'Blue Shell' }],
   reloadEntries: async () => { reloadedEntries++; },
-  reloadParties: async () => {},
+  reloadParties: async () => { reloadedParties++; },
+  reloadDrafts: async () => { reloadedDrafts++; },
 };
 const modules = new Map();
 function loadSource(url) {
@@ -76,10 +79,11 @@ function overview() {
 async function settle(work = () => {}) {
   await act(async () => { await work(); await new Promise(resolve => setTimeout(resolve, 20)); });
 }
-async function mount(item) {
-  candidates = [item]; sourceRows=[]; calls.length = 0; reloadedEntries = 0;
+async function mount(item, failInitial = false) {
+  candidates = Array.isArray(item) ? item : [item]; sourceRows=[]; calls.length = 0; reloadedEntries = 0; reloadedParties = 0; reloadedDrafts = 0;
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url, ...options });
+    if (failInitial) return new Response(JSON.stringify({message: 'Quelle nicht erreichbar'}), {status: 503});
     if (options.method === 'PUT' || options.method === 'POST') return new Response(null, { status: 204 });
     return new Response(JSON.stringify(overview()), { headers: { 'Content-Type': 'application/json' } });
   };
@@ -108,7 +112,7 @@ function change(element, value) {
     element.dispatchEvent(new Event(element.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
   });
 }
-async function openReview() { await settle(() => button('Veranstaltung prüfen').click()); }
+async function openReview() { await settle(() => { const trigger = [...document.querySelectorAll('article button')].find(item => /Veranstaltung prüfen|Ins Portfolio übernehmen|Übernahme öffnen/.test(item.textContent)); assert.ok(trigger); trigger.click(); }); }
 afterEach(() => {
   if (root) act(() => root.unmount());
   root = null; poll = null; document.body.replaceChildren(); globalThis.fetch = originalFetch;
@@ -117,7 +121,7 @@ afterEach(() => {
 test('cooperation shows both known series and requires an explicit single manual assignment', async () => {
   await mount(candidate());
   const card = document.querySelector('article');
-  assert.match(card.textContent, /Blue Shell · 2026-11-07/);
+  assert.match(card.textContent, /Blue Shell07. November 2026/);
   assert.match(card.textContent, /Kooperation erkannt/);
   assert.deepEqual([...card.querySelectorAll('li')].map(item => item.textContent), ['NEON PARADISE', 'NEON KULT']);
   await openReview();
@@ -140,7 +144,8 @@ test('READY is visible and benign UNCONFIRMED detail metadata does not become an
   const single = { status: 'SINGLE', parties: recognition.parties.slice(0, 1) };
   await mount(candidate({ title: 'NEON PARADISE Special', party_id: 'paradise', status: 'READY',
     reason: 'Bekannte Party; UNCONFIRMED Details nicht auswertbar', assessment: assessment({ recognition: single, automaticImportEligible: true }) }));
-  await settle(() => button('Bereit zur Übernahme').click());
+  assert.equal(document.querySelectorAll('.discovery-card').length, 0, 'Known ready parties do not become unnecessary review cases');
+  await settle(() => document.querySelector('.discovery-history > summary').click());
   assert.ok(calls.some(call => call.url.endsWith('?filter=READY')));
   assert.ok(document.querySelector('article'));
   await openReview();
@@ -203,15 +208,16 @@ test('portfolio approval uses the threshold of all active project genres and exp
   await mount(candidate({title:'New Alternative Party',matching_class:'POSSIBLE_MATCH',assessment:assessment({recognition:{status:'NONE',parties:[]}}),genreCoverage:{matched:2,total:4,percent:50,names:['Emo','Indie'],eligible:true}}));
   await openReview();assert.match(dialog().textContent,/2 von 4 aktiven Projektgenres \(50 %\)/);
   const name=control('Name im Portfolio');change(name,'New Alternative Night');assert.equal(document.activeElement,name);
-  await settle(()=>button('Ins Portfolio aufnehmen',dialog()).click());
+  await settle(()=>button('Ins Portfolio übernehmen',dialog()).click());
   const request=calls.find(call=>call.url.endsWith('/portfolio')&&call.method==='POST');
   assert.deepEqual(JSON.parse(request.body),{name:'New Alternative Night'});
   assert.equal(document.querySelector('[role="dialog"]'),null);assert.ok(!calls.some(call=>/instagram|publish|cancellations/.test(call.url)));
+  assert.equal(reloadedEntries, 1); assert.equal(reloadedParties, 1); assert.equal(reloadedDrafts, 1);
 });
 test('below fifty percent no new portfolio series is offered even when an individual genre matches',async()=>{
   await mount(candidate({title:'Unknown Emo Party',assessment:assessment({recognition:{status:'NONE',parties:[]}}),genreCoverage:{matched:1,total:4,percent:25,names:['Emo'],eligible:false}}));
   await openReview();assert.match(dialog().textContent,/1 von 4/);
-  assert.ok(![...dialog().querySelectorAll('button')].some(item=>item.textContent==='Ins Portfolio aufnehmen'));
+  assert.ok(![...dialog().querySelectorAll('button')].some(item=>item.textContent==='Ins Portfolio übernehmen'));
 });
 test('partial MTC source is not an empty calendar and new source options retain focus',async()=>{
   await mount(candidate());
@@ -230,4 +236,64 @@ test('source comparison displays title, date and location without raw JSON',asyn
   globalThis.fetch=async(url,options={})=>url.endsWith('/sources')?new Response(JSON.stringify([{url:'https://tickets.example/event',source_kind:'OFFICIAL_TICKETS',event_data:JSON.stringify({title:'NEON PARADISE',starts:['2026-11-07T23:00'],location:'Blue Shell',evidence:'Emo and Indie DJs'})}]),{headers:{'Content-Type':'application/json'}}):previous(url,options);
   await settle(()=>button('Quellenbelege laden',dialog()).click());
   assert.match(dialog().textContent,/Offizielle Ticketseite/);assert.match(dialog().textContent,/2026-11-07T23:00/);assert.ok(!dialog().textContent.includes('"starts":'));
+});
+
+test('Discovery separates eligible new series, protected decisions and imported history without debug cards', async () => {
+  const unknown = candidate({ id: 'new', title: 'Neue Indie-Nacht', assessment: assessment({ recognition: {status: 'NONE', parties: []} }), genreCoverage: {matched: 2, total: 4, percent: 50, names: ['Emo', 'Indie'], eligible: true} });
+  await mount([unknown, candidate({id: 'protected', title: 'Manuelle Rückfrage', inquiry_status: 'SENT', decision_origin: 'MANUAL'}), candidate({id: 'imported', title: 'Historischer Termin', status: 'IMPORTED', calendar_entry_id: 'entry'})]);
+  const fresh = document.querySelector('section[aria-label="Neue Partyreihen"]');
+  const review = document.querySelector('section[aria-label="Prüfbedarf"]');
+  assert.equal(fresh.querySelectorAll('article').length, 1);
+  assert.match(fresh.textContent, /Neue Indie-Nacht/);
+  assert.match(fresh.textContent, /50 % Genre-Match/);
+  assert.match(fresh.textContent, /EmoIndie/);
+  assert.equal(review.querySelectorAll('article').length, 1);
+  assert.match(review.textContent, /Rückfrage ist noch offen/);
+  assert.doesNotMatch(document.querySelector('main').textContent, /Historischer Termin|party-rules-3|POSSIBLE_MATCH/);
+  assert.equal(document.querySelector('.discovery-history').open, false);
+  assert.ok(!calls.some(call => call.url.endsWith('?filter=IMPORTED')));
+});
+
+test('empty Discovery has explicit empty states and keeps the existing scan endpoint', async () => {
+  await mount([]);
+  assert.match(document.querySelector('h1').textContent, /^Discovery$/);
+  assert.match(document.body.textContent, /Alles auf dem aktuellen Stand/);
+  assert.match(document.body.textContent, /Keine offenen Ausnahmefälle/);
+  await settle(() => button('Jetzt suchen').click());
+  assert.equal(calls.filter(call => call.method === 'POST' && call.url.endsWith('/scan')).length, 1);
+});
+
+test('long review lists reveal another page without mounting the historical archive', async () => {
+  await mount(Array.from({length: 35}, (_, index) => candidate({id: `review-${index}`})));
+  assert.equal(document.querySelectorAll('.discovery-card').length, 12);
+  await settle(() => button('Weitere 12 anzeigen').click());
+  assert.equal(document.querySelectorAll('.discovery-card').length, 24);
+  assert.ok(!calls.some(call => call.url.endsWith('?filter=ARCHIVE')));
+});
+
+test('portfolio confirmation prevents duplicate submissions and removes the approved series after refresh', async () => {
+  const fresh = candidate({ title: 'Neue Reihe', assessment: assessment({recognition: {status: 'NONE', parties: []}}), genreCoverage: {matched: 2, total: 4, percent: 50, names: ['Emo', 'Indie'], eligible: true} });
+  await mount(fresh);
+  await openReview();
+  assert.ok(!calls.some(call => call.method === 'POST'));
+  const previous = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => {
+    if (url.endsWith('/portfolio') && options.method === 'POST') {
+      candidates = [candidate({...fresh, status: 'IMPORTED', calendar_entry_id: 'entry', party_id: 'approved'})];
+      await new Promise(resolve => setTimeout(resolve, 5));
+    }
+    return previous(url, options);
+  };
+  const confirm = button('Ins Portfolio übernehmen', dialog());
+  await settle(() => { confirm.click(); confirm.click(); });
+  assert.equal(calls.filter(call => call.url.endsWith('/portfolio') && call.method === 'POST').length, 1);
+  assert.equal(document.querySelectorAll('.discovery-card').length, 0);
+  assert.equal(reloadedEntries, 1); assert.equal(reloadedDrafts, 1);
+});
+
+test('failed initial requests do not claim that Discovery is empty or up to date', async () => {
+  await mount([], true);
+  assert.match(document.querySelector('[role="alert"]').textContent, /Quelle nicht erreichbar/);
+  assert.match(document.body.textContent, /Ergebnisse derzeit nicht verfügbar/);
+  assert.doesNotMatch(document.body.textContent, /Alles auf dem aktuellen Stand|Keine offenen Ausnahmefälle/);
 });

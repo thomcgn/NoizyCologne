@@ -1,0 +1,74 @@
+[
+  {
+    "scenario": "desktop",
+    "width": 1440,
+    "theme": "dark",
+    "browserErrors": 0,
+    "minimumTextContrast": 9.442504665133699,
+    "screenshot": "desktop.png",
+    "passed": true
+  },
+  {
+    "scenario": "empty",
+    "width": 1440,
+    "theme": "light",
+    "browserErrors": 0,
+    "minimumTextContrast": 5.849614678771573,
+    "screenshot": "empty.png",
+    "passed": true
+  },
+  {
+    "scenario": "history",
+    "width": 1440,
+    "theme": "dark",
+    "browserErrors": 0,
+    "minimumTextContrast": 9.442504665133699,
+    "screenshot": "history.png",
+    "passed": true
+  },
+  {
+    "scenario": "running",
+    "width": 1440,
+    "theme": "dark",
+    "browserErrors": 0,
+    "minimumTextContrast": 9.442504665133699,
+    "screenshot": "running.png",
+    "passed": true
+  },
+  {
+    "scenario": "source-error",
+    "width": 1440,
+    "theme": "light",
+    "browserErrors": 0,
+    "minimumTextContrast": 5.849614678771573,
+    "screenshot": "source-error.png",
+    "passed": true
+  },
+  {
+    "scenario": "mobile",
+    "width": 390,
+    "theme": "dark",
+    "browserErrors": 0,
+    "minimumTextContrast": 16.12924943629902,
+    "screenshot": "mobile.png",
+    "passed": true
+  },
+  {
+    "scenario": "mobile-navigation",
+    "width": 390,
+    "theme": "light",
+    "browserErrors": 0,
+    "minimumTextContrast": 16.571642005018123,
+    "screenshot": "mobile-navigation.png",
+    "passed": true
+  },
+  {
+    "scenario": "mobile-dialog",
+    "width": 390,
+    "theme": "light",
+    "browserErrors": 0,
+    "minimumTextContrast": 16.571642005018123,
+    "screenshot": "mobile-dialog.png",
+    "passed": true
+  }
+]
