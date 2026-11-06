@@ -15,7 +15,9 @@ final class PartyOnlyPolicy {
         if (name.matches(".*\\b(aftershow ?party|after ?party)\\b.*")) return false;
         String context=EventNormalizer.text(evidence);
         if (name.matches(".*\\b(party|clubnacht)\\b.*") && context.matches(".*\\b(beginn|start) (ist |ab )?(nach dem konzert|after the concert)\\b.*")) return false;
-        return CONCERT.matcher(EventNormalizer.text(title + " " + evidence)).find();
+        // A relative party start does not describe a concert event. Other concert evidence still excludes it.
+        context=context.replaceAll("\\b(nach dem konzert|im anschluss an das konzert|after (the )?(concert|show))\\b", "");
+        return CONCERT.matcher(context).find();
     }
     static boolean concert(EventExtractor.Event event) { return concert(event.title(),event.evidence()); }
     static boolean separateAftershow(org.jsoup.nodes.Document doc) {

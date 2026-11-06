@@ -29,7 +29,7 @@ public final class SafeUrls {
         int a = b[0] & 255, c = b[1] & 255;
         if (b.length == 16) {
             // Only global unicast; reject documentation, transition and special allocations.
-            return (a & 0xe0) == 0x20 && !(a == 0x20 && c == 0x01 && ((b[2] & 255) < 0x20))
+            return (a & 0xe0) == 0x20 && !(a == 0x20 && c == 0x01 && ((b[2] & 255) < 2 || ((b[2] & 255) == 0x0d && (b[3] & 255) == 0xb8)))
                     && !(a == 0x20 && c == 0x02) && !(a == 0x3f && c == 0xff);
         }
         return !(a == 0 || a == 10 || a == 127 || a >= 224 || (a == 100 && c >= 64 && c <= 127)

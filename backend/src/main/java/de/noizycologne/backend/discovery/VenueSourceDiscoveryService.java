@@ -63,7 +63,7 @@ public class VenueSourceDiscoveryService {
             queue.remove(step);
             if (!seen.add(step.url())) continue;
             try {
-                if (!fetcher.robotsAllowed(step.url(), robots)) throw new EventPageFetcher.FetchFailure("ROBOTS_BLOCKED");
+                if (!fetcher.robotsAllowed(step.url(), robots)) throw new EventPageFetcher.FetchFailure("ROBOTS_BLOCKED","robots.txt untersagt den Abruf von " + step.url());
                 var page = fetcher.fetch(step.url());
                 var extraction = extractor.extract(page, profile);
                 var portalLinks=independent && !step.detail() && step.depth()<2 ? portalLinks(page,root) : List.<URI>of();
@@ -100,7 +100,7 @@ public class VenueSourceDiscoveryService {
                 var metadata=Jsoup.parse(page.body());
                 var site=metadata.selectFirst("meta[property=og:site_name][content]");
                 String siteName=site==null ? metadata.title() : site.attr("content");
-                found.add(new Found(step.url(), extraction,method,diagnostics,siteName.substring(0,Math.min(200,siteName.length()))));
+                found.add(new Found(page.url(), extraction,method,diagnostics,siteName.substring(0,Math.min(200,siteName.length()))));
                 if (step.depth() >= 2) continue;
                 if (step.detail()) continue;
                 Set<URI> eventLinks = new HashSet<>();
@@ -120,7 +120,7 @@ public class VenueSourceDiscoveryService {
                 if (page.body().contains("BEGIN:VCALENDAR")) continue;
                 boolean programmeLink = false;
                 int navigationLinks = 0;
-                for (var link : Jsoup.parse(page.body(), Objects.requireNonNull(step.url().toString())).select("a[href], link[href][type=text/calendar]").stream().limit(200).toList()) {
+                for (var link : Jsoup.parse(page.body(), Objects.requireNonNull(page.url().toString())).select("a[href], link[href][type=text/calendar]").stream().limit(200).toList()) {
                     try {
                         String href = link.absUrl("href").split("#", 2)[0];
                         URI next = SafeUrls.parse(independent?CanonicalSourceUrl.of(href):href);
@@ -142,8 +142,8 @@ public class VenueSourceDiscoveryService {
                 if (programmeLink && extraction.events().isEmpty() && extraction.status().equals("UNINTERPRETABLE"))
                     found.set(found.size() - 1, Objects.requireNonNull(found.getLast(),"Quellenbefund fehlt").withExtraction(new EventExtractor.Extraction(List.of(), "SOURCE_LINKS_FOUND")));
             } catch (IOException e) {
-                if (step.depth() == 0) throw e;
-                found.add(new Found(step.url(), new EventExtractor.Extraction(List.of(), e instanceof EventPageFetcher.FetchFailure f ? f.status : "SCAN_FAILED")));
+                found.add(new Found(step.url(), new EventExtractor.Extraction(List.of(), e instanceof EventPageFetcher.FetchFailure f ? f.status : "SCAN_FAILED"),
+                    "HTTP",List.of(Objects.requireNonNull(Objects.toString(e.getMessage(),"HTTP-Abruf fehlgeschlagen: " + step.url())))));
             }
         }
         return enrich(found, eligibleDetails);
