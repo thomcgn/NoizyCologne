@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { berlinDate } from "./calendarNavigation";
 import {
   toDateKey,
   useCatalog,
@@ -17,18 +19,22 @@ function sameDay(a: Date, b: Date) {
   return toDateKey(a) === toDateKey(b);
 }
 
-export default function CalendarPage() {
+function CalendarContent() {
+  const searchParams = useSearchParams();
+  const targetId = searchParams.get("entry");
+  const openedTarget = useRef<string | null>(null);
   const {
     entries,
     entriesLoading,
     entriesError,
     reloadEntries,
+    reloadParties,
     deleteEntry: deleteCalendarEntry,
     parties,
     venues,
     actors,
   } = useCatalog();
-  const [month, setMonth] = useState(new Date(2027, 0, 1));
+  const [month, setMonth] = useState(() => { const today = berlinDate(); return new Date(today.getFullYear(), today.getMonth(), 1); });
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -39,6 +45,28 @@ export default function CalendarPage() {
   const [infoEntryId, setInfoEntryId] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState("all");
   const [locationFilter, setLocationFilter] = useState("");
+
+  useEffect(() => {
+    void reloadEntries();
+    void reloadParties();
+  }, [reloadEntries, reloadParties]);
+
+  useEffect(() => {
+    if (!targetId || entriesLoading || openedTarget.current === targetId) return;
+    const entry = entries.find(item => item.id === targetId);
+    if (!entry) return;
+    const timer = window.setTimeout(() => {
+      openedTarget.current = targetId;
+      const [year, month, day] = entry.date.split("-").map(Number);
+      setMonth(new Date(year, month - 1, 1));
+      setSelectedDate(new Date(year, month - 1, day));
+      setTypeFilter("all");
+      setLocationFilter("");
+      setEntrySearch("");
+      setInfoEntryId(entry.id);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [targetId, entries, entriesLoading]);
 
   const days = useMemo(() => {
     const year = month.getFullYear();
@@ -137,7 +165,7 @@ export default function CalendarPage() {
   }
 
   function openNewEntry() {
-    const date = selectedDate ?? new Date();
+    const date = selectedDate ?? berlinDate();
     setMonth(new Date(date.getFullYear(), date.getMonth(), 1));
     setSelectedDate(date);
     setEditingId(null);
@@ -173,7 +201,7 @@ export default function CalendarPage() {
   }
 
   function goToToday() {
-    selectDay(new Date());
+    selectDay(berlinDate());
   }
 
   function toggleCalendar() {
@@ -230,6 +258,7 @@ export default function CalendarPage() {
               Veranstaltungen und Location-Sperren werden dauerhaft gespeichert.
             </p>
           </div>
+          <button type="button" disabled={entriesLoading} onClick={() => { void reloadEntries(); void reloadParties(); }} className="cc-button">Aktualisieren</button>
           <button
             type="button"
             onClick={goToToday}
@@ -239,6 +268,7 @@ export default function CalendarPage() {
           </button>
         </header>
 
+        {targetId && !entriesLoading && !entriesError && !entries.some(entry => entry.id === targetId) && <p role="alert" className="mt-6">Der verlinkte Kalendereintrag ist nicht mehr vorhanden.</p>}
         {entriesLoading && (
           <p className="mt-6 text-sm text-neutral-400" role="status">
             Kalendereinträge werden aus PostgreSQL geladen ...
@@ -331,7 +361,7 @@ export default function CalendarPage() {
                   const isWeekend = [0, 6].includes(date.getDay());
                   const isSelected =
                     selectedDate !== null && sameDay(date, selectedDate);
-                  const isToday = sameDay(date, new Date());
+                  const isToday = sameDay(date, berlinDate());
                   const dayEntries = entriesByDate.get(toDateKey(date)) ?? [];
 
                   return (
@@ -443,4 +473,8 @@ export default function CalendarPage() {
       </div>
     </main>
   );
+}
+
+export default function CalendarPage() {
+  return <Suspense fallback={<p role="status">Kalender wird geladen …</p>}><CalendarContent /></Suspense>;
 }

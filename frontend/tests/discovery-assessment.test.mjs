@@ -44,6 +44,7 @@ function loadSource(url) {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   function localRequire(specifier) {
+    if (specifier === "next/link") return {default: ({href, children, ...props}) => h("a", {href, ...props}, children)};
     if (specifier.endsWith('/CatalogProvider')) return { useCatalog: () => catalogue };
     if (specifier.startsWith('.')) {
       for (const extension of ['.tsx', '.ts']) {
@@ -149,7 +150,8 @@ test('cooperation shows both known series and requires an explicit single manual
   assert.equal(reloadedParties, 1); assert.equal(reloadedDrafts, 1);
   assert.equal(document.querySelectorAll('[data-record-id]').length, 0);
   assert.equal(reloadedEntries, 1);
-  assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.equal(dialog().querySelector('a[href="/dashboard/kalender?entry=imported-entry"]')?.textContent, 'Im Kalender anzeigen');
+  assert.equal(button('Bestätigen & übernehmen', dialog()).disabled, true);
 });
 
 test('READY is visible and benign UNCONFIRMED detail metadata does not become an absence or import blocker', async () => {
@@ -565,4 +567,16 @@ test('geography confirmation failures preserve the new location and proof inputs
   await settle(()=>dialog().querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
   assert.equal(control('Name der neuen Location').value,'Neuer Club Köln');assert.equal(control('Straße und Hausnummer').value,'Straße 12');
   assert.match(dialog().textContent,/Ortsbelege widersprechen sich/);
+});
+
+
+test('successful confirmation exposes the exact calendar target and prevents duplicate submission', async()=>{
+ await mount(candidate({party_id:'paradise'}));
+ const fallback=globalThis.fetch;
+ globalThis.fetch=async(url,options={})=>url.endsWith('/confirm') ? new Response(JSON.stringify({calendarEntryId:'new/import'}),{status:200}) : fallback(url,options);
+ await openReview();await settle(()=>button('Bestätigen & übernehmen',dialog()).click());
+ const link=dialog().querySelector('a[href^="/dashboard/kalender?entry="]');
+ assert.equal(link.textContent,'Im Kalender anzeigen');assert.equal(link.getAttribute('href'),'/dashboard/kalender?entry=new%2Fimport');
+ assert.equal(button('Bestätigen & übernehmen',dialog()).disabled,true);
+ assert.ok(reloadedEntries>0);
 });

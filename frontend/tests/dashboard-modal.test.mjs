@@ -169,6 +169,7 @@ test('disabled, hidden and collapsed controls are excluded; empty dialog traps T
 // Load the actual forms with an in-memory catalogue. No application API is contacted.
 const sourceCache = new Map();
 let catalogue;
+const reloadCalendarCatalog = async () => {};
 function loadSource(url) {
   const path = url.pathname;
   if (sourceCache.has(path)) return sourceCache.get(path);
@@ -179,9 +180,10 @@ function loadSource(url) {
   }).outputText;
   const localRequire = (specifier) => {
     if (specifier === 'next/link') return { __esModule: true, default: props => h('a', props) };
+    if (specifier === 'next/navigation') return { useSearchParams: () => new URLSearchParams() };
     if (specifier.endsWith('/CatalogProvider')) return {
       ...loadSource(new URL('../src/app/dashboard/CatalogProvider.tsx', import.meta.url)),
-      useCatalog: () => catalogue,
+      useCatalog: () => ({ reloadEntries: reloadCalendarCatalog, reloadParties: reloadCalendarCatalog, ...catalogue }),
     };
     if (specifier.endsWith('/DashboardModal')) return componentModule.exports;
     if (specifier.startsWith('.')) {
@@ -202,6 +204,7 @@ const party = { id: 'party', name: 'Test Party', instagram: 'party', color: '#12
 const venue = { id: 'venue', name: 'Test Venue', instagram: 'venue', websiteUrl: '', eventsUrl: '', discoveryEnabled: false };
 const actor = { id: 'actor', name: 'Test DJ', instagram: 'dj', kind: 'person', roles: ['dj'], collectiveIds: [] };
 const entry = { id: 'entry', date: '2027-01-02', type: 'event', locationId: 'venue', partyId: 'party', entryPrice: '10', startTime: '22:00', notes: '', mentionDjIds: [], eventFlyer: null };
+const currentCalendarEntry = () => ({ ...entry, date: new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()) });
 const genre = { id: 'genre', canonicalName: 'rock', displayName: 'Rock', active: true, aliases: [] };
 // jsdom does not compile Tailwind. Supply the two utility baselines, then apply
 // the real global stylesheet so theme overrides are tested on the actual forms.
@@ -326,7 +329,7 @@ test('suggestion review and source/profile dialogs preserve edits and focus', as
 });
 
 test('calendar information dialog traps focus and restores its trigger', async () => {
-  catalogue = { parties: [party], venues: [venue], actors: [actor], entries: [entry] };
+  catalogue = { parties: [party], venues: [venue], actors: [actor], entries: [currentCalendarEntry()] };
   const Page = loadSource(new URL('../src/app/dashboard/kalender/page.tsx', import.meta.url)).default;
   await act(async () => { mount(h(Page)); });
   const trigger = document.querySelector('button[title="Test Party"]');
@@ -345,7 +348,7 @@ test('calendar information dialog traps focus and restores its trigger', async (
 
 // Switching between the calendar's two layouts must retain the page trigger.
 test('calendar information → editor → Escape restores the original page trigger', async () => {
-  catalogue = { parties: [party], venues: [venue], actors: [actor], entries: [entry] };
+  catalogue = { parties: [party], venues: [venue], actors: [actor], entries: [currentCalendarEntry()] };
   const Page = loadSource(new URL('../src/app/dashboard/kalender/page.tsx', import.meta.url)).default;
   await act(async () => { mount(h(Page)); });
   const trigger = document.querySelector('button[title="Test Party"]');

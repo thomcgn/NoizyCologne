@@ -1,5 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { calendarEntryHref } from "../kalender/calendarNavigation";
 import { discoveryApi } from "./discoveryApi";
 import type { Candidate, Overview } from "./discoveryTypes";
 import { displayDate } from "./discoveryPresentation";
@@ -27,7 +29,7 @@ export default function DiscoveryHistory({ data, onReview, onReviewId }: {
     {error && <p role="alert">{error}</p>}
     {!history && !error && <p role="status">Verlauf wird geladen …</p>}
     {history?.length === 0 && <p className="discovery-empty">Keine Einträge in diesem Verlauf.</p>}
-    <ul className="discovery-history-list">{history?.slice(0, limit).map(candidate => <li key={candidate.id}><div><strong>{candidate.title}</strong><p>{candidate.venue_name} · {displayDate(candidate.event_date)}</p><span>{candidate.status === "IMPORTED" ? candidate.decision_origin === "AUTOMATIC" ? "Automatisch übernommen" : "Manuell übernommen" : candidate.status === "DUPLICATE" ? "Dublette" : candidate.status === "IGNORED" ? "Ignoriert" : candidate.status === "REJECTED" ? "Abgelehnt" : candidate.status === "READY" ? "Bereit zur Übernahme" : candidate.status === "NEEDS_INQUIRY" ? "Rückfrage offen" : "Angaben prüfen"}</span></div><button className="discovery-button" onClick={() => onReview(candidate)}>Details öffnen</button></li>)}</ul>
+    <ul className="discovery-history-list">{history?.slice(0, limit).map(candidate => <li key={candidate.id}><div><strong>{candidate.title}</strong><p>{candidate.venue_name} · {displayDate(candidate.event_date)}</p><span>{candidate.status === "IMPORTED" ? candidate.decision_origin === "AUTOMATIC" ? "Automatisch übernommen" : "Manuell übernommen" : candidate.status === "DUPLICATE" ? "Dublette" : candidate.status === "IGNORED" ? "Ignoriert" : candidate.status === "REJECTED" ? "Abgelehnt" : candidate.status === "READY" ? "Bereit zur Übernahme" : candidate.status === "NEEDS_INQUIRY" ? "Rückfrage offen" : "Angaben prüfen"}</span></div><div className="cc-inline-actions">{candidate.calendar_entry_id && <Link className="discovery-button" href={calendarEntryHref(candidate.calendar_entry_id)}>Im Kalender anzeigen</Link>}<button className="discovery-button" onClick={() => onReview(candidate)}>Details öffnen</button></div></li>)}</ul>
     {history && history.length > limit && <button className="discovery-button" onClick={() => setLimit(limit + 20)}>Weitere Einträge anzeigen</button>}
     {capped && <p className="discovery-muted">Die API liefert höchstens die letzten 500 Treffer dieses Filters; Dubletten werden innerhalb des Archivs ausgewählt.</p>}
     <details className="discovery-subsection" onToggle={event => setChangesOpen(event.currentTarget.open)}><summary>Änderungen &amp; Absagen</summary>{changesOpen && <EventChangesPanel onReviewCandidate={onReviewId} />}</details>
