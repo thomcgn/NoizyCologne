@@ -44,3 +44,9 @@ export function sourceName(value: string) {
 export function displayDate(value: string | null) {
   return value ? new Date(`${value}T12:00:00Z`).toLocaleDateString("de-DE", { day: "2-digit", month: "long", year: "numeric", timeZone: "Europe/Berlin" }) : "Datum noch offen";
 }
+
+export function genreMatchLabel(candidate: Candidate) {
+  const coverage=candidate.genreCoverage;
+  if (!coverage || coverage.total === 0 || coverage.basis === "MISSING") return "Keine Genreangaben";
+  return `${coverage.basis === "STANDARD" ? "Standardgenres · " : ""}${coverage.percent} %`;
+}

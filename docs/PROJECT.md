@@ -3772,10 +3772,11 @@ Kandidaten verwenden die bestehende Kalender-/Cancellation-Pipeline. Eine
 Teilauswertung ist kein bestätigter Leerbestand. Zusätzliche passende Angaben
 und unveränderte Beobachtungen erzeugen keine fingierten Änderungsmeldungen.
 
-Die 50-%-Schwelle für neue Portfolioaufnahmen verwendet gemäß ausdrücklicher
-Festlegung **alle aktiven Projektgenres** als Nenner, jedes Genre einmal,
-einschließlich seiner Aliasse als gleichwertige Namen. Sie ist kein Anteil der
-im Event genannten Genres. Die einmalige ausdrückliche Freigabe verwendet
+Die ursprüngliche 50-%-Definition mit allen aktiven Projektgenres als Nenner
+wurde durch den Folgeauftrag vom 06.11.2026 ersetzt: **erkannte Eventgenres**
+bilden den Nenner, passende aktive Portfoliogenres den Zähler; Aliasse zählen
+nicht mehrfach. Standardgenres bekannter Reihen werden getrennt ausgewiesen.
+Aktueller Ablauf und Grenzen stehen in Kapitel 32. Die einmalige ausdrückliche Freigabe verwendet
 PartySeriesService, lesbare Standardgenres und einen belegten Titelalias.
 Bestätigte bekannte Reihen behalten die bisherigen Importregeln. Relative
 Beginnzeiten bleiben Text in Notizen und neuen Captionvorlagen; bestehende
@@ -3813,3 +3814,43 @@ Geschäftslogik, APIs und Daten bleiben erhalten. Die fünf Phasen sind lokal
 umgesetzt: kompakte Tabellen/Drawer, globale Katalogsuche mit Strg/⌘ K sowie
 Desktop-Redaktion und mobile Bereichswechsel. Fortschritt, Prüfungen und
 Abnahmegrenzen stehen in [CONTROL-CENTER.md](CONTROL-CENTER.md).
+
+
+# 32. Dauerhafte Party-Erkennung und zuverlässige Kalenderübernahme (06.11.2026)
+
+Discovery bietet **Speichern** ohne Kalenderimport und **Bestätigen & übernehmen**
+als transaktionalen Vorgang (`POST /api/v1/discovery/candidates/{id}/confirm`).
+Zuordnung, bestätigtes Datum, Rückfrageangaben und Import werden gemeinsam
+übernommen; bei Konflikten bleibt der vorherige Stand erhalten und die API meldet
+den konkreten Grund. Erst ein bestätigter Import schließt den Vorschlag, lädt den
+Katalog neu und macht den Termin unmittelbar in der bestehenden Redaktion
+verfügbar. Ein Instagram-Post oder eine Freigabe wird dadurch nicht erzeugt.
+
+Bekannte Namen und Aliasse werden wiederverwendet. Zusätzliche Namensvarianten
+sind ausdrücklich als wiederverwendbarer Reihenname bestätigbar. Ganze
+Editionstitel, Daten und Line-ups werden nicht automatisch als Alias gespeichert;
+die vorhandene Alias-Tabelle und der vorhandene Namensmatcher bleiben Grundlage.
+Reihenbestätigung hebt keine Quellenfreigabe auf. Unveränderte offene automatische
+Funde werden nach Aliasänderungen neu geprüft; manuelle Ablehnungen, Zuordnungen,
+Absagen, Verschiebungen und bestehende Redaktionsdaten bleiben geschützt.
+
+Ein Kalendertag ist keine Eventidentität. Eigenständige Veranstaltungen derselben
+Location dürfen nebeneinander bestehen, insbesondere bereits vorhandenes Konzert
+und getrennte Aftershow. Konzerte bleiben weiterhin von Discovery ausgeschlossen.
+Stabile unterschiedliche Identitäten und belegte unterschiedliche Startzeiten
+trennen auch Ausgaben derselben Reihe. Dubletten, widersprüchliche Angaben zur
+selben Veranstaltung und ganztägige Location-Sperren blockieren weiterhin.
+Unbekannte Beginn-/Endzeiten werden nicht erfunden.
+
+Genre-Match vergleicht erkannte Quellengenres mit dem aktiven Portfolio.
+Katalognamen/Aliasse werden normalisiert; auch bekannte inaktive Genres und
+unbekannte ausdrücklich angegebene Genrewerte aus JSON-/beschrifteten Quellen
+bleiben im Nenner. Ohne belegte Quellengenres werden keine ergänzt. Bei bekannten
+Reihen dienen hinterlegte Standardgenres als getrennt benannte Grundlage;
+fehlende Quellengenres machen die Reihe nicht unbekannt. Diese Erweiterung
+verwendet das bestehende Katalogmatching, keinen neuen lernenden Matcher.
+
+Arbeitsphasen, Regressionen und tatsächliche Prüfungen:
+[DISCOVERY-RECOGNITION.md](DISCOVERY-RECOGNITION.md). Keine Datenmigration und kein
+Produktions-/Instagram-Schreibvorgang. Fachliche Abnahme und CI-FULL für den exakt
+akzeptierten Commit bleiben vor Integration erforderlich.

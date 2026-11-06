@@ -40,6 +40,7 @@ public class EventChangeMonitor {
     private boolean matches(Set<String> keys,EventExtractor.Event old,EventExtractor.Event event) {
         String key=identity(event);
         if(keys.contains(key)) return true;
+        if (EventNormalizer.distinctTimedOccurrences(old,event)) return false;
         // No title-only matching across dates: repetition and a move cannot be distinguished safely.
         return Objects.equals(date(old),date(event)) && date(old)!=null
             && (EventMatcher.nameMatches(event.title(),old.title()) || EventMatcher.nameMatches(old.title(),event.title()));
@@ -62,16 +63,17 @@ public class EventChangeMonitor {
             if(calendarDay==null) throw new IllegalStateException("Kalendereintrag ohne Datum");
             String start=calendarDay.toString()+(entry.get("start_time")==null ? "" : "T"+entry.get("start_time"));
             var old=new EventExtractor.Event("calendar:"+entry.get("id"),(String)entry.get("party_name"),venue.getWebsiteUrl(),List.of(start),"Bestätigter Kalendereintrag", "",venue.getName());
+            if (PartyOnlyPolicy.concert(old)) continue;
             boolean present=observations.stream().filter(Observation::official).anyMatch(o -> Objects.equals(date(old),date(o.event())) && EventMatcher.nameMatches(o.event().title(),old.title()));
             Map<String,Object> reference=new HashMap<>();reference.put("calendar_entry_id",entry.get("id"));
             if(present) {
-                for(var found:observations) if(found.official() && Objects.equals(date(old),date(found.event())) && EventMatcher.nameMatches(found.event().title(),old.title())) {
+                for(var found:observations) if(found.official() && !EventNormalizer.distinctTimedOccurrences(old,found.event()) && Objects.equals(date(old),date(found.event())) && EventMatcher.nameMatches(found.event().title(),old.title())) {
                     String kind=classify(old,found.event(),false);
                     if(kind!=null && !kind.equals("EVENT_CHANGED")) alert(reference,venue,kind,old,found.event(),sourceUrl(found.sourceId()),"Geänderter offizieller Befund zu bestehendem Kalendereintrag");
                 }
                 continue;
             }
-            for(var found:observations) if(found.official() && Objects.equals(date(old),date(found.event())) && !PartyOnlyPolicy.concert(found.event()))
+            for(var found:observations) if(found.official() && !EventNormalizer.distinctTimedOccurrences(old,found.event()) && Objects.equals(date(old),date(found.event())) && !PartyOnlyPolicy.concert(found.event()))
                 alert(reference,venue,"POSSIBLE_REPLACEMENT",old,found.event(),sourceUrl(found.sourceId()),"Andere Party am belegten Kalendertag; getrennte Veranstaltungen oder Ersatz prüfen");
         }
         for (var candidate:candidates) {
@@ -113,11 +115,12 @@ public class EventChangeMonitor {
             for (var found:observations) {
                 if (!found.official() || PartyOnlyPolicy.concert(found.event()) || date(old)==null || date(found.event())==null) continue;
                 if(!Objects.equals(date(old),date(found.event()))) {
+                    if (!old.identity().isBlank() && !found.event().identity().isBlank() && !keys.contains(identity(found.event()))) continue;
                     if(EventMatcher.nameMatches(found.event().title(),old.title()) || EventMatcher.nameMatches(old.title(),found.event().title()))
                         alert(candidate,venue,"CONFLICTING_SOURCES",old,found.event(),sourceUrl(found.sourceId()),"Ohne stabile externe Identität anderes Datum: Wiederholung oder Verschiebung redaktionell prüfen");
                     continue;
                 }
-                if (!EventNormalizer.text(old.title()).equals(EventNormalizer.text(found.event().title())))
+                if (!EventNormalizer.distinctTimedOccurrences(old,found.event()) && !EventNormalizer.text(old.title()).equals(EventNormalizer.text(found.event().title())))
                     alert(candidate,venue,"POSSIBLE_REPLACEMENT",old,found.event(),sourceUrl(found.sourceId()),"Bisheriges Event nicht bestätigt; andere Party an derselben Location und demselben Tag. Mehrere Veranstaltungen sind möglich.");
             }
         }

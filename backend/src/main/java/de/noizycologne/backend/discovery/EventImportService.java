@@ -41,20 +41,8 @@ public class EventImportService {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,"Automatische Übernahme nach erneuter Prüfung gesperrt: "+current.reason());
         }
         String venue = (String)c.get("venue_id");
-        var existing = store.jdbc().queryForList("""
-            SELECT e.id,e.party_id,e.entry_type FROM calendar_entries e WHERE e.location_id=? AND e.event_date=?
-            AND NOT (e.event_status='CANCELLED' AND EXISTS(SELECT 1 FROM event_cancellations x WHERE x.calendar_entry_id=e.id AND x.replacement_candidate_id=?))
-            AND NOT EXISTS(SELECT 1 FROM event_changes x WHERE x.calendar_entry_id=e.id AND x.state='SEPARATE' AND x.after_data::jsonb->>'url'=?)
-            """,venue,date,id,c.get("source_url"));
-        if (!existing.isEmpty()) {
-            boolean duplicate = existing.stream().anyMatch(e -> party.equals(e.get("party_id")) && "event".equals(e.get("entry_type")));
-            store.jdbc().update("UPDATE discovery_candidates SET status=?,reason=?,updated_at=now() WHERE id=?",
-                    duplicate ? "DUPLICATE" : "NEEDS_REVIEW", duplicate ? "Identischer Kalendereintrag vorhanden" : "Konflikt mit bestehendem Termin oder Location-Sperre", id);
-            store.jdbc().update("UPDATE discovery_candidates SET decision_origin=?,previous_status=?,evaluated_at=now() WHERE id=?",
-                manual ? "MANUAL" : "AUTOMATIC",c.get("status"),id);
-            store.audit(id,(String)c.get("status"),manual ? null : (String)c.get("last_evaluation_id"));
-            return;
-        }
+        var conflict=evaluator.calendarConflict(evaluator.event(c),venue,party,date,id);
+        if (conflict!=null) throw new ResponseStatusException(HttpStatus.CONFLICT,conflict.reason());
         String time = c.get("start_time") == null ? null : c.get("start_time").toString().substring(0,5);
         String relative=EventTiming.relativeStart(evaluator.event(c));
         String notes="Quelle: "+c.get("source_url")+(time==null && !relative.isBlank() ? "\nBeginn: "+relative : "");
@@ -65,6 +53,40 @@ public class EventImportService {
         store.jdbc().update("UPDATE discovery_candidates SET decision_origin=?,previous_status=?,evaluated_at=now() WHERE id=?",
                 manual ? "MANUAL" : "AUTOMATIC",c.get("status"),id);
         store.audit(id,(String)c.get("status"),manual ? null : (String)c.get("last_evaluation_id"));
+    }
+    @Transactional
+    public String confirm(String id,String party,LocalDate date,String inquiry,String dm,String seriesAlias) {
+        store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
+        var candidate=store.candidate(id);
+        if ("IMPORTED".equals(candidate.get("status")) && candidate.get("calendar_entry_id") instanceof String entryId) {
+            if (!party.equals(candidate.get("party_id")) || !date.equals(((java.sql.Date)candidate.get("event_date")).toLocalDate()))
+                throw new ResponseStatusException(HttpStatus.CONFLICT,"Bereits übernommen; Änderungen direkt im Kalender prüfen");
+            return entryId;
+        }
+        if (List.of("REJECTED","DUPLICATE","IGNORED").contains(candidate.get("status")))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Archivierten Vorschlag zuerst prüfen");
+        review(id,party,date,"NEEDS_REVIEW",inquiry,dm);
+        importCandidate(id,party,date,true);
+        rememberAlias(candidate,party,seriesAlias);
+        return Objects.requireNonNull((String)store.candidate(id).get("calendar_entry_id"),"Kalenderimport nicht abgeschlossen");
+    }
+    void rememberAlias(Map<String,Object> candidate,String party,String seriesAlias) {
+        if (seriesAlias==null || seriesAlias.isBlank()) return;
+        var rules=evaluator.rules();
+        var chosen=Objects.requireNonNull(rules.parties().stream().filter(p -> party.equals(p.getId())).findFirst().orElseThrow());
+        String alias=seriesAlias.trim();
+        var names=new ArrayList<String>();names.add(chosen.getName());names.addAll(rules.aliases().getOrDefault(party,List.of()));
+        if (names.stream().anyMatch(name -> PartySeriesRecognition.containsName(alias,name))) return;
+        String normalized=EventNormalizer.text(alias);
+        if (alias.length()>200 || normalized.length()<3 || !PartySeriesRecognition.containsName((String)candidate.get("title"),alias)
+                || normalized.matches(".*\\b(special|edition|vol|volume|ausgabe|feat|featuring|with|mit|dj|djs|vs|versus|meets|presents|lineup)\\b.*")
+                || normalized.matches(".*\\p{N}.*") || alias.matches(".*[@+|].*"))
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT,"Nur den belegten wiederverwendbaren Reihennamen als Alias bestätigen, ohne Special, Datum oder Line-up");
+        if (!PartySeriesRecognition.recognize(alias,rules.parties(),rules.aliases()).parties().isEmpty())
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Namensvariante gehört bereits zu einer anderen Partyreihe");
+        if (Objects.requireNonNull(store.jdbc().queryForObject("SELECT count(*) FROM party_series_aliases WHERE party_id=?",Integer.class,party))>=30)
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Die Partyreihe hat bereits 30 Aliase; bitte zuerst im Portfolio prüfen");
+        store.jdbc().update("INSERT INTO party_series_aliases(party_id,alias) VALUES (?,?) ON CONFLICT DO NOTHING",party,alias);
     }
     @Transactional
     public void review(String id, String party, LocalDate date, String status, String inquiry, String dm) {
