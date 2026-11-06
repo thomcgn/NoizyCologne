@@ -27,6 +27,16 @@ class CologneGeographyTests {
         assertThat(filter.evaluate(event("Party","Blauer Club",evidence),List.of(known)).status()).isEqualTo("INSIDE");
         assertThat(filter.evaluate(event("Party","BLUE SHELL",place("Bonn")),List.of(known)).status()).isEqualTo("OUTSIDE");
     }
+    @Test void multipleConfirmedVenuesForTheSameNameAndAddressRequireManualClarification() {
+        var place=place("Köln");
+        Set<@NonNull String> names=Set.of("blueshell");
+        var keys=CologneGeography.keys(place);
+        var result=filter.evaluate(event("Bekannte Party","Blue Shell",place),List.of(
+            new CologneGeography.ConfirmedVenue("first","Köln",names,keys),
+            new CologneGeography.ConfirmedVenue("second","Köln",names,keys)));
+        assertThat(result.status()).isEqualTo("UNRESOLVED");
+        assertThat(result.venueId()).isNull();
+    }
     @Test void preciseCoordinatesUseTheActualCityPolygonAndNeverARadiusOrBoundingBox() {
         assertThat(point(50.936504,6.939821)).isEqualTo("INSIDE");
         assertThat(point(50.737431,7.098207)).isEqualTo("OUTSIDE");

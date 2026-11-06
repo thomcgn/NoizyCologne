@@ -2,6 +2,7 @@ package de.noizycologne.backend.discovery;
 
 import org.jspecify.annotations.NonNull;
 import de.noizycologne.backend.venue.Venue;
+import de.noizycologne.backend.venue.VenueRepository;
 import de.noizycologne.backend.party.PartySeries;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,8 +18,9 @@ public class EventCandidateProcessor {
     private final DiscoveryEvaluationService evaluator;
     private final EventImportService importer;
     private final DiscoveryGeographyService geography;
-    public EventCandidateProcessor(DiscoveryStore store,DiscoveryEvaluationService evaluator,EventImportService importer,EventChangeMonitor monitor,DiscoveryGeographyService geography) {
-        this.store=store;this.evaluator=evaluator;this.importer=importer;this.monitor=monitor;this.geography=geography;
+    private final VenueRepository venues;
+    public EventCandidateProcessor(DiscoveryStore store,DiscoveryEvaluationService evaluator,EventImportService importer,EventChangeMonitor monitor,DiscoveryGeographyService geography,VenueRepository venues) {
+        this.store=store;this.evaluator=evaluator;this.importer=importer;this.monitor=monitor;this.geography=geography;this.venues=venues;
     }
     public void process(Venue venue,String sourceId,EventExtractor.Event event,List<@NonNull PartySeries> known,
             Map<String,List<String>> aliases,List<String> genres,boolean approved) {
@@ -34,7 +36,7 @@ public class EventCandidateProcessor {
         String identity=EventChangeMonitor.identity(event),fingerprint=EventChangeMonitor.fingerprint(event);
         var previous=store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE source_id=? AND (identity_key=? OR id=?)",sourceId,identity,finding.candidateId());
         var old=previous.isEmpty() ? null : previous.getFirst();
-        String venueId=old==null ? finding.result().venueId() : (String)old.get("venue_id");
+        String venueId=old==null || old.get("venue_id")==null ? finding.result().venueId() : (String)old.get("venue_id");
         String venueName=old!=null && venueId!=null ? (String)store.candidate((String)old.get("id")).get("venue_name") : "";
         var result=evaluator.evaluate(event,venueId,venueName,false,evaluator.rules());
         if (old!=null && !"AUTOMATIC".equals(old.get("decision_origin"))) {
@@ -43,6 +45,21 @@ public class EventCandidateProcessor {
                     evaluator.raw(event),fingerprint,event.evidence(),SafeUrls.parse(event.url()).toString(),result.reason(),result.classification(),EventMatcher.VERSION,operation,old.get("id"));
                 store.technicalAudit((String)old.get("id"),(String)old.get("matching_class"),operation);
             }
+            return;
+        }
+        // A confirmed venue identity allows the regular reconciliation/import rules,
+        // including source approval, duplicate checks and calendar/cancellation guards.
+        if (venueId!=null && venueId.equals(finding.result().venueId())) {
+            if (old!=null && old.get("venue_id")==null) {
+                int assigned=store.jdbc().update("UPDATE discovery_candidates SET venue_id=? WHERE id=? AND NOT EXISTS(SELECT 1 FROM discovery_candidates other WHERE other.venue_id=? AND other.identity_key=? AND other.id<>?)",venueId,old.get("id"),venueId,old.get("identity_key"),old.get("id"));
+                if (assigned==0) return;
+            }
+            var venue=venues.findById(venueId).orElseThrow();
+            var rules=evaluator.rules();
+            boolean approved=Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT approved FROM discovery_sources WHERE id=?",Boolean.class,sourceId));
+            process(venue,sourceId,event,rules.parties(),rules.aliases(),new ArrayList<>(rules.genres()),approved,operation);
+            store.jdbc().update("UPDATE discovery_geo_events SET candidate_id=(SELECT candidate_id FROM discovery_candidate_identities WHERE venue_id=? AND identity_key=?) WHERE id=?",venueId,identity,finding.id());
+            store.jdbc().update("UPDATE discovery_candidates SET geo_status='INSIDE',geo_reason=? WHERE id IN (SELECT candidate_id FROM discovery_candidate_identities WHERE venue_id=? AND identity_key=?)",finding.result().reason(),venueId,identity);
             return;
         }
         if (old!=null && (old.get("venue_id")!=null || old.get("calendar_entry_id")!=null)) return;

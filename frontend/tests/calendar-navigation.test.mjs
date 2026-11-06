@@ -18,6 +18,7 @@ function load(url){
  const loaded={exports:{}};
  const code=ts.transpileModule(readFileSync(url,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
  const localRequire=specifier=>{
+  if(specifier==='next/image')return {default:({src,alt,width,height,className,style})=>h('img',{src,alt,width,height,className,style})};
   if(specifier==='next/navigation')return {useSearchParams:()=>new URLSearchParams(query)};
   if(specifier.endsWith('/CatalogProvider'))return {useCatalog:()=>catalog,toDateKey:date=>`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`};
   if(specifier.endsWith('/EntryEditor'))return {default:()=>null};
@@ -33,7 +34,7 @@ const {berlinDate,calendarEntryHref}=load(new URL('../src/app/dashboard/kalender
 const Page=load(new URL('../src/app/dashboard/kalender/page.tsx',import.meta.url)).default;
 async function settle(work=()=>{}){await act(async()=>{await work();await new Promise(resolve=>setTimeout(resolve,25));});}
 async function mount(){document.body.innerHTML='<div id="root"></div>';root=createRoot(document.getElementById('root'));await settle(()=>root.render(h(Page)));await settle();}
-afterEach(async()=>{if(root)await settle(()=>root.unmount());root=null;query='';loads=0;catalog.entries=[];});
+afterEach(async()=>{if(root)await settle(()=>root.unmount());root=null;query='';loads=0;catalog.entries=[];catalog.parties[0].defaultFlyer=null;});
 test('Berlin civil month handles midnight, summer time and year boundaries',()=>{
  for(const [instant,expected] of [['2026-10-31T23:30:00Z',[2026,10,1]],['2026-12-31T23:30:00Z',[2027,0,1]],['2026-06-30T22:30:00Z',[2026,6,1]]]){
   const date=berlinDate(new Date(instant));assert.deepEqual([date.getFullYear(),date.getMonth(),date.getDate()],expected);
@@ -52,6 +53,28 @@ test('a linked import arriving after refresh opens its actual day, month and det
  await settle(()=>root.render(h(Page)));await settle();
  assert.match(document.querySelector('h2').textContent,/19. März 2027/);
  assert.equal(document.querySelector('[role="dialog"]').getAttribute('aria-label'),'Importierte Rocknacht');
- assert.match(document.querySelector('[role="dialog"]').textContent,/Automatischer Import/);
+ assert.match(document.querySelector('[role="dialog"]').textContent,/Noch kein Flyer hinterlegt/);
+ assert.doesNotMatch(document.querySelector('[role="dialog"]').textContent,/Automatischer Import/);
  assert.doesNotMatch(document.body.textContent,/nicht mehr vorhanden/);
+});
+
+for(const kind of ['event','default','none'])test(`calendar detail flyer priority: ${kind}`,async()=>{
+ const eventFlyer={url:'/api/v1/media/event/content'};
+ const defaultFlyer={url:'/api/v1/media/default/content'};
+ catalog.parties[0].defaultFlyer=kind==='none'?null:defaultFlyer;
+ catalog.entries=[{id:'flyer',date:'2027-03-19',type:'event',partyId:'party',locationId:'venue',notes:'Quelle: https://source.example/proof',startTime:'23:00',entryPrice:'',mentionDjIds:[],eventFlyer:kind==='event'?eventFlyer:null}];
+ query='entry=flyer';await mount();
+ const detail=document.querySelector('[role="dialog"]');
+ assert.doesNotMatch(detail.textContent,/Notizen|source\.example/);
+ assert.match(detail.textContent,/Club/);assert.match(detail.textContent,/Importierte Rocknacht/);
+ assert.ok([...detail.querySelectorAll('button')].some(button=>button.textContent==='Bearbeiten'));
+ const image=detail.querySelector('img');
+ if(kind==='none'){assert.equal(image,null);assert.match(detail.textContent,/Noch kein Flyer hinterlegt/);}
+ else{
+  const expected=kind==='event'?eventFlyer:defaultFlyer;
+  assert.equal(image.getAttribute('src'),expected.url);
+  assert.equal(image.style.width,'auto');assert.equal(image.style.height,'auto');assert.ok(image.classList.contains('object-contain'));
+  assert.equal(image.closest('a').getAttribute('href'),expected.url);assert.equal(image.closest('a').target,'_blank');
+ }
+ assert.equal(catalog.entries[0].notes,'Quelle: https://source.example/proof');
 });

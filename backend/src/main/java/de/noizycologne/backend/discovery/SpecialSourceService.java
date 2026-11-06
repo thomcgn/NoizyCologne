@@ -28,6 +28,10 @@ public class SpecialSourceService {
     }
     @Transactional
     public String add(String name,String input,String item,String title,String date) {
+        return add(name,input,item,title,date,false);
+    }
+    @Transactional
+    public String add(String name,String input,String item,String title,String date,boolean approved) {
         String address=url(input);
         for (String selector:List.of(item,title,date)) if (!selector.isBlank()) org.jsoup.Jsoup.parse("").select(selector);
         store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
@@ -36,15 +40,19 @@ public class SpecialSourceService {
             var old=previous.getFirst();
             if (old.get("deleted_at")==null) throw new ResponseStatusException(HttpStatus.CONFLICT,"Diese Sonderquelle ist bereits vorhanden");
             String id=(String)old.get("id");
-            store.jdbc().update("UPDATE discovery_sources SET name=?,deleted_at=NULL,enabled=true,approved=false,item_selector=?,title_selector=?,date_selector=? WHERE id=?",name.trim(),item,title,date,id);
+            store.jdbc().update("UPDATE discovery_sources SET name=?,deleted_at=NULL,enabled=true,approved=?,item_selector=?,title_selector=?,date_selector=? WHERE id=?",name.trim(),approved,item,title,date,id);
             return id;
         }
         String id=UUID.randomUUID().toString();
-        store.jdbc().update("INSERT INTO discovery_sources(id,venue_id,name,url,source_type,source_kind,is_seed,approved,item_selector,title_selector,date_selector) VALUES (?,NULL,?,?,'EXTERNAL','PLATFORM',true,false,?,?,?)",id,name.trim(),address,item,title,date);
+        store.jdbc().update("INSERT INTO discovery_sources(id,venue_id,name,url,source_type,source_kind,is_seed,approved,item_selector,title_selector,date_selector) VALUES (?,NULL,?,?,'EXTERNAL','PLATFORM',true,?,?,?,?)",id,name.trim(),address,approved,item,title,date);
         return id;
     }
     @Transactional
     public void update(String id,String name,String input,String item,String title,String date) {
+        update(id,name,input,item,title,date,null);
+    }
+    @Transactional
+    public void update(String id,String name,String input,String item,String title,String date,@org.jspecify.annotations.Nullable Boolean approved) {
         String address=url(input);
         for (String selector:List.of(item,title,date)) if (!selector.isBlank()) org.jsoup.Jsoup.parse("").select(selector);
         store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
@@ -54,7 +62,7 @@ public class SpecialSourceService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,"Diese Sonderquelle ist bereits vorhanden");
         var old=rows.getFirst();
         boolean changed=!address.equals(old.get("url")) || !item.equals(old.get("item_selector")) || !title.equals(old.get("title_selector")) || !date.equals(old.get("date_selector"));
-        store.jdbc().update("UPDATE discovery_sources SET name=?,url=?,item_selector=?,title_selector=?,date_selector=? WHERE id=?",name.trim(),address,item,title,date,id);
+        store.jdbc().update("UPDATE discovery_sources SET name=?,url=?,item_selector=?,title_selector=?,date_selector=?,approved=COALESCE(?,approved) WHERE id=?",name.trim(),address,item,title,date,approved,id);
         if (changed) store.jdbc().update("UPDATE discovery_sources SET status='NOT_CHECKED',quality='NOT_CHECKED',event_count=NULL,last_fetched_at=NULL,last_success_at=NULL,fetch_diagnostics='',scan_complete=false WHERE id=?",id);
     }
     @Transactional

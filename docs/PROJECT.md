@@ -2120,6 +2120,7 @@ Bei jeder Ergänzung gleichzeitig **Kapitel 3 (Lastenheft), 4 (Pflichtenheft), 5
 
 | Version | Datum | Änderungen |
 |---|---|---|
+| v1.9.3 Location-Matching und Kalenderflyer | 06.11.2026 | Eindeutig bestätigte Location-Zuordnungen aus Sonderquellen verwenden den bestehenden Discovery-Import mit unabhängiger ausdrücklicher Quellenfreigabe; Kalenderdetails zeigen Event-Flyer vor Dauerflyer statt Veranstaltungsnotizen. Keine neue Medienverwaltung oder Migration. Arbeitsnachweis: [DISCOVERY-LOCATION-FLYER.md](DISCOVERY-LOCATION-FLYER.md). |
 | v1.9.3 Geografischer Sonderquellen-Filter | 06.11.2026 | Nur nachgewiesene Kölner Veranstaltungsorte gelangen in den normalen Discovery-Prozess. Eigener Standortbereich, bestätigte Ortsidentitäten/Aliase, bewusste Bestands-Neubewertung ohne Datenverlust, generische kanonische URLs ohne `_rsc`. Migration V18 und Prüfbelege: [DISCOVERY-GEOGRAPHY.md](DISCOVERY-GEOGRAPHY.md). |
 | v1.9.2 Sonderquellen und Sofort-Ablehnung | 06.11.2026 | Unabhängige Sonderquellen hinzufügen/löschen, begrenzter Discovery-Scan ohne Standardlocation, explizite Ortszuordnung und dauerhafte Sofort-Ablehnung durch das Team. Migration V17; Details und Prüfbelege in [SPECIAL-SOURCES.md](SPECIAL-SOURCES.md). |
 | v1.9.1 QRUSH-Sonderquelle | 06.11.2026 | QRUSH als eigenständige, locationunabhängige Sonderquelle festgelegt, ohne fachliche Verbindung zum MTC. Veranstaltungsorte müssen je Termin belegt werden; keine MTC-Standardzuordnung oder Verwendung als MTC-Fallback. Anforderung und technische Umsetzungslücke getrennt dokumentiert, siehe 24.17. |
@@ -3940,3 +3941,31 @@ Arbeitsphasen, Regressionen und tatsächliche Prüfungen:
 [DISCOVERY-RECOGNITION.md](DISCOVERY-RECOGNITION.md). Keine Datenmigration und kein
 Produktions-/Instagram-Schreibvorgang. Fachliche Abnahme und CI-FULL für den exakt
 akzeptierten Commit bleiben vor Integration erforderlich.
+
+
+# 33. Discovery-Location-Zuordnung und Kalenderflyer (06.11.2026)
+
+Globale Sonderquellen verwenden für eindeutig bestätigte Portfolio-Locations
+(gespeicherte ID, normalisierter bestätigter Name/Alias und Ortsreferenz/Adresse)
+den vorhandenen Discovery-Abgleich einschließlich Dubletten-, Termin-, Absage-
+und Location-Sperrenprüfung. Die Köln-Prüfung bleibt vorgeschaltet. Bloße
+Namensähnlichkeit, Titel und Quell-URL erlauben keine Zuordnung. Fehlende oder
+mehrdeutige Ortsidentität bleibt in Standortklärung beziehungsweise Prüfbedarf;
+eine Location wird nur auf ausdrückliche Entscheidung neu angelegt.
+
+Die Quellenfreigabe bleibt eine unabhängige Voraussetzung und ist nun auch
+im vorhandenen Sonderquellen-Dialog ausdrücklich bedienbar. Standard bleibt
+nicht freigegeben; bestätigte Location-Zuordnung allein reicht nicht zur
+Kalenderübernahme. Manuelle Ablehnungen, Rückfragen und korrigierte Vorschläge
+bleiben geschützt. Eine nachgewiesene Ortsbindung kann späteren Veranstaltungen
+mit derselben eindeutigen Ortsidentität dienen. Ein importierter Kalendertermin
+steht in der Redaktion bereit, ohne einen Postentwurf oder eine
+Veröffentlichungsfreigabe zu erzeugen.
+
+Kalenderdetails für Veranstaltungen zeigen zuerst `eventFlyer`, ersatzweise
+`defaultFlyer` der Partyreihe, sonst „Noch kein Flyer hinterlegt“. Das vollständige
+Bild bleibt proportional und kann separat größer geöffnet werden. Die bestehenden
+Medien-URLs werden verwendet. Veranstaltungsnotizen und technische Quellenbelege
+erscheinen dort nicht mehr, bleiben aber unverändert gespeichert, im Editor
+bearbeitbar und in Discovery erhalten. Notizen von Location-Sperren bleiben
+sichtbar. Keine neue Medienverwaltung, Endpunkte oder Datenbankmigrationen.
