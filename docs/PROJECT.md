@@ -1,6 +1,6 @@
 # NoizyCologne – Lastenheft, Pflichtenheft & Entwicklungs-/Lernhandbuch
 
-> **Version:** 1.9 · **Stand:** 6. November 2026 · **Status:** Persistente Team-Anwendung mit Redaktion, Party-Discovery und Änderungsprüfung; Instagram-Publishing nicht implementiert
+> **Version:** 1.9.1 · **Stand:** 6. November 2026 · **Status:** Persistente Team-Anwendung mit Redaktion, Party-Discovery und Änderungsprüfung; Instagram-Publishing nicht implementiert
 > **Zielgruppe:** NoizyCologne-Team und Entwickler  
 > **Source of Truth:** Diese Version ersetzt v1.6 und frühere Projektdokumente fachlich. Für das tatsächlich implementierte Verhalten gilt zusätzlich der aktuelle Codezustand; nur dokumentierte Features sind noch nicht automatisch umgesetzt.  
 > **Wichtig:** Dieses Handbuch enthält Lastenheft, Pflichtenheft, technische Lern-/Agenten-Referenzen **und einen Ist-/Soll-Abgleich**. Die früheren Beispielskripte sind nicht automatisch identisch mit der aktuellen Codebasis. Die Entwicklung erfolgt auf Arch Linux; der Benutzer hat den lokalen Kalender-Prototyp erfolgreich getestet. Plattform-Funktionen werden vor Produktivstart im realen Meta-Konto verifiziert.  
@@ -2120,6 +2120,7 @@ Bei jeder Ergänzung gleichzeitig **Kapitel 3 (Lastenheft), 4 (Pflichtenheft), 5
 
 | Version | Datum | Änderungen |
 |---|---|---|
+| v1.9.1 QRUSH-Sonderquelle | 06.11.2026 | QRUSH als eigenständige, locationunabhängige Sonderquelle festgelegt, ohne fachliche Verbindung zum MTC. Veranstaltungsorte müssen je Termin belegt werden; keine MTC-Standardzuordnung oder Verwendung als MTC-Fallback. Anforderung und technische Umsetzungslücke getrennt dokumentiert, siehe 24.17. |
 | v1.9 Quality-Gate-Optimierung | 06.11.2026 | QUICK für Entwicklung/lokale Commits und Feature-Pushes; FULL vor PR-Merge und für main. GHCR verwendet nur streng nachgewiesene identische Commit-SHAs statt parallel erneut FULL. Fehlender Live-IDE-Zugriff blockiert Codex Cloud bei grünen CLI-Prüfungen nicht. Branch-Protection-Konfiguration vorbereitet, Aktivierung noch offen; Details und Messungen in QUALITY.md. |
 | v1.9 Heller Modus und Branch-CI | 06.11.2026 | Primäre Buttons mit weißem Hintergrund und schwarzer Schrift erhalten im hellen Modus gemeinsam eine dunkle Fläche und weiße Schrift; Location-Übernehmen und gleich gestaltete Formularaktionen bleiben lesbar, weiße Logo-Flächen bleiben erhalten. Anlegen-/Bearbeiten-Regressionen prüfen mindestens 4,5:1 Textkontrast. Damals prüfte CI jeden Arbeitsbranch mit FULL; seit der Quality-Gate-Optimierung gilt QUICK für Feature-Pushes und FULL für PR/main, siehe Kapitel 25. |
 | v1.9 Team und Qualität | 05.11.2026 | Verständliches Team-Handbuch ergänzt; veraltete Prototyp-/Reload-Angaben korrigiert, gespeicherte Freigabe von Instagram-Publishing und noch fehlender Bildversion-Fixierung getrennt. Conversion-/Null-Diagnosen einschließlich INFO blockieren; vier Feldinjektionen auf Konstruktoren umgestellt. Damals vollständiges Quality Gate und aktueller IDE-Nachweis vor jedem Commit; diese Ablaufregel ist seit 06.11. durch Kapitel 25 ersetzt. |
@@ -3538,6 +3539,50 @@ Der optionale Test `ReadOnlyDiscoveryDiagnosisTests` verarbeitet nur eine per `N
 
 Validierung der Reset-Korrektur: **100 Backend-Tests erfolgreich**, einschließlich des ausdrücklich aktivierten Offline-Replays der 94 kopierten Datensätze; Maven-Paket erfolgreich. **16 Frontend-Tests**, TypeScript (`tsc --noEmit`), ESLint und Next.js-Produktionsbuild erfolgreich. PostgreSQL-Schreibtests ausschließlich im kurzlebigen Testcontainer auf Port 55434. Die Bestandsdatenbank blieb auf Migration V12 und wurde nur lesend untersucht. Keine produktiven Datenänderungen, kein Push und kein Deployment. DOM-Tests ersetzen keine visuelle Browser-/Mobilabnahme.
 
+
+## 24.17 QRUSH als eigenständige Sonderquelle (Anforderung vom 06.11.2026)
+
+**Verbindliche fachliche Einordnung:** QRUSH wird als eigenständige,
+locationunabhängige Sonderquelle behandelt. QRUSH hat keine fachliche Verbindung
+zum MTC als Location. QRUSH ist weder eine MTC-Unterquelle noch ein MTC-Fallback;
+QRUSH-Funde dürfen nicht allein aufgrund ihrer Herkunft dem MTC zugeordnet werden.
+Diese Festlegung ersetzt jede frühere angenommene QRUSH-/MTC-Verknüpfung.
+
+Quelle und Veranstaltungsort werden getrennt behandelt: Der tatsächliche Ort
+jedes QRUSH-Termins muss aus dessen Veranstaltungsangaben belegt und einer
+passenden Location zugeordnet werden. Fehlt eine eindeutige Ortsangabe, bleibt
+sie offen und erfordert redaktionelle Prüfung; MTC wird nicht als Standardort
+oder Ersatzwert eingesetzt. Ein einzelner tatsächlich für das MTC belegter Termin
+würde nur dessen Veranstaltungsort bestätigen, keine allgemeine Quellenbindung.
+Die vorhandenen Party-, Genre-, Quellenfreigabe-, Dubletten- und Absageregeln gelten
+auch für QRUSH-Funde.
+
+**Ist-/Soll-Grenze:** Im versionierten Code und in der bisherigen Spezifikation
+ist keine QRUSH-spezifische Zuordnung hinterlegt. Die vorhandene Quellentabelle
+und Quellen-API verlangen jedoch derzeit eine Location-Zuordnung (`venue_id` /
+`venueId`). Eine locationunabhängige Sonderquelle ist damit noch nicht technisch
+umgesetzt. Sie darf nicht durch eine künstliche MTC-Zuordnung simuliert werden.
+Eine spätere Implementierung muss die Quellenverwaltung und die belegte
+Veranstaltungsort-Zuordnung entsprechend erweitern. Bestehende gespeicherte
+QRUSH-Quellen wurden in dieser Anforderungsrunde weder ausgelesen noch geändert;
+eine bereits vorhandene Datenbankkonfiguration ist damit nicht als korrigiert
+nachgewiesen.
+
+**Abnahme der späteren Umsetzung:** QRUSH ist unabhängig vom MTC konfigurierbar;
+QRUSH-Termine können anhand ihrer Belege unterschiedlichen Locations zugeordnet
+werden. Ein Termin ohne belegten Ort wird nicht als MTC-Termin importiert. Die
+MTC-Quellenprüfung erhält durch QRUSH weder einen fingierten Erfolg noch zusätzliche
+MTC-Termine.
+
+**Arbeitsnachweis dieser Anforderung:** Repository-Status, Discovery-Quellenmodell,
+Quellen-API und relevante Projektdokumentation geprüft. Ausschließlich die
+Spezifikation geändert; kein Code- oder Datenbankschreibvorgang. `git diff --check`
+und der reguläre QUICK-Commit-Hook prüfen diese Dokumentationsänderung. Backend-,
+Frontend- und Live-IDE-Prüfungen belegen hier keine neue Implementierung und sind
+für diesen reinen Dokumentationsumfang nicht erforderlich. FULL in CI für den
+exakt akzeptierten Commit bleibt vor einem Merge verbindlich.
+
+---
 
 # 25. Permanente Code-Quality-Routine (aktualisiert 06.11.2026)
 
