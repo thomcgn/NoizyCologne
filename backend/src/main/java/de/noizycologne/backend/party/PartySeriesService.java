@@ -25,6 +25,8 @@ public class PartySeriesService {
     private static final Set<String> RECURRENCE_KINDS = Set.of("weekly", "monthly_weekday", "other");
     private static final Set<Integer> MONTHLY_OCCURRENCES = Set.of(-1, 1, 2, 3, 4);
 
+    private final de.noizycologne.backend.calendar.RecurrencePlanningService planning;
+    private final de.noizycologne.backend.venue.VenueRepository venues;
     private final PartySeriesRepository partySeriesRepository;
     private final ActorRepository actorRepository;
     private final MediaAssetRepository mediaAssetRepository;
@@ -33,7 +35,10 @@ public class PartySeriesService {
 
     public PartySeriesService(PartySeriesRepository partySeriesRepository, ActorRepository actorRepository,
                               MediaAssetRepository mediaAssetRepository, GenreRepository genreRepository,
-                              CalendarEntryRepository calendarEntryRepository) {
+                              CalendarEntryRepository calendarEntryRepository,
+                              de.noizycologne.backend.calendar.RecurrencePlanningService planning,
+                              de.noizycologne.backend.venue.VenueRepository venues) {
+        this.planning=planning;this.venues=venues;
         this.partySeriesRepository = partySeriesRepository;
         this.actorRepository = actorRepository;
         this.mediaAssetRepository = mediaAssetRepository;
@@ -51,6 +56,7 @@ public class PartySeriesService {
     @Transactional
     public PartySeriesResponse createParty(PartySeriesRequest request) {
         if (request.defaultStartTime() == null) throw badRequest("Neue Partyreihen benötigen eine Standard-Startuhrzeit (HH:mm)");
+        planningLock();
         validateRequest(request);
         ensureNameAvailable(request.name(), null);
         validateActorReferences(request);
@@ -70,11 +76,16 @@ public class PartySeriesService {
                 request.standardGenres()
         );
         party.setDefaults(defaultTime(request), request.defaultEntryPrice());
-        return toResponse(partySeriesRepository.save(party));
+        var recurrence=request.recurrence();
+        party.setRecurrencePlanning(recurrence==null ? null : recurrence.locationId(),recurrence==null ? null : recurrence.startDate());
+        partySeriesRepository.saveAndFlush(party);
+        planning.reconcile(party);
+        return toResponse(party);
     }
 
     @Transactional
     public PartySeriesResponse updateParty(String id, PartySeriesRequest request) {
+        planningLock();
         validateRequest(request);
         PartySeries party = Objects.requireNonNull(partySeriesRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Partyreihe nicht gefunden")));
@@ -96,11 +107,16 @@ public class PartySeriesService {
                 request.standardGenres()
         );
         party.setDefaults(defaultTime(request), request.defaultEntryPrice());
-        return toResponse(partySeriesRepository.save(party));
+        var recurrence=request.recurrence();
+        party.setRecurrencePlanning(recurrence==null ? null : recurrence.locationId(),recurrence==null ? null : recurrence.startDate());
+        partySeriesRepository.saveAndFlush(party);
+        planning.reconcile(party);
+        return toResponse(party);
     }
 
     @Transactional
     public void deleteParty(String id) {
+        planningLock();
         PartySeries party = Objects.requireNonNull(partySeriesRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Partyreihe nicht gefunden")));
         if (calendarEntryRepository.countByPartyId(id) > 0) {
@@ -125,6 +141,8 @@ public class PartySeriesService {
         return PartySeriesResponse.from(party, flyer);
     }
 
+    private void planningLock() { planning.lock(); }
+
     private void validateRequest(PartySeriesRequest request) {
         defaultTime(request);
         var price = request.defaultEntryPrice();
@@ -138,6 +156,12 @@ public class PartySeriesService {
             throw badRequest("recurrence.kind muss weekly, monthly_weekday oder other sein");
         }
 
+        if (!"other".equals(recurrence.kind())) {
+            var location=recurrence.locationId();
+            if(location==null || location.isBlank() || recurrence.startDate()==null)
+                throw badRequest("Fester Turnus benötigt eine bestätigte Location und ein gültiges Startdatum");
+            if(!venues.existsById(location)) throw badRequest("Die bestätigte Turnus-Location existiert nicht");
+        } else if(recurrence.locationId()!=null || recurrence.startDate()!=null) throw badRequest("Unklarer Turnus erzeugt keine Kalenderplanung");
         if ("weekly".equals(recurrence.kind())) {
             requireWeekday(recurrence.weekday());
             if (recurrence.occurrence() != null || recurrence.description() != null) {

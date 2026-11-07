@@ -29,6 +29,8 @@ public class CalendarEntry {
     @Column(name = "event_status", nullable = false)
     private String eventStatus="ACTIVE";
     public String getEventStatus() { return eventStatus; }
+    void markPlanned() { eventStatus="PLANNED"; }
+    void confirmPlanned() { eventStatus="ACTIVE"; }
 
     @Column(name = "event_date", nullable = false)
     private LocalDate eventDate;

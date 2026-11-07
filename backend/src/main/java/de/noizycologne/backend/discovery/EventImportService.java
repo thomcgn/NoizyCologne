@@ -49,7 +49,16 @@ public class EventImportService {
         String time = c.get("start_time") == null ? null : c.get("start_time").toString().substring(0,5);
         String relative=EventTiming.relativeStart(evaluator.event(c));
         String notes="Originaltitel: "+c.get("title")+"\nQuelle: "+c.get("source_url")+(time==null && !relative.isBlank() ? "\nBeginn: "+relative : "");
-        var entry = calendar.createEntry(new CalendarEntryRequest(date.toString(), venue, "event", notes, EventAdmission.price(evaluator.event(c)), party, time, null, Set.of()));
+        var request=new CalendarEntryRequest(date.toString(), venue, "event", notes, EventAdmission.price(evaluator.event(c)), party, time, null, Set.of());
+        var planned=store.jdbc().queryForList("SELECT id FROM calendar_entries WHERE party_id=? AND location_id=? AND event_date=? AND event_status='PLANNED'",party,venue,date);
+        CalendarEntryResponse entry;
+        if(planned.isEmpty()) entry=calendar.createEntry(request);
+        else {
+            var verified=evaluator.verification(evaluator.event(c),venue,(String)c.get("venue_name"));
+            if(planned.size()!=1 || !verified.sufficient() || !date.equals(verified.date()))
+                throw new ResponseStatusException(HttpStatus.CONFLICT,"Plantermin nur mit eindeutig belegten Veranstaltungsdaten bestätigen");
+            entry=calendar.confirmPlannedEntry((String)Objects.requireNonNull(planned.getFirst()).get("id"),request);
+        }
         entityManager.flush();
         store.jdbc().update("UPDATE discovery_candidates SET calendar_entry_id=?,party_id=?,event_date=?,status='IMPORTED',reason=?,updated_at=now() WHERE id=?",
                 entry.id(), party, date, manual ? "Manuell geprüft und übernommen" : "Automatisch übernommen", id);

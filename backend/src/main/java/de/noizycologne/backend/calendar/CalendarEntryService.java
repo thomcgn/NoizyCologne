@@ -70,6 +70,13 @@ public class CalendarEntryService {
 
     @Transactional
     public CalendarEntryResponse createEntry(CalendarEntryRequest request) {
+        return create(request,false);
+    }
+
+    @Transactional
+    public CalendarEntryResponse createPlannedEntry(CalendarEntryRequest request) { return create(request,true); }
+
+    private CalendarEntryResponse create(CalendarEntryRequest request,boolean planned) {
         lockCalendar();
         ValidatedEntry validated = validate(request);
         LocalTime startTime = validated.startTime();
@@ -91,7 +98,26 @@ public class CalendarEntryService {
                 validated.reason(),
                 validated.mentionDjIds()
         );
-        return toResponse(calendarEntryRepository.save(entry));
+        if (planned) entry.markPlanned();
+        return toResponse(calendarEntryRepository.saveAndFlush(entry));
+    }
+
+    @Transactional
+    public CalendarEntryResponse confirmPlannedEntry(String id,CalendarEntryRequest request) {
+        lockCalendar();
+        discoveryStore.jdbc().queryForList("SELECT id FROM calendar_entries WHERE id=? FOR UPDATE",id);
+        if (!Boolean.TRUE.equals(discoveryStore.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM calendar_recurrence_occurrences r JOIN calendar_entries e ON e.id=r.calendar_entry_id WHERE e.id=? AND e.event_status='PLANNED' AND NOT r.protected AND NOT EXISTS(SELECT 1 FROM editorial_post_drafts d WHERE d.calendar_entry_id=e.id))",Boolean.class,id)))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Plantermin wurde bereits bearbeitet; manuell prüfen");
+        var entry=calendarEntryRepository.findById(id).orElseThrow();
+        var validated=validate(request);
+        if (!entry.getEventDate().equals(validated.date()) || !entry.getLocationId().equals(validated.locationId()) || !java.util.Objects.equals(entry.getPartyId(),validated.partyId()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Plantermin passt nicht zur bestätigten Veranstaltung");
+        LocalTime time=validated.startTime();
+        if (time==null && !de.noizycologne.backend.discovery.EventTiming.hasRelativeStart(validated.notes())) time=entry.getStartTime();
+        entry.update(validated.date(),validated.locationId(),"event",validated.notes(),
+            validated.entryPrice().isBlank() ? entry.getEntryPrice() : validated.entryPrice(),validated.partyId(),time,null,validated.mentionDjIds());
+        entry.confirmPlanned();
+        return toResponse(calendarEntryRepository.saveAndFlush(entry));
     }
 
     @Transactional
@@ -120,6 +146,7 @@ public class CalendarEntryService {
         CalendarEntry entry = calendarEntryRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Kalendereintrag nicht gefunden"));
         calendarEntryRepository.delete(entry);
+        calendarEntryRepository.flush();
     }
 
     private ValidatedEntry validate(CalendarEntryRequest request) {

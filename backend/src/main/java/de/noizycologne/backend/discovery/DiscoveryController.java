@@ -120,9 +120,10 @@ public class DiscoveryController {
     @GetMapping("/candidates/{id}/dm") public Map<String,String> dm(@PathVariable String id) { return Map.of("text",importer.dm(id)); }
     public record PortfolioApproval(@NotBlank @Size(max=200) String name,@Size(max=200) String seriesAlias,
                                    @jakarta.validation.constraints.Pattern(regexp="(?:[01][0-9]|2[0-3]):[0-5][0-9]") String defaultStartTime,
-                                   @NotNull @Size(max=50) Set<@NotBlank @Size(max=100) String> standardGenres) { }
+                                   @NotNull @Size(max=50) Set<@NotBlank @Size(max=100) String> standardGenres,
+                                   @Valid de.noizycologne.backend.party.PartyRecurrenceRequest recurrence) { }
     @PostMapping("/candidates/{id}/portfolio") public Map<String,String> portfolio(@PathVariable String id,@Valid @RequestBody PortfolioApproval request) {
-        return Map.of("partyId",portfolio.approve(id,request.name(),request.seriesAlias(),request.defaultStartTime(),request.standardGenres()));
+        return Map.of("partyId",portfolio.approve(id,request.name(),request.seriesAlias(),request.defaultStartTime(),request.standardGenres(),request.recurrence()));
     }
     @GetMapping("/sources") public List<Map<String,Object>> sources(@RequestParam String venueId) {
         return store.jdbc().queryForList("SELECT s.*,v.name AS venue_name FROM discovery_sources s JOIN venues v ON v.id=s.venue_id WHERE venue_id=? ORDER BY priority,url",venueId).stream().map(DiscoveryStore::forApi).toList();

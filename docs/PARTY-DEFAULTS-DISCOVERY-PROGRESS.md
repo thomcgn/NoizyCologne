@@ -185,3 +185,69 @@ bereit; keine Konsolenunterdrückung und keine Änderung am Produktionscode. Die
 beiden betroffenen Schlagwort-/Konfigurationsdialogtests bestehen damit ohne
 Laufzeitfehler. Ein weiterer regulärer QUICK-Hook prüft den finalen Frontendstand;
 die unveränderten Backend- und isolierten Datenbankergebnisse bleiben gültig.
+
+## Erweiterung: bestätigter Turnus und unbestätigte Kalenderplanung
+
+Bestandsaufnahme: Turnusfelder beschrieben bisher nur eine Regel; Kalenderstatus
+war ausschließlich ACTIVE/CANCELLED. Es gab keine Generierung, Zuordnung zu einer
+bestätigten Turnus-Location, Löschhistorie oder Sperre für unbestätigte Plantermine.
+
+Umsetzung in Arbeit: V23 ergänzt nullable Location/Startdatum ohne automatische
+Konfiguration historischer Reihen sowie einen dauerhaften Nachweis je Reihe/Tag.
+PLANNED ist ausdrücklich „Geplant – nicht bestätigt“. Der Horizont ist das
+halboffene Berliner Datumsintervall [heute, heute + drei Monate), frühestens ab
+dem ausdrücklich eingegebenen Startdatum. Tägliche Ergänzung um 03:15 Berlin.
+`other` erzeugt keine Termine. Datenbanktrigger schützen geänderte Termine,
+Mentions und entfernte Tage auch unabhängig vom verwendeten Schreibpfad.
+Turnusänderungen entfernen ausschließlich unveränderte künftige PLANNED-Einträge
+und berechnen sie neu; eine solche Systembereinigung entfernt gezielt ihren
+Nachweis, manuelle Löschungen behalten eine dauerhafte Sperre. Redaktionelle
+Entwürfe schützen den zugehörigen Plantermin ebenfalls. Kalender- und
+Discovery-Services bleiben die Schreibpfade; die bestehende globale Transaktions-
+sperre serialisiert Planung und Importe. Eindeutige Discovery-Funde ergänzen
+unveränderte Plantermine unter derselben ID; Originaltitel und belegte Eventwerte
+haben Vorrang, relative Zeiten bleiben offen. Serverseitige Veröffentlichungs-
+prüfung und Frontend sperren PLANNED unabhängig von Flyer oder Genre-Match.
+
+Prüfphase: vier gezielte Datums-Unit-Tests bestanden (Woche, erster bis vierter/
+letzter Monatstag, Sonntag, Schaltjahr, Monats-/Jahreswechsel und ungültige Regeln).
+Weitere isolierte Datenbank-/Dialogprüfungen und regulärer QUICK stehen noch aus.
+
+Prüfstand vor Commit:
+
+- Vier gezielte Datums-Unit-Tests bestanden. Frische ECJ-Haupt-/Testanalyse nach
+  expliziten Nullprüfungen an JDBC-/JDK-/Spring-Grenzen ohne Diagnosen. Keine
+  Warnungsunterdrückung; frühe Annotations-/Nulltypbefunde fachlich korrigiert.
+- 20 unterschiedliche gezielte Datenbankfälle bestanden: neun Planungsfälle,
+  sieben betroffene Partyreihen-API-Fälle, zwei Discovery-Import-/Konfliktfälle
+  sowie bestehende Event-Flyer- und Änderungs-/Freigabe-Regressionen. Zunächst
+  16 Fälle gemeinsam; danach nur zusätzliche beziehungsweise betroffene Fälle.
+  Ein neuer Freipreis-Test verwendete zunächst eine nicht vom bestehenden Parser
+  unterstützte Schreibweise ohne Doppelpunkt. Der synthetische Beleg wurde auf
+  „Eintritt: frei“ korrigiert; der Test prüft weiterhin unverändert den Vorrang vor
+  dem Standardpreis und den unbekannten relativen Beginn. Die Preisextraktion
+  wurde nicht erweitert. Danach bestanden Freipreis-/Zeitfall und erweiterter
+  Schutz eines manuell vorbereiteten Redaktionsentwurfs.
+- Sämtliche Datenbankläufe mit frischem isoliertem PostgreSQL und anschließendem
+  Entfernen des Containers. Kein Zugriff auf bestehende Datenbanken.
+- 15 gezielte Frontendtests bestanden; nach Text-/Statuspräzisierungen vier
+  betroffene Fälle erneut bestanden, darunter erstmals die bestehende globale
+  Suche (insgesamt 16 unterschiedliche gezielte Fälle). Standardgenre- und
+  Stammnamen-Vorauswahl bleiben erhalten. Kein Browser gestartet.
+- Mindest-RAM während dieser Prüfungen 7.255 MiB, kein Speicherabbruch. Alle
+  intensiven Schritte mit Vorprüfung und Wächter strikt nacheinander.
+- PR #23 wurde während der Arbeit extern gemergt. Sein Main-Baum war identisch
+  zum Branch-Ausgangspunkt; alle Änderungen wurden ohne Reset, neuen Worktree
+  oder inhaltlichen Merge auf `feat/party-recurrence-planning` übernommen.
+- `git diff --check` erfolgreich. Abschlussprüfung durch den regulären QUICK-Hook;
+  FULL bleibt GitHub Actions für den exakt akzeptierten Commit vorbehalten.
+
+Der erste reguläre QUICK bestand javac/ECJ, 147 Backendtests (ein optionaler
+privater Replay mangels Snapshot übersprungen), TypeScript und ESLint. Vier
+Kalenderdetailtests stoppten den Commit: Die Darstellung hatte technische
+Eventnotizen eingeblendet. Die bisherige Ausblendung dieser Notizen wurde
+wiederhergestellt; Originaltitel bleiben unverändert gespeichert. Drei Flyer-
+Prioritätsfälle, der verlinkte Import nach Datenaktualisierung und die neue
+PLANNED-Darstellung bestehen nach der Korrektur. Damit insgesamt 20 verschiedene
+gezielte Frontendfälle erfolgreich. Der reguläre Hook wird für den korrigierten
+Abschlussstand vollständig gemäß seiner bestehenden Auswahl erneut ausgeführt.

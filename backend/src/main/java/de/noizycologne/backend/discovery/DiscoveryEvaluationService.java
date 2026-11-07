@@ -109,8 +109,13 @@ public class DiscoveryEvaluationService {
     public record CalendarConflict(String status,String reason,String entryId) { }
     /** One policy for scan previews and the locked import. A shared day is not event identity. */
     public CalendarConflict calendarConflict(EventExtractor.Event event,String venueId,String party,java.time.LocalDate date,String candidateId) {
+        if(Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM calendar_recurrence_occurrences WHERE party_id=? AND event_date=? AND calendar_entry_id IS NULL)",Boolean.class,party,date)))
+            return new CalendarConflict("NEEDS_REVIEW","Termin wurde ausdrücklich entfernt; keine automatische Wiederanlage",null);
+        if(Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM calendar_recurrence_occurrences r JOIN calendar_entries e ON e.id=r.calendar_entry_id WHERE r.party_id=? AND r.event_date=? AND (e.event_date<>r.event_date OR e.location_id<>? OR e.party_id IS DISTINCT FROM r.party_id))",Boolean.class,party,date,venueId)))
+            return new CalendarConflict("NEEDS_REVIEW","Plantermin wurde anders zugeordnet oder verschoben; manuell prüfen",null);
         var entries=store.jdbc().queryForList("""
-            SELECT e.id,e.party_id,e.entry_type,e.start_time,e.event_status,c.raw_event,c.title,c.source_url,c.event_date,c.evidence,
+            SELECT e.id,e.party_id,e.entry_type,e.start_time,e.event_status,
+             EXISTS(SELECT 1 FROM calendar_recurrence_occurrences r WHERE r.calendar_entry_id=e.id AND NOT r.protected) AND NOT EXISTS(SELECT 1 FROM editorial_post_drafts d WHERE d.calendar_entry_id=e.id) AS untouched_plan,c.raw_event,c.title,c.source_url,c.event_date,c.evidence,
              EXISTS(SELECT 1 FROM event_changes x WHERE x.calendar_entry_id=e.id AND x.blocks_publication) AS blocked,
              EXISTS(SELECT 1 FROM event_cancellations x WHERE x.calendar_entry_id=e.id AND x.replacement_candidate_id=?) AS replaceable,
              EXISTS(SELECT 1 FROM event_changes x WHERE x.calendar_entry_id=e.id AND x.state='SEPARATE' AND x.after_data::jsonb->>'url'=?) AS separate
@@ -128,6 +133,10 @@ public class DiscoveryEvaluationService {
             if (!sameParty && !identity) continue;
             if ("CANCELLED".equals(entry.get("event_status")) || Boolean.TRUE.equals(entry.get("blocked")))
                 return new CalendarConflict("NEEDS_REVIEW","Zugehöriger Kalendereintrag ist abgesagt oder wegen einer Veranstaltungsänderung gesperrt",sameParty ? entryId : null);
+            if ("PLANNED".equals(entry.get("event_status"))) {
+                if (sameParty && Boolean.TRUE.equals(entry.get("untouched_plan"))) continue;
+                return new CalendarConflict("NEEDS_REVIEW","Plantermin bereits bearbeitet; Angaben manuell prüfen",sameParty ? entryId : null);
+            }
             var times=event.starts().stream().map(EventNormalizer::time).filter(Objects::nonNull).toList();
             java.time.@org.jspecify.annotations.Nullable LocalTime time=times.isEmpty() ? null : times.getFirst();
             var existingTime=entry.get("start_time") instanceof java.sql.Time sqlTime ? sqlTime.toLocalTime() : null;

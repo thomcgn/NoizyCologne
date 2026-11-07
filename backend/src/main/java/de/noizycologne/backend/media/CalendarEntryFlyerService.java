@@ -31,13 +31,16 @@ public class CalendarEntryFlyerService {
     private static final long MAX_FILE_SIZE = 8 * 1024 * 1024;
     private static final int MAX_PIXELS = 8_000_000;
 
+    private final de.noizycologne.backend.discovery.DiscoveryStore store;
     private final CalendarEntryRepository calendarEntryRepository;
     private final MediaAssetRepository mediaAssetRepository;
     private final Path mediaRoot;
 
     public CalendarEntryFlyerService(CalendarEntryRepository calendarEntryRepository,
                                      MediaAssetRepository mediaAssetRepository,
-                                     @Value("${noizy.media.root:./uploads}") String mediaRoot) {
+                                     @Value("${noizy.media.root:./uploads}") String mediaRoot,
+                                     de.noizycologne.backend.discovery.DiscoveryStore store) {
+        this.store=store;
         this.calendarEntryRepository = calendarEntryRepository;
         this.mediaAssetRepository = mediaAssetRepository;
         this.mediaRoot = Path.of(mediaRoot).toAbsolutePath().normalize();
@@ -45,6 +48,7 @@ public class CalendarEntryFlyerService {
 
     @Transactional
     public PartyFlyerResponse upload(String entryId, MultipartFile file) {
+        store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
         CalendarEntry entry = findEvent(entryId);
         ValidatedImage image = validateImage(file);
         String mediaId = java.util.UUID.randomUUID().toString();
@@ -97,6 +101,7 @@ public class CalendarEntryFlyerService {
 
     @Transactional
     public void delete(String entryId) {
+        store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
         CalendarEntry entry = findEvent(entryId);
         findAsset(entry);
         entry.setEventFlyerMediaId(null);

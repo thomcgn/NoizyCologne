@@ -840,3 +840,35 @@ test('record links resolve after catalogue loading and reopen on same-page hash 
     assert.deepEqual(opened, ['party:40', 'other']);
   } finally {window.history.replaceState(null, '', '/');}
 });
+
+test('portfolio fixed recurrence preserves confirmed planning context across edits', async () => {
+  const saved=[];
+  const save=async data=>{const result={...party,...data,id:'recurrence-party'};catalogue.parties=[result];saved.push(data);return result;};
+  catalogue={parties:[],venues:[venue],actors:[],createParty:save,updateParty:save};
+  globalThis.fetch=async url=>jsonResponse(url.includes('aliases')?[]:[genre]);
+  const Page=loadSource(new URL('../src/app/dashboard/portfolio/page.tsx',import.meta.url)).default;
+  await act(async()=>mount(h(Page)));click(button('Neu anlegen'));
+  type(document.querySelector('[role="dialog"] input'),'Plan Night');
+  changeField(document.querySelector('input[type="time"]'),'22:00');
+  const field=name=>[...document.querySelectorAll('[role="dialog"] label')].find(label=>label.textContent.trim().startsWith(name)).querySelector('input,select');
+  changeField(field('Wiederholung'),'weekly');
+  assert.equal(field('Bestätigte Turnus-Location').value,'');assert.equal(field('Planung ab Datum').value,'');
+  changeField(field('Wochentag'),'6');changeField(field('Bestätigte Turnus-Location'),venue.id);changeField(field('Planung ab Datum'),'2026-11-07');
+  await act(async()=>button('Übernehmen').click());
+  assert.deepEqual(saved[0].recurrence,{kind:'weekly',weekday:6,locationId:venue.id,startDate:'2026-11-07'});
+  await act(async()=>button('Bearbeiten').click());
+  assert.equal(field('Bestätigte Turnus-Location').value,venue.id);assert.equal(field('Planung ab Datum').value,'2026-11-07');
+  changeField(field('Wiederholung'),'monthly_weekday');changeField(field('Woche im Monat'),'-1');
+  await act(async()=>button('Übernehmen').click());
+  assert.deepEqual(saved[1].recurrence,{kind:'monthly_weekday',weekday:6,occurrence:-1,locationId:venue.id,startDate:'2026-11-07'});
+});
+
+test('editorial planned occurrences show a confirmation warning and disable approval', async () => {
+  const persisted={id:'draft',calendarEntryId:'entry',caption:'Planentwurf',hashtags:'',mentionActorIds:[],genres:[],status:'DRAFT',musicTrackId:null,publicationBlockers:[]};
+  catalogue={parties:[party],venues:[venue],actors:[actor],entries:[{...entry,eventStatus:'PLANNED'}],entriesLoading:false,entriesError:null,reloadEntries:async()=>{},drafts:[persisted],draftsLoading:false,draftsError:null,reloadDrafts:async()=>{},musicTracks:[],musicTracksLoading:false,musicTracksError:null,reloadMusicTracks:async()=>{}};
+  globalThis.fetch=async()=>jsonResponse([genre]);
+  const Page=loadSource(new URL('../src/app/dashboard/redaktion/page.tsx',import.meta.url)).default;
+  await act(async()=>mount(h(Page)));
+  assert.match(document.body.textContent,/Geplant – nicht bestätigt\. Keine Veröffentlichungsfreigabe möglich/);
+  assert.equal(document.querySelector('option[value="APPROVED"]').disabled,true);
+});

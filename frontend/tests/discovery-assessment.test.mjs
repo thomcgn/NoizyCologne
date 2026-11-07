@@ -818,3 +818,22 @@ test('keyword warnings on a confirmed venue stay visible in review rather than n
  assert.match(document.querySelector('[aria-label="Prüfbedarf"]').textContent,/Schlagwortfilter.*B2B.*Ausdrücklich prüfen/);
  assert.equal(document.querySelector('[aria-label="Neue Partyreihen"] [data-record-id]'),null);
 });
+
+test('Discovery portfolio recurrence requires confirmed location and start date and only creates planned entries', async () => {
+  await mount(candidate({title:'BallroomBlitz! mit DER GRAUE KLAUS',suggestedSeriesName:'BallroomBlitz!',assessment:assessment({recognition:{status:'NONE',parties:[]}})}));
+  await openReview();change(control('Standard-Startuhrzeit'),'23:00');
+  change(control('Wiederholung'),'monthly_weekday');
+  assert.equal(button('Ins Portfolio übernehmen',dialog()).disabled,true);
+  change(control('Wochentag'),'5');change(control('Woche im Monat'),'1');
+  change(control('Bestätigte Turnus-Location'),'blue-shell');
+  assert.equal(button('Ins Portfolio übernehmen',dialog()).disabled,true);
+  change(control('Planung ab Datum'),'2026-11-07');
+  assert.equal(button('Ins Portfolio übernehmen',dialog()).disabled,false);
+  assert.match(dialog().textContent,/Geplant – nicht bestätigt/);
+  await settle(()=>button('Ins Portfolio übernehmen',dialog()).click());
+  const payload=JSON.parse(calls.find(call=>call.method==='POST'&&call.url.endsWith('/portfolio')).body);
+  assert.equal(payload.name,'BallroomBlitz!');
+  assert.deepEqual(payload.recurrence,{kind:'monthly_weekday',weekday:5,occurrence:1,locationId:'blue-shell',startDate:'2026-11-07'});
+  assert.equal(control('Partyreihe zuordnen').value,'approved');
+  assert.equal(reloadedEntries,1);assert.ok(!calls.some(call=>call.url.endsWith('/confirm')||/publish|instagram/.test(call.url)));
+});

@@ -1,5 +1,7 @@
 package de.noizycologne.backend.party;
 
+import java.time.LocalDate;
+
 import org.jspecify.annotations.NonNull;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
@@ -39,6 +41,16 @@ public class PartySeries {
 
     @Column(name = "dj_mention_default", nullable = false, length = 20)
     private String djMentionDefault;
+
+    @Column(name = "recurrence_location_id")
+    private @Nullable String recurrenceLocationId;
+    @Column(name = "recurrence_start_date")
+    private @Nullable LocalDate recurrenceStartDate;
+    public @Nullable String getRecurrenceLocationId() { return recurrenceLocationId; }
+    public @Nullable LocalDate getRecurrenceStartDate() { return recurrenceStartDate; }
+    public void setRecurrencePlanning(@Nullable String locationId,@Nullable LocalDate startDate) {
+        recurrenceLocationId=locationId; recurrenceStartDate=startDate;
+    }
 
     @Column(name = "recurrence_kind", length = 20)
     private String recurrenceKind;

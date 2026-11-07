@@ -409,7 +409,7 @@ export default function RedaktionPage() {
   };
   const automaticGates = Boolean(selectedEntry && selectedParty && selectedVenue && flyerUrl);
   const manualGates = Object.values(gates).every(Boolean);
-  const allGatesPassed = automaticGates && manualGates && selectedEntry?.eventStatus !== "CANCELLED" && !persistedDraft?.approvalNeedsReview && !persistedDraft?.publicationBlockers?.length;
+  const allGatesPassed = automaticGates && manualGates && selectedEntry?.eventStatus !== "CANCELLED" && selectedEntry?.eventStatus !== "PLANNED" && !persistedDraft?.approvalNeedsReview && !persistedDraft?.publicationBlockers?.length;
   const hoveredEntry = hoveredPreviewId
     ? orderedEventEntries.find((entry) => entry.id === hoveredPreviewId) ?? null
     : null;
@@ -1004,7 +1004,7 @@ export default function RedaktionPage() {
             <section id="editorial-editor" className="cc-editorial-editor rounded-xl border border-white/10 bg-neutral-950 p-4 sm:p-6">
               <h2 className="text-lg font-semibold">Entwurf bearbeiten</h2>
               <p className="cc-description" role="status">{selectedParty?.name ?? "Unbekannte Partyreihe"} · {selectedEntry ? formatDate(selectedEntry.date) : "Termin fehlt"}{unsavedIds.includes(activeId) ? " · Ungespeicherte Änderungen" : ""}</p>
-              {(selectedEntry?.eventStatus === "CANCELLED" || persistedDraft?.approvalNeedsReview || Boolean(persistedDraft?.publicationBlockers?.length)) && <div role="alert" className="mt-4 rounded-lg border border-amber-400 p-4 text-amber-300"><p>Veranstaltungsänderung: Originalpost gesperrt beziehungsweise Freigabe erneut prüfen.</p>{persistedDraft?.publicationBlockers?.map((message, index) => <p key={index}>{message}</p>)}<a className="underline" href="/dashboard/vorschlaege">Änderungen &amp; Absagen im Cancellation-Workflow prüfen</a><p>Caption, Flyer, Genres und Musik bleiben erhalten. Bereits veröffentlichte Inhalte in Instagram manuell prüfen.</p></div>}
+              {(selectedEntry?.eventStatus === "PLANNED" || selectedEntry?.eventStatus === "CANCELLED" || persistedDraft?.approvalNeedsReview || Boolean(persistedDraft?.publicationBlockers?.length)) && <div role="alert" className="mt-4 rounded-lg border border-amber-400 p-4 text-amber-300"><p>{selectedEntry?.eventStatus === "PLANNED" ? "Geplant – nicht bestätigt. Keine Veröffentlichungsfreigabe möglich." : "Veranstaltungsänderung: Originalpost gesperrt beziehungsweise Freigabe erneut prüfen."}</p>{persistedDraft?.publicationBlockers?.map((message, index) => <p key={index}>{message}</p>)}<a className="underline" href="/dashboard/vorschlaege">{selectedEntry?.eventStatus === "PLANNED" ? "Termin in Discovery prüfen" : "Änderungen & Absagen im Cancellation-Workflow prüfen"}</a><p>{selectedEntry?.eventStatus === "PLANNED" ? "Plantermine bestätigen keine Veranstaltung. Redaktionelle Eingaben bleiben erhalten." : "Caption, Flyer, Genres und Musik bleiben erhalten. Bereits veröffentlichte Inhalte in Instagram manuell prüfen."}</p></div>}
               <p className="mt-2 text-sm leading-6 text-neutral-400">
                 Änderungen werden erst mit „Entwurf speichern“ dauerhaft in PostgreSQL gespeichert.
               </p>
@@ -1019,7 +1019,7 @@ export default function RedaktionPage() {
                 >
                   <option value="DRAFT">Entwurf</option>
                   <option value="READY_FOR_REVIEW">Zur Prüfung bereit</option>
-                  <option value="APPROVED" disabled={Boolean(persistedDraft?.publicationBlockers?.length)}>Freigegeben (nicht veröffentlicht)</option>
+                  <option value="APPROVED" disabled={selectedEntry?.eventStatus === "PLANNED" || Boolean(persistedDraft?.publicationBlockers?.length)}>Freigegeben (nicht veröffentlicht)</option>
                 </select>
               </label>
               <section className="mt-5 rounded-lg border border-white/10 p-4">
