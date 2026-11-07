@@ -54,7 +54,7 @@ public class DiscoveryGeographyService {
         var rows=store.jdbc().queryForList("SELECT * FROM discovery_geo_events WHERE source_id=? AND identity_key=?",sourceId,identity);
         String id=rows.isEmpty()?UUID.randomUUID().toString():(String)rows.getFirst().get("id");
         String mapped=requestedCandidate!=null?requestedCandidate:rows.isEmpty()?null:(String)rows.getFirst().get("candidate_id");
-        var candidates=store.jdbc().queryForList("SELECT id FROM discovery_candidates WHERE source_id=? AND (identity_key=? OR id=?) ORDER BY (calendar_entry_id IS NULL),(decision_origin='AUTOMATIC'),id LIMIT 1",sourceId,identity,mapped);
+        var candidates=store.jdbc().queryForList("SELECT id FROM discovery_candidates WHERE (source_id=? AND identity_key=?) OR id=? ORDER BY (calendar_entry_id IS NULL),(decision_origin='AUTOMATIC'),id LIMIT 1",sourceId,identity,mapped);
         if(candidates.isEmpty()) {
             // Old _rsc identities are not rewritten: reuse the protected candidate through a stable mapping.
             candidates=Objects.requireNonNull(store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE source_id=? AND geo_status='NOT_CHECKED' ORDER BY (calendar_entry_id IS NULL),(decision_origin='AUTOMATIC'),id",sourceId).stream()
@@ -68,7 +68,7 @@ public class DiscoveryGeographyService {
             INSERT INTO discovery_geo_events(id,source_id,candidate_id,identity_key,title,source_url,raw_event,status,reason,venue_id) VALUES (?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(source_id,identity_key) DO UPDATE SET candidate_id=COALESCE(discovery_geo_events.candidate_id,excluded.candidate_id),title=excluded.title,source_url=excluded.source_url,raw_event=excluded.raw_event,status=excluded.status,reason=excluded.reason,venue_id=excluded.venue_id,updated_at=now()
             """,id,sourceId,candidateId,identity,event.title(),CanonicalSourceUrl.of(event.url()),json.writeValueAsString(event),result.status(),result.reason(),result.venueId());
-        store.jdbc().update("UPDATE discovery_candidates SET geo_status=?,geo_reason=?,raw_event=?,evidence=?,source_url=? WHERE source_id=? AND (identity_key=? OR id=?) AND calendar_entry_id IS NULL AND status<>'IMPORTED'",result.status(),result.reason(),json.writeValueAsString(effective),effective.evidence(),CanonicalSourceUrl.of(effective.url()),sourceId,identity,candidateId);
+        store.jdbc().update("UPDATE discovery_candidates SET geo_status=?,geo_reason=?,raw_event=?,evidence=?,source_url=? WHERE source_id=? AND (identity_key=? OR id=?) AND calendar_entry_id IS NULL AND status<>'IMPORTED' AND NOT (status IN ('REJECTED','IGNORED') AND event_date IS NOT NULL AND event_date IS DISTINCT FROM ?::date)",result.status(),result.reason(),json.writeValueAsString(effective),effective.evidence(),CanonicalSourceUrl.of(effective.url()),sourceId,identity,candidateId,EventChangeMonitor.date(event));
         return new Finding(id,sourceId,effective,result,candidateId);
     }
     @Transactional

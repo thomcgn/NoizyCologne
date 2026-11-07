@@ -23,17 +23,18 @@ public class DiscoveryResetService {
     }
     public record Item(String id,String title,String venue,String oldStatus,String newStatus,String classification,String reason,String automaticReason,boolean manual,boolean missingRaw,String partyId) { }
     public record GeographicItem(String id,String status,String reason,String venueId) { }
-    public record Preview(String token,int affectedCount,int preservedManual,int missingRaw,int enabledLocations,List<@org.jspecify.annotations.NonNull Item> items,List<@org.jspecify.annotations.NonNull GeographicItem> geography) { }
+    public record Preview(String token,int affectedCount,int preservedManual,int missingRaw,int enabledLocations,List<@org.jspecify.annotations.NonNull Item> items,List<@org.jspecify.annotations.NonNull GeographicItem> geography,int keywordExcluded,int keywordReview,int protectedRejections,int keywordRestored) { }
     public record Summary(int evaluated,int newPossibleMatches,int stillIgnored,int preservedManual,int reclassified,int failed,int geographicallyClassified) {
         public Summary(int evaluated,int newPossibleMatches,int stillIgnored,int preservedManual,int reclassified,int failed){this(evaluated,newPossibleMatches,stillIgnored,preservedManual,reclassified,failed,0);}
     }
+    private final DiscoveryKeywordService keywords;
     private final DiscoveryStore store;
     private final DiscoveryEvaluationService evaluator;
     private final EventImportService importer;
     private final DiscoveryGeographyService geography;
     private final JsonMapper json=JsonMapper.builder().build();
-    public DiscoveryResetService(DiscoveryStore store,DiscoveryEvaluationService evaluator,EventImportService importer,DiscoveryGeographyService geography) {
-        this.store=store;this.evaluator=evaluator;this.importer=importer;this.geography=geography;
+    public DiscoveryResetService(DiscoveryKeywordService keywords,DiscoveryStore store,DiscoveryEvaluationService evaluator,EventImportService importer,DiscoveryGeographyService geography) {
+        this.keywords=keywords;this.store=store;this.evaluator=evaluator;this.importer=importer;this.geography=geography;
     }
     static boolean selected(Map<String,Object> row,Selection selection) {
         if (row.get("calendar_entry_id")!=null || "IMPORTED".equals(row.get("status"))) return false;
@@ -46,22 +47,30 @@ public class DiscoveryResetService {
         var rows=store.evaluationRows();var rules=evaluator.rules();
         List<@org.jspecify.annotations.NonNull Item> items=new ArrayList<>();List<String> revisions=new ArrayList<>();
         List<@org.jspecify.annotations.NonNull GeographicItem> geographical=new ArrayList<>();
-        int preserved=0;
+        int preserved=0,keywordExcluded=0,keywordReview=0,protectedRejections=0,keywordRestored=0;
         for (var row:rows) {
+            boolean manualRejection="REJECTED".equals(row.get("status")) && !"AUTOMATIC".equals(row.get("decision_origin"));
             if(Boolean.TRUE.equals(row.get("special_source")) && row.get("calendar_entry_id")==null && !"IMPORTED".equals(row.get("status"))) {
                 var geo=geography.assess(evaluator.event(row));
                 geographical.add(new GeographicItem((String)row.get("id"),geo.status(),geo.reason(),geo.venueId()));
                 revisions.add("geo|"+row.get("id")+"|"+row.get("updated_at")+"|"+row.get("raw_event"));
-                if(!geo.inside()){if(!"AUTOMATIC".equals(row.get("decision_origin")))preserved++;continue;}
+                if(!geo.inside() && keywords.match(evaluator.event(row))==null && !"KEYWORD_FILTER".equals(row.get("filter_origin"))){if(!"AUTOMATIC".equals(row.get("decision_origin")))preserved++;if(manualRejection)protectedRejections++;continue;}
             }
-            if (!selected(row,selection)) {
+            boolean changedRelease=keywords.releaseChanged(row);
+            if (!selected(row,selection) && !changedRelease) {
+                if(manualRejection) protectedRejections++;
                 if (!"AUTOMATIC".equals(row.get("decision_origin"))) preserved++;
                 continue;
             }
             var result=evaluator.evaluate(row,rules);
             boolean manual="MANUAL".equals(row.get("decision_origin"));
-            String status=manual ? "NEEDS_REVIEW" : result.status();
-            String reason=manual ? "Manuell abgelehnt; ausdrücklich erneut zur Prüfung vorgelegt. "+result.reason() : result.reason();
+            String status=manual && !changedRelease ? "NEEDS_REVIEW" : result.status();
+            if(changedRelease && status.equals("READY")) status="NEEDS_REVIEW";
+            var hit=keywords.match(evaluator.event(row));
+            if(hit!=null && status.equals("IGNORED")) keywordExcluded++;
+            if(hit!=null && row.get("venue_id")!=null) keywordReview++;
+            if("KEYWORD_FILTER".equals(row.get("filter_origin")) && "IGNORED".equals(row.get("status")) && !status.equals("IGNORED")) keywordRestored++;
+            String reason=manual && !changedRelease ? "Manuell abgelehnt; ausdrücklich erneut zur Prüfung vorgelegt. "+result.reason() : result.reason();
             if (!manual && selection.mode()==Mode.RESCAN && status.equals("READY")) {
                 status="NEEDS_REVIEW";
                 reason="Neuer Abruf vor automatischer Übernahme erforderlich; "+reason;
@@ -70,11 +79,11 @@ public class DiscoveryResetService {
                 (String)row.get("status"),status,result.classification(),reason,result.reason(),manual,row.get("raw_event")==null,manual ? (String)row.get("party_id") : result.partyId()));
             revisions.add(row.get("id")+"|"+row.get("updated_at")+"|"+row.get("fingerprint")+"|"+row.get("raw_event"));
         }
-        String token=EventNormalizer.hash(EventMatcher.VERSION+json.writeValueAsString(selection)+json.writeValueAsString(items)+json.writeValueAsString(geographical)+json.writeValueAsString(revisions));
+        String token=EventNormalizer.hash(keywords.version()+EventMatcher.VERSION+json.writeValueAsString(selection)+json.writeValueAsString(items)+json.writeValueAsString(geographical)+json.writeValueAsString(revisions));
         Integer count=store.jdbc().queryForObject("SELECT count(*) FROM venues WHERE discovery_enabled",Integer.class);
         if (count==null) throw new IllegalStateException("Location-Zählung lieferte kein Ergebnis");
         int enabled=count;
-        return new Plan(new Preview(token,items.size(),preserved,(int)items.stream().filter(Item::missingRaw).count(),enabled,items.stream().limit(500).toList(),List.copyOf(geographical)),items,geographical);
+        return new Plan(new Preview(token,items.size(),preserved,(int)items.stream().filter(Item::missingRaw).count(),enabled,items.stream().limit(500).toList(),List.copyOf(geographical),keywordExcluded,keywordReview,protectedRejections,keywordRestored),items,geographical);
     }
     @Transactional(readOnly=true)
     public Preview preview(Selection selection) { return plan(selection).preview(); }
@@ -97,6 +106,8 @@ public class DiscoveryResetService {
                 evaluated_at=now(),previous_status=?,last_evaluation_id=?,updated_at=now() WHERE id=?
                 """,item.newStatus(),item.reason(),item.automaticReason(),item.classification(),item.partyId(),EventMatcher.VERSION,
                 item.oldStatus(),request.operationId().toString(),item.id());
+            keywords.remember(item.id(),evaluator.event(before));
+            if(keywords.releaseChanged(before)) store.jdbc().update("UPDATE discovery_candidates SET keyword_release_version=?,decision_origin=? WHERE id=?",keywords.version(),item.newStatus().equals("IGNORED") ? "AUTOMATIC" : "MANUAL",item.id());
             // An explicitly reopened manual rejection stays manual and can never auto-import.
             store.audit(item.id(),item.oldStatus(),request.operationId().toString(),(String)before.get("matching_class"));
             if (item.newStatus().equals("READY") && !item.manual()) {
