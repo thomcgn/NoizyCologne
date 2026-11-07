@@ -35,8 +35,8 @@ export type Actor = {
 export type DjMentionDefault = "residents" | "manual";
 
 export type RecurrenceRule =
-  | { kind: "weekly"; weekday: number }
-  | { kind: "monthly_weekday"; weekday: number; occurrence: number }
+  | { kind: "weekly"; weekday: number; locationId?: string | null; startDate?: string | null }
+  | { kind: "monthly_weekday"; weekday: number; occurrence: number; locationId?: string | null; startDate?: string | null }
   | { kind: "other"; description: string };
 
 export type PartyFlyer = {
@@ -127,7 +127,7 @@ export type MusicTrack = {
 export type MusicTrackInput = Omit<MusicTrack, "id" | "lastUsedAt" | "score" | "matchReasons">;
 
 type EntryBase = {
-  eventStatus?: "ACTIVE" | "CANCELLED";
+  eventStatus?: "ACTIVE" | "PLANNED" | "CANCELLED";
   id: string;
   date: string; // Lokales Kalenderdatum: YYYY-MM-DD (ohne Zeitzonen-Verschiebung)
   locationId: string;
@@ -335,6 +335,10 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
 
       if (!recurrence) {
         throw new Error("Die Partyreihen-API lieferte einen ungültigen Turnus.");
+      }
+      if (recurrence.kind !== "other" && (rule.locationId != null || rule.startDate != null)) {
+        if (typeof rule.locationId !== "string" || !rule.locationId || typeof rule.startDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(rule.startDate)) throw new Error("Ungültige Turnus-Location oder ungültiges Startdatum.");
+        recurrence = {...recurrence, locationId:rule.locationId, startDate:rule.startDate};
       }
     }
 
@@ -994,7 +998,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         entryPrice: value.entryPrice,
         eventFlyer,
         type: "event",
-        eventStatus: value.eventStatus === "CANCELLED" ? "CANCELLED" : "ACTIVE",
+        eventStatus: value.eventStatus === "CANCELLED" ? "CANCELLED" : value.eventStatus === "PLANNED" ? "PLANNED" : "ACTIVE",
         partyId: value.partyId,
         startTime: value.startTime ?? "",
         mentionDjIds: value.mentionDjIds,

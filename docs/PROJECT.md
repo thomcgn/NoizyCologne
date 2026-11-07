@@ -4020,3 +4020,25 @@ erst durch die eigene Bestätigung mit gültigem Datum und bestätigter Location
 die bestehenden Import- und Standortsperren bleiben wirksam. Keine Migration
 oder zusätzliche Infrastruktur. Prüfungen und Grenzen:
 [DISCOVERY-PARTY-GENRES.md](DISCOVERY-PARTY-GENRES.md).
+
+# 36. Unbestätigte Kalenderplanung bei festem Partyreihen-Turnus
+
+Bestätigte Regeln `weekly` und `monthly_weekday` benötigen ausdrücklich eine
+Portfolio-Location (`recurrence.locationId`) und ein gültiges Startdatum
+(`recurrence.startDate`). Ohne diese Angaben ergänzen Nutzer die Formulare;
+Altregeln werden durch die Migration nicht automatisch aktiviert. `other` bleibt
+rein beschreibend. Der feste Turnus ist auch bei der Discovery-Portfolioaufnahme
+mit dem bereinigten Stammnamen erfassbar.
+
+Die Planung verwendet Berliner LocalDate-Werte und ergänzt täglich um 03:15 den
+Zeitraum ab heute bis ausschließlich heute plus drei Monate, frühestens ab dem
+bestätigten Startdatum. Termine erhalten `PLANNED` („Geplant – nicht bestätigt“),
+Reihe, Location, Standardbeginn und Standardpreis. Sie erzeugen keine Entwürfe oder
+Veröffentlichungsfreigaben. Serverseitige Veröffentlichungsprüfung sperrt PLANNED.
+Eindeutig verifizierte Discovery-Ausgaben bestätigen passende unveränderte
+Plantermine unter derselben ID; Originaltitel und belegte Eventwerte haben Vorrang.
+Manuell bearbeitete, bestätigte, abgesagte und gelöschte Termine bleiben geschützt,
+auch über Turnusänderungen und erneute Planung hinweg. V23 ergänzt dafür
+Kontextfelder und einen dauerhaften Nachweis einschließlich Löschsperren; sie
+verändert keine vorhandenen Kalenderdaten. Prüfbelege und Grenzen:
+[PARTY-DEFAULTS-DISCOVERY-PROGRESS.md](PARTY-DEFAULTS-DISCOVERY-PROGRESS.md).

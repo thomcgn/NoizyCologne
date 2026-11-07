@@ -252,7 +252,7 @@ function CalendarContent() {
     {key: "date", label: "Datum", sortValue: entry => `${entry.date} ${entry.type === "event" ? entry.startTime : "23:59"}`, render: entry => dateFromKey(entry.date).toLocaleDateString("de-DE", {weekday: "short", day: "2-digit", month: "2-digit", year: "numeric"})},
     {key: "location", label: "Location", sortValue: entry => venues.find(venue => venue.id === entry.locationId)?.name ?? "", render: entry => venues.find(venue => venue.id === entry.locationId)?.name ?? "Unbekannte Location"},
     {key: "time", label: "Beginn", render: entry => entry.type === "event" ? entry.startTime || "Noch offen" : "–"},
-    {key: "type", label: "Art / Status", render: entry => <span className={`cc-status ${entry.eventStatus === "CANCELLED" ? "cc-status-danger" : ""}`}>{entry.eventStatus === "CANCELLED" ? "ABGESAGT" : entry.type === "closure" ? "Sperre" : "Party"}</span>},
+    {key: "type", label: "Art / Status", render: entry => <span className={`cc-status ${entry.eventStatus === "CANCELLED" ? "cc-status-danger" : ""}`}>{entry.eventStatus === "CANCELLED" ? "ABGESAGT" : entry.eventStatus === "PLANNED" ? "Geplant – nicht bestätigt" : entry.type === "closure" ? "Sperre" : "Party"}</span>},
     {key: "price", label: "Eintritt", render: entry => entry.type === "event" ? entry.entryPrice || "Noch offen" : "–"},
   ];
 
@@ -428,6 +428,7 @@ function CalendarContent() {
                             }}
                             title={getEntryName(entry)}
                           >
+                            {entry.eventStatus === "PLANNED" && <strong>Geplant – nicht bestätigt · </strong>}
                             {entry.eventStatus === "CANCELLED" && <strong className="text-red-400">ABGESAGT · </strong>}
                             {entry.type === "event" && entry.startTime
                               ? `${entry.startTime} `
@@ -470,7 +471,7 @@ function CalendarContent() {
                   <span className="font-semibold">{entry.type === "event" && entry.startTime && <span>{entry.startTime} · </span>}{getEntryName(entry)}</span>
                   {location && <span className="text-sm text-neutral-400">{location}</span>}
                   <span className={`text-xs ${entry.eventStatus === "CANCELLED" ? "text-red-400" : "text-neutral-400"}`}>
-                    {entry.type === "closure" ? "Location-Sperre" : "Party"}{entry.eventStatus === "CANCELLED" ? " · ABGESAGT" : ""}
+                    {entry.type === "closure" ? "Location-Sperre" : "Party"}{entry.eventStatus === "CANCELLED" ? " · ABGESAGT" : entry.eventStatus === "PLANNED" ? " · Geplant – nicht bestätigt" : ""}
                   </span>
                 </button>
               </li>;
@@ -483,7 +484,7 @@ function CalendarContent() {
         </DashboardModal>}
 
         {infoEntry && <DashboardModal variant="drawer" open onClose={() => setInfoEntryId(null)} title={getEntryName(infoEntry)} description={dateFromKey(infoEntry.date).toLocaleDateString("de-DE", {weekday: "long", day: "2-digit", month: "long", year: "numeric"})}>
-          <span className={`cc-status ${infoEntry.eventStatus === "CANCELLED" ? "cc-status-danger" : ""}`}>{infoEntry.eventStatus === "CANCELLED" ? "ABGESAGT" : infoEntry.type === "closure" ? "Location-Sperre" : "Veranstaltung"}</span>
+          <span className={`cc-status ${infoEntry.eventStatus === "CANCELLED" ? "cc-status-danger" : ""}`}>{infoEntry.eventStatus === "CANCELLED" ? "ABGESAGT" : infoEntry.eventStatus === "PLANNED" ? "Geplant – nicht bestätigt" : infoEntry.type === "closure" ? "Location-Sperre" : "Veranstaltung"}</span>
           {infoEntry.type === "event" && <figure className="mt-5 rounded-xl border border-white/10 bg-black/10 p-3">
             {infoFlyer ? <><a href={infoFlyer.url} target="_blank" rel="noreferrer" aria-label="Flyer größer öffnen">
               <Image src={infoFlyer.url} width={1200} height={1200} unoptimized alt={`${infoEntry.eventFlyer ? "Event-Flyer" : "Dauerflyer"} ${getEntryName(infoEntry)}`} className="mx-auto object-contain" style={{ width: "auto", height: "auto", maxWidth: "100%", maxHeight: "65vh" }} />
@@ -501,7 +502,7 @@ function CalendarContent() {
         </DashboardModal>}
 
         <p className="mt-6 text-xs text-neutral-500">
-          Automatische Termine aus dem Turnus werden nicht erzeugt.
+          Bestätigte feste Turnusregeln planen drei Monate voraus. Plantermine sind keine bestätigten Veranstaltungen.
         </p>
       </div>
     </main>

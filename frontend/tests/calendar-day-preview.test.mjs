@@ -134,3 +134,14 @@ test('calendar type, location and search filters also apply to preview; filter a
  click([...cell.querySelectorAll('button')].find(item=>item.textContent.includes('Alle 5 ansehen')));
  click(document.querySelector('[aria-label="Nächster Monat"]'));assert.ok(preview()===null);
 });
+
+test('planned status remains visible in month cell, day preview and existing event details',async()=>{
+ catalog.entries=[entry('planned','party','23:00',{eventStatus:'PLANNED',notes:'Geplant – nicht bestätigt. Fester Turnus.'})];
+ await mount();
+ const cell=document.querySelector(`[data-calendar-day="${date}"]`);
+ assert.match(cell.textContent,/Geplant – nicht bestätigt/);
+ click([...cell.querySelectorAll('button')].find(button=>button.textContent.includes('Alle 1 ansehen')));
+ assert.match(preview().textContent,/Geplant – nicht bestätigt/);
+ click(document.querySelector('.calendar-day-preview-entry'));
+ assert.match(preview().textContent,/Geplant – nicht bestätigt/);
+});

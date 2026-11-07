@@ -44,6 +44,8 @@ class PartySeriesControllerIntegrationTests {
     private PartySeriesRepository partySeriesRepository;
 
     @Autowired private de.noizycologne.backend.genre.GenreRepository genreRepository;
+    @Autowired private de.noizycologne.backend.venue.VenueRepository planningVenues;
+    private de.noizycologne.backend.venue.Venue planningVenue;
     private final @NonNull List<String> createdGenreIds = new ArrayList<>();
 
     private final @NonNull List<String> createdPartyIds = new ArrayList<>();
@@ -53,6 +55,7 @@ class PartySeriesControllerIntegrationTests {
     void cleanUpTestData() {
         partySeriesRepository.deleteAllById(createdPartyIds);
         partySeriesRepository.flush();
+        if(planningVenue!=null) planningVenues.deleteById(planningVenue.getId());
         actorRepository.deleteAllById(createdActorIds);
         actorRepository.flush();
         genreRepository.deleteAllById(createdGenreIds);
@@ -85,7 +88,7 @@ class PartySeriesControllerIntegrationTests {
         assertThat(created.residentDjIds()).containsExactly(resident.getId());
         assertThat(created.otherDjIds()).containsExactly(otherDj.getId());
         assertThat(created.organizerIds()).containsExactly(organizer.getId());
-        assertThat(created.recurrence()).isEqualTo(new PartyRecurrenceResponse("weekly", 5, null, null));
+        assertThat(created.recurrence()).isEqualTo(new PartyRecurrenceResponse("weekly", 5, null, null,planningVenue.getId(),java.time.LocalDate.of(2099,1,1)));
 
         PartySeriesResponse[] afterReload = getParties();
         PartySeriesResponse persisted = List.of(afterReload).stream()
@@ -122,7 +125,7 @@ class PartySeriesControllerIntegrationTests {
         assertThat(updated.color()).isEqualTo("#D4E5F6");
         assertThat(updated.residentDjIds()).containsExactly(otherDj.getId());
         assertThat(updated.otherDjIds()).isEmpty();
-        assertThat(updated.recurrence()).isEqualTo(new PartyRecurrenceResponse("monthly_weekday", 2, -1, null));
+        assertThat(updated.recurrence()).isEqualTo(new PartyRecurrenceResponse("monthly_weekday", 2, -1, null,planningVenue.getId(),java.time.LocalDate.of(2099,1,1)));
     }
 
     @Test void persistsSeriesDefaultsAndKeepsUnknownSeparateFromFree() throws Exception {
@@ -318,6 +321,10 @@ class PartySeriesControllerIntegrationTests {
         PartyRecurrenceRequest recurrence = recurrenceKind == null
                 ? null
                 : new PartyRecurrenceRequest(recurrenceKind, weekday, occurrence, description);
+        if ("weekly".equals(recurrenceKind) || "monthly_weekday".equals(recurrenceKind)) {
+            if(planningVenue==null) planningVenue=planningVenues.saveAndFlush(new de.noizycologne.backend.venue.Venue("Bestätigte Turnus-Location", ""));
+            recurrence=new PartyRecurrenceRequest(recurrenceKind,weekday,occurrence,description,planningVenue.getId(),java.time.LocalDate.of(2099,1,1));
+        }
         return new PartySeriesRequest(
                 name,
                 instagram,

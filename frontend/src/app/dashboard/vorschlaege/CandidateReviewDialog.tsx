@@ -4,7 +4,7 @@ import Link from "next/link";
 import { calendarEntryHref } from "../kalender/calendarNavigation";
 import DashboardModal from "../DashboardModal";
 import StandardGenreSelector, { useActiveGenres } from "../StandardGenreSelector";
-import { useCatalog } from "../CatalogProvider";
+import { type RecurrenceRule, useCatalog } from "../CatalogProvider";
 import { SourceEvidence } from "../SourceOverview";
 import CandidateAssessment from "./CandidateAssessment";
 import { discoveryApi as api } from "./discoveryApi";
@@ -21,6 +21,14 @@ export default function CandidateReviewDialog({ candidate, currentCandidate, bus
  const [importedId,setImportedId] = useState(candidate.calendar_entry_id);
  const [origins,setOrigins] = useState<{url:string;source_kind:string;event_data:string}[]>([]);
  const [portfolioStartTime,setPortfolioStartTime] = useState("");
+ const [recurrenceKind,setRecurrenceKind] = useState<"none"|"weekly"|"monthly_weekday"|"other">("none");
+ const [recurrenceWeekday,setRecurrenceWeekday] = useState(5);
+ const [recurrenceOccurrence,setRecurrenceOccurrence] = useState(1);
+ const [recurrenceLocation,setRecurrenceLocation] = useState("");
+ const [recurrenceStart,setRecurrenceStart] = useState("");
+ const [recurrenceNote,setRecurrenceNote] = useState("");
+ const fixedRecurrence = recurrenceKind === "weekly" || recurrenceKind === "monthly_weekday";
+ const recurrence: RecurrenceRule | null = recurrenceKind === "none" ? null : recurrenceKind === "other" ? {kind:"other",description:recurrenceNote.trim()} : recurrenceKind === "weekly" ? {kind:"weekly",weekday:recurrenceWeekday,locationId:recurrenceLocation,startDate:recurrenceStart} : {kind:"monthly_weekday",weekday:recurrenceWeekday,occurrence:recurrenceOccurrence,locationId:recurrenceLocation,startDate:recurrenceStart};
  const { genres: availableGenres, loading: genresLoading, error: genresError } = useActiveGenres();
  const [portfolioGenres,setPortfolioGenres] = useState<string[] | null>(null);
  const [createdParty,setCreatedParty] = useState<{id:string;name:string;standardGenres:string[]} | null>(null);
@@ -58,8 +66,19 @@ export default function CandidateReviewDialog({ candidate, currentCandidate, bus
           <p>Namensvorschlag bitte prüfen: Wechselnde DJs, Gäste und Line-ups gehören nicht zum dauerhaften Reihennamen. Bei uneindeutigen Titeln den Stammnamen selbst eingeben. Der Originaltitel bleibt beim Kalendertermin erhalten.</p>
           <p>{portfolioGenres !== null ? "Genreauswahl manuell angepasst." : genresLoading ? "Erkannte Genres werden mit dem aktiven Katalog abgeglichen …" : recognizedPortfolioGenres.length ? `${recognizedPortfolioGenres.length} erkannte Genres aus dem aktiven Katalog vorausgewählt.` : "Keine erkannten Genres aus dem aktiven Katalog vorhanden."} Bitte die Standardgenres der Reihe prüfen und bei Bedarf ergänzen. Die manuelle Aufnahme ist unabhängig vom automatischen Genre-Matching.</p>
           <StandardGenreSelector genres={availableGenres} loading={genresLoading} error={genresError} value={selectedPortfolioGenres} onChange={setPortfolioGenres} disabled={busy} />
-          <p>Die Partyreihe wird angelegt und diesem Vorschlag zugeordnet. Ein Kalenderimport erfolgt erst über „Bestätigen &amp; übernehmen“ mit gültigem Datum und bestätigter Location.</p>
-          <button type="button" className={`${button} discovery-button-primary`} disabled={busy || genresLoading || !!genresError || !portfolioName.trim() || !portfolioStartTime} onClick={()=>void action(async()=>{const result=await api<{partyId:string}>(`/candidates/${candidate.id}/portfolio`,"POST",{name:portfolioName,defaultStartTime:portfolioStartTime,standardGenres:selectedPortfolioGenres,seriesAlias:rememberName ? seriesAlias.trim() : null});if(!result?.partyId) throw new Error("Die Partyreihe wurde nicht bestätigt. Bitte den Vorschlag erneut prüfen.");setCreatedParty({id:result.partyId,name:portfolioName,standardGenres:selectedPortfolioGenres});setParty(result.partyId);setNotice("Partyreihe angelegt und zugeordnet. Termin bitte weiter prüfen.");await reloadParties();})}>Ins Portfolio übernehmen</button></fieldset>}
+          <fieldset className="space-y-2"><legend>Bestätigter Turnus der Partyreihe</legend>
+            <label className="block">Wiederholung<select className={field} value={recurrenceKind} disabled={busy} onChange={event=>setRecurrenceKind(event.target.value as typeof recurrenceKind)}><option value="none">Kein fester Turnus</option><option value="weekly">Wöchentlich</option><option value="monthly_weekday">Monatlich nach Wochentag</option><option value="other">Andere / noch unklare Regel</option></select></label>
+            {fixedRecurrence && <>
+              {recurrenceKind === "monthly_weekday" && <label className="block">Woche im Monat<select className={field} value={recurrenceOccurrence} disabled={busy} onChange={event=>setRecurrenceOccurrence(Number(event.target.value))}>{[1,2,3,4,-1].map(value=><option key={value} value={value}>{value === -1 ? "Letzte" : `${value}.`}</option>)}</select></label>}
+              <label className="block">Wochentag<select className={field} value={recurrenceWeekday} disabled={busy} onChange={event=>setRecurrenceWeekday(Number(event.target.value))}>{["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"].map((name,value)=><option key={value} value={value}>{name}</option>)}</select></label>
+              <label className="block">Bestätigte Turnus-Location<select className={field} required value={recurrenceLocation} disabled={busy} onChange={event=>setRecurrenceLocation(event.target.value)}><option value="">Bitte ausdrücklich bestätigen</option>{venues.map(venue=><option key={venue.id} value={venue.id}>{venue.name}</option>)}</select></label>
+              <label className="block">Planung ab Datum<input type="date" required className={field} value={recurrenceStart} disabled={busy} onChange={event=>setRecurrenceStart(event.target.value)} /></label>
+              <p>Drei Monate im Voraus als „Geplant – nicht bestätigt“. Der Turnus allein bestätigt keine Veranstaltung und erlaubt keine Veröffentlichung.</p>
+            </>}
+            {recurrenceKind === "other" && <label className="block">Regel beschreiben<input className={field} value={recurrenceNote} disabled={busy} onChange={event=>setRecurrenceNote(event.target.value)} /><span>Unklare Regeln erzeugen keine Termine.</span></label>}
+          </fieldset>
+          <p>Die Partyreihe wird angelegt und diesem Vorschlag zugeordnet. Feste Turnusregeln erzeugen nur unbestätigte Plantermine. Die konkrete Veranstaltung wird erst über „Bestätigen &amp; übernehmen“ mit gültigem Datum und bestätigter Location bestätigt.</p>
+          <button type="button" className={`${button} discovery-button-primary`} disabled={busy || genresLoading || !!genresError || !portfolioName.trim() || !portfolioStartTime || (fixedRecurrence && (!recurrenceLocation || !recurrenceStart)) || (recurrenceKind === "other" && !recurrenceNote.trim())} onClick={()=>void action(async()=>{const result=await api<{partyId:string}>(`/candidates/${candidate.id}/portfolio`,"POST",{name:portfolioName,defaultStartTime:portfolioStartTime,standardGenres:selectedPortfolioGenres,...(recurrence ? {recurrence} : {}),seriesAlias:rememberName ? seriesAlias.trim() : null});if(!result?.partyId) throw new Error("Die Partyreihe wurde nicht bestätigt. Bitte den Vorschlag erneut prüfen.");setCreatedParty({id:result.partyId,name:portfolioName,standardGenres:selectedPortfolioGenres});setParty(result.partyId);setNotice("Partyreihe angelegt und zugeordnet. Termin bitte weiter prüfen.");await reloadParties();if(fixedRecurrence) await reloadEntries();})}>Ins Portfolio übernehmen</button></fieldset>}
         <details><summary>Quellen und Angaben vergleichen</summary><button type="button" className={button} disabled={busy} onClick={()=>void action(async()=>{const rows=await api(`/candidates/${candidate.id}/sources`);setOrigins(Array.isArray(rows)?rows:[]);})}>Quellenbelege laden</button><SourceEvidence origins={origins} /></details>
         <a href={sourceLink(candidate.source_url)} target="_blank" rel="noreferrer" className="underline">Quellseite öffnen</a>
         {needsVenue && <label className="block">Veranstaltungsort zuordnen<p className="text-sm">Angabe aus der Quelle: {candidate.reported_location || "Kein eindeutiger Veranstaltungsort angegeben"}. Die Plattform ist keine Location.</p><select className={field} value={venueId} onChange={e=>setVenueId(e.target.value)}><option value="">Bitte ausdrücklich wählen</option>{venues.map(venue=><option key={venue.id} value={venue.id}>{venue.name}</option>)}</select></label>}

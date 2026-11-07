@@ -1,5 +1,7 @@
 package de.noizycologne.backend.party;
 
+import java.time.LocalDate;
+
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
@@ -15,6 +17,11 @@ public record PartyRecurrenceRequest(
         Integer occurrence,
 
         @Size(max = 2000)
-        String description
+        String description,
+        @Size(max = 100) @org.jspecify.annotations.Nullable String locationId,
+        @org.jspecify.annotations.Nullable LocalDate startDate
 ) {
+    public PartyRecurrenceRequest(String kind,Integer weekday,Integer occurrence,String description) {
+        this(kind,weekday,occurrence,description,null,null);
+    }
 }

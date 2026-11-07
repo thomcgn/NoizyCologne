@@ -32,6 +32,10 @@ public class DiscoveryPortfolioService {
     }
     @Transactional
     public String approve(String candidateId,String name,String seriesAlias,String defaultStartTime,Set<String> standardGenres) {
+        return approve(candidateId,name,seriesAlias,defaultStartTime,standardGenres,null);
+    }
+    @Transactional
+    public String approve(String candidateId,String name,String seriesAlias,String defaultStartTime,Set<String> standardGenres,PartyRecurrenceRequest recurrence) {
         store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
         var candidate=store.candidate(candidateId);var event=evaluation.event(candidate);var rules=evaluation.rules();
         if (List.of("REJECTED","DUPLICATE","IGNORED").contains(candidate.get("status"))) throw conflict("Geschützten Vorschlag zuerst prüfen");
@@ -45,7 +49,7 @@ public class DiscoveryPortfolioService {
         String partyId;
         if (recognized.parties().size()==1) partyId=Objects.requireNonNull(recognized.parties().getFirst()).id();
         else {
-            var party=parties.createParty(new PartySeriesRequest(name,"","#E11D48","manual",Set.of(),Set.of(),Set.of(),null,standardGenres,defaultStartTime,null));
+            var party=parties.createParty(new PartySeriesRequest(name,"","#E11D48","manual",Set.of(),Set.of(),Set.of(),recurrence,standardGenres,defaultStartTime,null));
             entities.flush();
             partyId=party.id();
         }

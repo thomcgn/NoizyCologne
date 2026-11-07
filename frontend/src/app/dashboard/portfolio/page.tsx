@@ -75,6 +75,7 @@ export default function PortfolioPage({
     updateVenue,
     deleteVenue,
     actors,
+    reloadEntries,
   } = useCatalog();
 
   const [category, setCategory] = useState<Category>(initialCategory);
@@ -141,6 +142,8 @@ export default function PortfolioPage({
   const [weekday, setWeekday] = useState(5);
   const [occurrence, setOccurrence] = useState(3);
   const [recurrenceNote, setRecurrenceNote] = useState("");
+  const [recurrenceLocationId,setRecurrenceLocationId] = useState("");
+  const [recurrenceStartDate,setRecurrenceStartDate] = useState("");
 
   useEffect(() => {
     if (category !== "parties" || !editingId) return;
@@ -182,6 +185,7 @@ export default function PortfolioPage({
     setWeekday(5);
     setOccurrence(3);
     setRecurrenceNote("");
+    setRecurrenceLocationId("");setRecurrenceStartDate("");
     setAliasesReady(true); setAliasesLoading(false);
     setDiscoveryAliases("");
     setEditingId(null);
@@ -238,6 +242,7 @@ export default function PortfolioPage({
 
         if (rule?.kind === "weekly" || rule?.kind === "monthly_weekday") {
           setWeekday(rule.weekday);
+          setRecurrenceLocationId(rule.locationId ?? "");setRecurrenceStartDate(rule.startDate ?? "");
         }
         if (rule?.kind === "monthly_weekday") {
           setOccurrence(rule.occurrence);
@@ -331,9 +336,9 @@ export default function PortfolioPage({
     let recurrence: RecurrenceRule | null = null;
     if (category === "parties") {
       if (recurrenceKind === "weekly") {
-        recurrence = { kind: "weekly", weekday };
+        recurrence = { kind: "weekly", weekday,locationId:recurrenceLocationId,startDate:recurrenceStartDate };
       } else if (recurrenceKind === "monthly_weekday") {
-        recurrence = { kind: "monthly_weekday", weekday, occurrence };
+        recurrence = { kind: "monthly_weekday", weekday, occurrence,locationId:recurrenceLocationId,startDate:recurrenceStartDate };
       } else if (recurrenceKind === "other") {
         const description = recurrenceNote.trim();
         if (!description) {
@@ -345,6 +350,7 @@ export default function PortfolioPage({
     }
 
     if (category === "parties") {
+      if ((recurrenceKind === "weekly" || recurrenceKind === "monthly_weekday") && (!recurrenceLocationId || !recurrenceStartDate)) {setError("Bitte bestätigte Turnus-Location und Startdatum ergänzen.");return;}
       if (!editingId && !defaultStartTime) {setError("Bitte eine Standard-Startuhrzeit eingeben."); return;}
       const partyData: Omit<PartySeries, "id"> = {
         defaultStartTime: defaultStartTime || null,
@@ -372,6 +378,7 @@ export default function PortfolioPage({
           // die gerade angelegte Partyreihe aktualisieren statt ein Duplikat anzulegen.
           setEditingId(savedParty.id);
         }
+        await reloadEntries();
         const aliasesResponse = await fetch(`/api/v1/discovery/parties/${encodeURIComponent(savedParty.id)}/aliases`, {
           method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify({aliases: discoveryAliases.split("\n").map(a => a.trim()).filter(Boolean)})
         });
@@ -694,7 +701,7 @@ export default function PortfolioPage({
                 <div className="mt-6 rounded-xl border border-white/10 p-5">
                   <h3 className="text-lg font-semibold">Turnus</h3>
                   <p className="mt-1 text-sm text-neutral-400">
-                    Optional. Feste Regeln können später Kalenderentwürfe erzeugen.
+                    Feste Regeln planen drei Monate voraus: Geplant – nicht bestätigt. Manuelle Änderungen und entfernte Termine bleiben geschützt.
                   </p>
 
                   <label className="mt-4 block">
@@ -763,6 +770,11 @@ export default function PortfolioPage({
                       </label>
                     </div>
                   )}
+
+                  {(recurrenceKind === "weekly" || recurrenceKind === "monthly_weekday") && <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <label>Bestätigte Turnus-Location<select className={inputStyle} required value={recurrenceLocationId} onChange={event=>setRecurrenceLocationId(event.target.value)}><option value="">Bitte bestätigen</option>{venues.map(venue=><option key={venue.id} value={venue.id}>{venue.name}</option>)}</select></label>
+                    <label>Planung ab Datum<input type="date" className={inputStyle} required value={recurrenceStartDate} onChange={event=>setRecurrenceStartDate(event.target.value)} /></label>
+                  </div>}
 
                   {recurrenceKind === "other" && (
                     <label className="mt-4 block">
