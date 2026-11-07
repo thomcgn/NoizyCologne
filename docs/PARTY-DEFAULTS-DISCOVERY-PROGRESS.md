@@ -98,3 +98,25 @@ Keine vollständigen Modulprüfungen, Produktionsbuilds oder echten Browser.
 CLI-Prüfungen belegen keine Live-IDE-/visuelle Abnahme. Der reguläre QUICK-Hook
 bleibt die Commitprüfung; FULL bleibt für den exakt akzeptierten Commit in
 GitHub Actions vor Integration erforderlich.
+
+## Nachkorrektur: erkannte Discovery-Genres vorauswählen (07.11.2026)
+
+Bestandsaufnahme: Der Aufnahmedialog berücksichtigte ausschließlich
+`suggestedStandardGenres` des beim Öffnen gespeicherten Kandidaten. Die bereits
+vorhandenen `sourceNames` fehlten. Die Vorauswahl verwendet jetzt beide Listen
+von `currentCandidate` (ersatzweise `candidate`) und ausschließlich eindeutige
+Anzeigenamen des aktiven Katalogs. Sie erscheint auch nach verzögerter API-Antwort.
+Manuelle Auswahländerungen einschließlich vollständiger Abwahl bleiben beim
+Polling erhalten; gespeichert wird exakt diese editierbare Auswahl. Der Hinweis
+nennt die Anzahl vorausgewählter erkannter Kataloggenres. Matching-Regel und
+Kalenderbedingungen bleiben unverändert.
+
+Gezielte Prüfung: fünf Frontendtests erfolgreich, davon drei neue Regressionen
+für die vier Sonic-Boom-Genres mit verzögertem Katalogladen, aktuelle
+Kandidatendaten/vereinigte Vorschläge/manuelle Abwahl sowie mehrdeutige,
+unbekannte und inaktive Namen. Bestehende Aufnahme-/Speicher- und Unter-50-%-Fälle
+bestanden ebenfalls. Ein anfänglicher Testfehler zur alphabetischen
+Katalogreihenfolge und ein Testdaten-Duplikat wurden korrigiert; abschließend
+keine Warnungen. Mindestens 7.454 MiB RAM verfügbar, kein Speicherabbruch.
+`git diff --check` erfolgreich. Abschlussprüfung über den regulären QUICK-Hook;
+FULL bleibt GitHub Actions vorbehalten. Keine lokalen Builds oder Browserläufe.
