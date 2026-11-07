@@ -249,6 +249,65 @@ test('portfolio approval saves chosen standards and keeps the dialog open with t
   assert.equal(JSON.parse(calls.find(call=>call.url.endsWith('/confirm')&&call.method==='POST').body).partyId,'approved');
   assert.ok(dialog().querySelector('a[href*="entry=imported-entry"]'));
 });
+test('Sonic Boom preselects all four source genres after the catalog loads and saves manual choices exactly', async () => {
+  const sourceNames = ['Garage Rock', 'Rock’n’Roll', 'Punkrock', 'Soul'];
+  await mount(candidate({title:'The Sonic Boom mit JAY TRIPLECHAIR & FRIENDS',
+    assessment:assessment({recognition:{status:'NONE',parties:[]}}),
+    genreCoverage:{matched:4,total:4,percent:100,names:sourceNames,sourceNames,eligible:true}}));
+  const previousFetch = globalThis.fetch;
+  let finishGenres;
+  const pendingGenres = new Promise(resolve => { finishGenres = resolve; });
+  globalThis.fetch = (url, options) => url === '/api/v1/genres' ? pendingGenres.then(() => new Response(JSON.stringify(genreRows))) : previousFetch(url, options);
+  genreRows = [...sourceNames, 'Indie'].map(displayName => ({id:displayName,displayName,active:true}));
+  await openReview();
+  assert.match(dialog().textContent, /Genres werden geladen/);
+  assert.equal(dialog().querySelectorAll('input[type="checkbox"]:checked').length, 0);
+  await settle(() => finishGenres());
+  const checked = () => [...dialog().querySelectorAll('fieldset input[type="checkbox"]:checked')].map(input => input.parentElement.textContent);
+  assert.deepEqual(checked(), ['Garage Rock','Punkrock','Rock’n’Roll','Soul']);
+  assert.match(dialog().textContent, /4 erkannte Genres aus dem aktiven Katalog vorausgewählt\./);
+  const checkbox = name => [...dialog().querySelectorAll('label')].find(label => label.textContent === name).querySelector('input');
+  act(() => checkbox('Soul').click());
+  act(() => checkbox('Indie').click());
+  candidates = candidates.map(item => ({...item, genreCoverage:{...item.genreCoverage,sourceNames:['Soul']}}));
+  await settle(() => poll());
+  assert.deepEqual(checked(), ['Garage Rock','Indie','Punkrock','Rock’n’Roll']);
+  change(control('Standard-Startuhrzeit'), '23:00');
+  await settle(() => button('Ins Portfolio übernehmen', dialog()).click());
+  const payload = JSON.parse(calls.find(call => call.url.endsWith('/portfolio') && call.method === 'POST').body);
+  assert.deepEqual(payload.standardGenres, ['Garage Rock','Punkrock','Rock’n’Roll','Indie']);
+  assert.ok(document.querySelector('[role="dialog"]'));
+  assert.equal(control('Partyreihe zuordnen').value, 'approved');
+});
+
+test('genre defaults use current candidate source names and confirmed suggestions but preserve an empty manual selection', async () => {
+  await mount(candidate({assessment:assessment({recognition:{status:'NONE',parties:[]}}),
+    genreCoverage:{matched:1,total:1,percent:100,names:['Emo'],sourceNames:['Emo'],eligible:true}}));
+  await openReview();
+  const checked = () => [...dialog().querySelectorAll('fieldset input[type="checkbox"]:checked')].map(input => input.parentElement.textContent);
+  assert.deepEqual(checked(), ['Emo']);
+  candidates = candidates.map(item => ({...item,genreCoverage:{...item.genreCoverage,
+    sourceNames:['Indie','Unknown','Pop'],suggestedStandardGenres:['Metalcore','Indie','Unknown','Pop']}}));
+  await settle(() => poll());
+  assert.deepEqual(checked(), ['Indie','Metalcore']);
+  for (const input of dialog().querySelectorAll('fieldset input[type="checkbox"]:checked')) act(() => input.click());
+  candidates = candidates.map(item => ({...item,genreCoverage:{...item.genreCoverage,sourceNames:['Emo']}}));
+  await settle(() => poll());
+  assert.deepEqual(checked(), []);
+  change(control('Standard-Startuhrzeit'), '22:00');
+  await settle(() => button('Ins Portfolio übernehmen', dialog()).click());
+  assert.deepEqual(JSON.parse(calls.find(call => call.url.endsWith('/portfolio') && call.method === 'POST').body).standardGenres, []);
+});
+
+test('genre defaults exclude ambiguous active catalog names and inactive or unknown suggestions', async () => {
+  await mount(candidate({assessment:assessment({recognition:{status:'NONE',parties:[]}}),
+    genreCoverage:{matched:1,total:1,percent:100,names:['Emo'],sourceNames:['Emo','Pop','Unknown'],suggestedStandardGenres:['Pop','Unknown'],eligible:true}}));
+  genreRows.push({id:'second-emo',displayName:'Emo',active:true});
+  await openReview();
+  assert.equal(dialog().querySelectorAll('fieldset input[type="checkbox"]:checked').length, 0);
+  assert.match(dialog().textContent, /Keine erkannten Genres aus dem aktiven Katalog vorhanden/);
+});
+
 test('manual portfolio creation stays available below fifty percent without auto-selecting inferred genres',async()=>{
   await mount(candidate({title:'Unknown Emo Party',assessment:assessment({recognition:{status:'NONE',parties:[]}}),genreCoverage:{matched:1,total:4,percent:25,names:['Emo'],eligible:false}}));
   await openReview();assert.match(dialog().textContent,/1 von 4/);
