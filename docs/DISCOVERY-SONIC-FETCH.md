@@ -150,3 +150,51 @@ verwendet. Intensive Schritte nacheinander mit Speicherprüfung und laufender
 Überwachung, bisher mindestens 7.319 MiB verfügbar, kein Speicherabbruch.
 Abschlussprüfung über den regulären QUICK-Commit-Hook; FULL bleibt in GitHub
 Actions. Kein zusätzlicher PR, Browser, lokaler Build, Merge oder Deployment.
+
+### Fehlendes Anzeigedatum bei manueller Prüfung (07.11.2026)
+
+Lesende Produktionsdiagnose: `noizycologne-api-1` verwendet das Backendimage
+`226258494a20a8ef11bd5543eb567fc801c55f7b` (Merge von PR #18), gestartet
+am 07.11.2026 um 12:50:03 UTC. Der letzte gespeicherte Discovery-Lauf endete
+bereits um 12:49:27 UTC. Damit ist der Fix deployed, die gespeicherten Sonic-
+Vorschläge wurden seitdem aber noch nicht neu gescannt. BallroomBlitz!/DER GRAUE
+KLAUS enthält noch `starts=["Freitag, 04. Dezember"]`, `event_date=NULL`,
+`decision_origin=AUTOMATIC`. Der manuell geprüfte BallroomBlitz!/ANJA HELLFIRE
+enthält noch `starts=["HEUTE"]`, `event_date=NULL`, `decision_origin=MANUAL`.
+Die beiden Sonic-Quellen haben leere Item-/Titel-/Datumsselektoren. Abfragen
+ausschließlich in `BEGIN READ ONLY` mit Timeout und abschließendem `ROLLBACK`;
+kein Scan ausgelöst und keine Produktionsdaten verändert.
+
+Zusätzlicher reproduzierter Speicherfehler: Der manuelle Schutzpfad aktualisierte
+nach der Auflösung `raw_event.starts`, ließ `event_date` aber leer. Die Oberfläche
+zeigt dieses gespeicherte Feld und deshalb weiterhin „Datum noch offen“.
+`EventCandidateProcessor` ergänzt jetzt ausschließlich fehlende Datumswerte
+offener manueller Prüfungen ohne Kalendereintrag, wenn der neue Starttag eindeutig
+verifiziert und das Event aktiv ist. `COALESCE` bewahrt vorhandene, insbesondere
+manuell gewählte Termine. Status, Zuordnung, Ablehnung, Rückfragetext und
+Kalenderdaten bleiben geschützt; der manuelle Pfad löst keinen Import aus.
+Auch bereits aktualisierte Rohdaten mit unverändertem Fingerprint können das
+fehlende Datum ergänzen. Kein Eingriff in HTML-Extraktion oder Frontend nötig.
+
+Genau ein neuer Integrationstest mit der vorhandenen Sonic-Fixture: ein manuell
+geprüfter BallroomBlitz!-Altvorschlag erhält beim erneuten Scan den 04.12.2026,
+behält seine ID und redaktionelle Entscheidung, erzeugt keinen Kalendertermin
+und liefert das Datum über die bestehende Detail-API. Zusätzlich prüft derselbe
+Fall den bereits aktualisierten Rohdaten-/Fingerprintzustand. Vor der Korrektur
+scheitert der Test an `event_date=NULL` trotz `raw_event.starts=["2026-12-04"]`.
+Prüfprotokolle unter `.quality/calendar-visibility/reviewed-date-*.log`.
+
+Nach der Korrektur sechs gezielt ausgewählte Methoden von
+`DiscoveryIntegrationTests` bestanden: der neue BallroomBlitz!-Fall, die bestehende
+Jahresauflösung mit manuellen und importierten Altzeilen, widersprüchliche
+Starttage/Absage-Aktiv-Meldungen, widersprüchliche Uhrzeiten, abgelehnte
+Altvorschläge und falsche Wochentage. Maven `test-compile surefire:test` mit
+entsprechender `-Dtest=DiscoveryIntegrationTests#…`-Methodenauswahl, ausschließlich
+gegen frische isolierte PostgreSQL-Testdatenbanken; beide Testcontainer entfernt.
+Intensive Schritte seriell, vorab Speicherprüfung und laufende Überwachung;
+bisher mindestens 6.957 MiB verfügbar, kein Speicherabbruch. Regulärer QUICK-Hook
+als Commitprüfung; FULL bleibt in CI. Keine neuen Worktrees, Produktionsänderungen,
+Datenbank-Resets, Browserprüfungen, lokalen Modulprüfungen/Builds oder eigener Merge.
+Der erste QUICK-Hook blockierte eine unsichere Nulltyp-Interpretation des
+Optional-Rückgabewerts im neuen Test. Der Bibliotheksübergang ist mit einer
+expliziten Nullprüfung korrigiert; keine Änderung der Testfälle oder Erwartungen.

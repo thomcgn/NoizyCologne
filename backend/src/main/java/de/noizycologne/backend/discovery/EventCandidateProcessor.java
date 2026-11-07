@@ -151,12 +151,17 @@ public class EventCandidateProcessor {
         if (old!=null) store.jdbc().update("INSERT INTO discovery_candidate_identities(venue_id,identity_key,candidate_id) VALUES (?,?,?) ON CONFLICT DO NOTHING",venue.getId(),identity,old.get("id"));
         // Includes ambiguous legacy reviews: uncertainty about provenance never permits overwriting them.
         if (old!=null && (!"AUTOMATIC".equals(old.get("decision_origin")) || "REJECTED".equals(old.get("status")))) {
-            if (!fingerprint.equals(old.get("fingerprint")) || !EventMatcher.VERSION.equals(old.get("matcher_version"))) {
+            // A review of status/assignment without a date must not freeze missing source data.
+            // Existing dates and calendar entries remain authoritative; no import follows this path.
+            boolean supplementDate=date!=null && old.get("event_date")==null && old.get("calendar_entry_id")==null
+                && "MANUAL".equals(old.get("decision_origin")) && List.of("NEEDS_REVIEW","NEEDS_INQUIRY").contains(old.get("status"))
+                && evaluator.verification(event,venue.getId(),venue.getName()).sufficient() && EventLifecycle.signal(event).equals("ACTIVE");
+            if (supplementDate || !fingerprint.equals(old.get("fingerprint")) || !EventMatcher.VERSION.equals(old.get("matcher_version"))) {
                 var technical=evaluator.evaluate(event,venue.getId(),venue.getName(),approved,new DiscoveryEvaluationService.Rules(known,aliases,genres));
                 store.jdbc().update("""
                     UPDATE discovery_candidates SET raw_event=?,fingerprint=?,evidence=?,source_url=?,automatic_reason=?,matching_class=?,
-                    matcher_version=?,evaluated_at=now(),last_evaluation_id=?,updated_at=now() WHERE id=?
-                    """,evaluator.raw(event),fingerprint,event.evidence(),url,technical.reason(),technical.classification(),EventMatcher.VERSION,operation,old.get("id"));
+                    matcher_version=?,evaluated_at=now(),last_evaluation_id=?,event_date=COALESCE(event_date,?),updated_at=now() WHERE id=?
+                    """,evaluator.raw(event),fingerprint,event.evidence(),url,technical.reason(),technical.classification(),EventMatcher.VERSION,operation,supplementDate ? date : null,old.get("id"));
                 store.technicalAudit((String)old.get("id"),(String)old.get("matching_class"),operation);
             }
             return;
