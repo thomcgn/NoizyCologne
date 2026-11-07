@@ -36,15 +36,23 @@ public class DiscoveryPortfolioService {
         var candidate=store.candidate(candidateId);var event=evaluation.event(candidate);var rules=evaluation.rules();
         if (List.of("REJECTED","DUPLICATE","IGNORED").contains(candidate.get("status"))) throw conflict("Geschützten Vorschlag zuerst prüfen");
         var recognized=PartySeriesRecognition.recognize(event.title(),rules.parties(),rules.aliases());
-        if (recognized.parties().size()==1) return Objects.requireNonNull(recognized.parties().getFirst()).id();
-        if (!recognized.parties().isEmpty() || candidate.get("party_id")!=null) throw conflict("Vorhandene Zuordnung zuerst prüfen");
+        if (candidate.get("party_id") instanceof String assigned) {
+            if (recognized.parties().size()==1 && assigned.equals(Objects.requireNonNull(recognized.parties().getFirst()).id())) return assigned;
+            throw conflict("Vorhandene Zuordnung zuerst prüfen");
+        }
+        if (recognized.parties().size()>1) throw conflict("Vorhandene Zuordnung zuerst prüfen");
         if (!EventLifecycle.signal(event).equals("ACTIVE") || Boolean.TRUE.equals(candidate.get("has_blocking_change"))) throw conflict("Veranstaltungsänderung zuerst klären");
-        var party=parties.createParty(new PartySeriesRequest(name,"","#E11D48","manual",Set.of(),Set.of(),Set.of(),null,standardGenres,defaultStartTime,null));
-        entities.flush();
-        importer.rememberAlias(candidate,party.id(),seriesAlias);
-        store.jdbc().update("UPDATE discovery_candidates SET party_id=?,decision_origin='MANUAL',reason='Partyreihe ausdrücklich ins Portfolio aufgenommen',updated_at=now() WHERE id=?",party.id(),candidateId);
+        String partyId;
+        if (recognized.parties().size()==1) partyId=Objects.requireNonNull(recognized.parties().getFirst()).id();
+        else {
+            var party=parties.createParty(new PartySeriesRequest(name,"","#E11D48","manual",Set.of(),Set.of(),Set.of(),null,standardGenres,defaultStartTime,null));
+            entities.flush();
+            partyId=party.id();
+        }
+        importer.rememberAlias(candidate,partyId,seriesAlias);
+        store.jdbc().update("UPDATE discovery_candidates SET party_id=?,decision_origin='MANUAL',reason='Partyreihe ausdrücklich ins Portfolio aufgenommen',updated_at=now() WHERE id=?",partyId,candidateId);
         store.audit(candidateId,(String)candidate.get("status"),null);
-        return party.id();
+        return partyId;
     }
     private static ResponseStatusException conflict(String reason) { return new ResponseStatusException(HttpStatus.CONFLICT,reason); }
 }

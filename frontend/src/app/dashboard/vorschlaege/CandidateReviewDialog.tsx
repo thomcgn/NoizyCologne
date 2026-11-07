@@ -29,7 +29,9 @@ export default function CandidateReviewDialog({ candidate, currentCandidate, bus
  const recognizedPortfolioGenres = availableGenres.filter(genre => recognizedNames.has(genre.displayName)
    && availableGenres.filter(item => item.displayName === genre.displayName).length === 1).map(genre => genre.displayName);
  const selectedPortfolioGenres = portfolioGenres ?? recognizedPortfolioGenres;
- const [portfolioName,setPortfolioName] = useState(candidate.title.slice(0,200));
+ const suggestedSeriesName = (currentCandidate ?? candidate).suggestedSeriesName ?? candidate.title;
+ const [editedPortfolioName,setPortfolioName] = useState<string | null>(null);
+ const portfolioName = editedPortfolioName ?? suggestedSeriesName.slice(0,200);
  const [venueId,setVenueId] = useState(candidate.venue_id ?? "");
  const needsVenue = !candidate.venue_id;
  const [party,setParty] = useState(candidate.party_id ?? "");
@@ -38,7 +40,7 @@ export default function CandidateReviewDialog({ candidate, currentCandidate, bus
  const [inquiry,setInquiry] = useState(candidate.inquiry_status);
  const [dm,setDm] = useState(candidate.dm_text);
  const [rememberName,setRememberName] = useState(false);
- const [seriesAlias,setSeriesAlias] = useState(candidate.title.slice(0,200));
+ const [seriesAlias,setSeriesAlias] = useState(suggestedSeriesName.slice(0,200));
  const dialogParties = createdParty && !parties.some(item => item.id === createdParty.id) ? [...parties, createdParty] : parties;
  const selectedStandards=dialogParties.find(item => item.id === party)?.standardGenres ?? currentCandidate?.genreCoverage?.standardNames ?? [];
  function setCandidate(value: Candidate | null) { if (value === null) onClose(); }
@@ -53,6 +55,7 @@ export default function CandidateReviewDialog({ candidate, currentCandidate, bus
         {currentCandidate?.assessment && <CandidateAssessment assessment={currentCandidate.assessment} detailed />}
         {currentCandidate?.genreCoverage && <section aria-label="Genregrundlage" className="space-y-2 text-sm"><p><strong>Genres aus Veranstaltungsquelle:</strong> {(currentCandidate.genreCoverage.sourceNames ?? currentCandidate.genreCoverage.names).join(", ") || "Keine Eventgenres belegt."}</p>{((currentCandidate.assessment && currentCandidate.assessment.recognition.status !== "NONE") || party) && <p><strong>Standardgenres der bekannten Partyreihe:</strong> {selectedStandards.join(", ") || "Keine hinterlegt."}</p>}{currentCandidate.genreCoverage.basis === "STANDARD" ? <p>Genregrundlage: hinterlegte Standardgenres. Fehlende Eventgenres ändern die bekannte Zuordnung nicht.</p> : currentCandidate.genreCoverage.total > 0 ? <p>Genreübereinstimmung: {currentCandidate.genreCoverage.matched} von {currentCandidate.genreCoverage.total} erkannten Eventgenres passen zum aktiven Portfolio ({currentCandidate.genreCoverage.percent} %).</p> : <p>Keine Eventgenres für eine Prozentberechnung belegt.</p>}</section>}
         {!party && !createdParty && canApprovePortfolio(currentCandidate ?? candidate) && <fieldset className="space-y-2 rounded-lg border p-3"><legend>Neue Partyreihe einmalig freigeben</legend><label className="block">Standard-Startuhrzeit (24 Stunden)<input type="time" step={60} required className={field} value={portfolioStartTime} onChange={event=>setPortfolioStartTime(event.target.value)} /></label><label className="block">Name im Portfolio<input className={field} value={portfolioName} maxLength={200} onChange={e=>setPortfolioName(e.target.value)} /></label>
+          <p>Namensvorschlag bitte prüfen: Wechselnde DJs, Gäste und Line-ups gehören nicht zum dauerhaften Reihennamen. Bei uneindeutigen Titeln den Stammnamen selbst eingeben. Der Originaltitel bleibt beim Kalendertermin erhalten.</p>
           <p>{portfolioGenres !== null ? "Genreauswahl manuell angepasst." : genresLoading ? "Erkannte Genres werden mit dem aktiven Katalog abgeglichen …" : recognizedPortfolioGenres.length ? `${recognizedPortfolioGenres.length} erkannte Genres aus dem aktiven Katalog vorausgewählt.` : "Keine erkannten Genres aus dem aktiven Katalog vorhanden."} Bitte die Standardgenres der Reihe prüfen und bei Bedarf ergänzen. Die manuelle Aufnahme ist unabhängig vom automatischen Genre-Matching.</p>
           <StandardGenreSelector genres={availableGenres} loading={genresLoading} error={genresError} value={selectedPortfolioGenres} onChange={setPortfolioGenres} disabled={busy} />
           <p>Die Partyreihe wird angelegt und diesem Vorschlag zugeordnet. Ein Kalenderimport erfolgt erst über „Bestätigen &amp; übernehmen“ mit gültigem Datum und bestätigter Location.</p>

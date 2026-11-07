@@ -280,6 +280,26 @@ test('Sonic Boom preselects all four source genres after the catalog loads and s
   assert.equal(control('Partyreihe zuordnen').value, 'approved');
 });
 
+for (const [title, suggestedSeriesName] of [
+  ['The Sonic Boom mit JAY TRIPLECHAIR & FRIENDS','The Sonic Boom'],
+  ['BallroomBlitz! mit DER GRAUE KLAUS','BallroomBlitz!'],
+  ['BallroomBlitz! mit ROMAN EMPIRE','BallroomBlitz!'],
+  ['Shake Appeal mit BEATMIKE, FACE B & HOLLY WOOD','Shake Appeal'],
+  ['Tanzen mit Freunden','Tanzen mit Freunden'],
+]) test(`portfolio stem proposal stays editable and preserves original title: ${title}`, async () => {
+  await mount(candidate({title,suggestedSeriesName,assessment:assessment({recognition:{status:'NONE',parties:[]}})}));
+  await openReview();
+  assert.equal(control('Name im Portfolio').value, suggestedSeriesName);
+  assert.ok(dialog().textContent.includes(title));
+  change(control('Name im Portfolio'), 'Manuell bestätigte Reihe');
+  candidates = candidates.map(item => ({...item,suggestedSeriesName:'Späterer Vorschlag'}));
+  await settle(() => poll());
+  assert.equal(control('Name im Portfolio').value, 'Manuell bestätigte Reihe');
+  change(control('Standard-Startuhrzeit'), '22:00');
+  await settle(() => button('Ins Portfolio übernehmen', dialog()).click());
+  assert.equal(JSON.parse(calls.find(call => call.url.endsWith('/portfolio') && call.method === 'POST').body).name, 'Manuell bestätigte Reihe');
+});
+
 test('genre defaults use current candidate source names and confirmed suggestions but preserve an empty manual selection', async () => {
   await mount(candidate({assessment:assessment({recognition:{status:'NONE',parties:[]}}),
     genreCoverage:{matched:1,total:1,percent:100,names:['Emo'],sourceNames:['Emo'],eligible:true}}));

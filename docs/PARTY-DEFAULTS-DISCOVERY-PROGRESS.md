@@ -120,3 +120,45 @@ Katalogreihenfolge und ein Testdaten-Duplikat wurden korrigiert; abschließend
 keine Warnungen. Mindestens 7.454 MiB RAM verfügbar, kein Speicherabbruch.
 `git diff --check` erfolgreich. Abschlussprüfung über den regulären QUICK-Hook;
 FULL bleibt GitHub Actions vorbehalten. Keine lokalen Builds oder Browserläufe.
+
+## Nachkorrektur: Stammname und wechselndes Line-up trennen (07.11.2026)
+
+Bestandsaufnahme: Katalognamen und bestätigte Aliase wurden bereits innerhalb
+längerer Eventtitel erkannt; gepflegte Standardgenres wurden wiederverwendet.
+Der Aufnahmedialog schlug dagegen den vollständigen Eventtitel als Reihennamen
+vor. Die API liefert jetzt einen editierbaren `suggestedSeriesName`. Eine
+abgesetzte, großgeschriebene Line-up-Angabe nach „mit“, „with“ oder „feat.“ wird
+bei gemischt geschriebenem Stammnamen nur für diesen Vorschlag abgetrennt.
+Uneindeutige Titel bleiben vollständig als editierbarer Vorschlag erhalten;
+keine pauschale Entfernung von „mit“, keine automatische Änderung bestehender
+Namen oder Aliase. Der Dialog erklärt die manuelle Prüfung. Namensänderungen im
+Formular bleiben beim Polling erhalten; die bestätigte Eingabe wird gespeichert.
+
+Originaltitel und Rohdaten bleiben unverändert. Neue Kalenderübernahmen erhalten
+den vollständigen Titel zusätzlich in ihren Notizen. Bei zwei offenen Vorschlägen
+mit wechselndem Line-up verwendet die zweite Portfolioaufnahme eine inzwischen
+angelegte passende Reihe und ordnet sie tatsächlich zu; gepflegte Standardgenres
+werden nicht überschrieben. Eine abweichende manuelle Zuordnung bleibt geschützt.
+Keine Änderung der Eventidentität, Termintrennung oder Importbedingungen.
+
+Gezielte Prüfungen des Erweiterungsstands:
+
+- javac-Haupt-/Testkompilierung erfolgreich; sieben DiscoveryAssessment-Unit-Tests
+  bestanden, einschließlich aller vier Beispiele, Stamm-/Aliaserkennung und
+  Standardgenres sowie unverändertem „Tanzen mit Freunden“/„Tanz mit MIR“.
+- Drei Integrationstests gegen eine frische isolierte PostgreSQL-Datenbank
+  bestanden: wechselnde Line-ups/eine Reihe/getrennte Termine/Originaltitel/
+  Standardgenres/Alias/geschützte manuelle Zuordnung sowie bestehende
+  Portfolioaufnahme und Quellenkonflikt mit geschützter Ablehnung. Container
+  anschließend entfernt.
+- Elf gezielte Frontendtests bestanden: die vier editierbaren Namensvorschläge,
+  unveränderter uneindeutiger Titel, manuelle Eingabe über Polling bis zum
+  Speichern, aktive Eventgenres für neue und Standardgenres für bekannte Reihen.
+- Intensive Schritte seriell mit Speicherwächter; mindestens 6.775 MiB RAM
+  verfügbar, kein Speicherabbruch. `git diff --check` erfolgreich. Abschluss
+  über regulären QUICK-Hook, FULL ausschließlich in GitHub Actions. Keine
+  lokalen Produktionsbuilds, Browserprüfungen oder Datenmigrationen.
+
+Ein erster QUICK-Lauf stoppte vor dem Commit wegen einer Nulltyp-Warnung im
+neuen Integrationstest. Der Katalogwert wird jetzt ausdrücklich auf NULL geprüft;
+die fachlichen Datenbankergebnisse bleiben dadurch unverändert gültig.

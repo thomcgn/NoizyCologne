@@ -16,6 +16,26 @@ class DiscoveryAssessmentTests {
     private EventExtractor.Event event(String title,List<@NonNull String> starts,String state) {
         return new EventExtractor.Event("neon-event",title,"https://club.example/events/neon",starts,"Indie / Emo DJs",state,"Blue Shell");
     }
+    @Test void lineupSuggestionsSeparateFourExamplesAndReuseStemsAliasesAndStandards() {
+        var examples=Map.of(
+            "The Sonic Boom mit JAY TRIPLECHAIR & FRIENDS","The Sonic Boom",
+            "BallroomBlitz! mit DER GRAUE KLAUS","BallroomBlitz!",
+            "BallroomBlitz! mit ROMAN EMPIRE","BallroomBlitz!",
+            "Shake Appeal mit BEATMIKE, FACE B & HOLLY WOOD","Shake Appeal");
+        for (var example:examples.entrySet()) {
+            String title=Objects.requireNonNull(example.getKey()),stem=Objects.requireNonNull(example.getValue());
+            assertThat(PartySeriesRecognition.suggestedName(title)).isEqualTo(stem);
+            var match=new EventMatcher().match(event(title,List.of("2026-12-04"),""),"Blue Shell",
+                List.of(party("series",stem)),Map.of(),List.of(),true);
+            assertThat(match.partyId()).isEqualTo("series");assertThat(match.status()).isEqualTo("READY");
+            assertThat(match.reason()).contains("Standardgenres: Indie");
+        }
+        var aliased=PartySeriesRecognition.recognize("Blitz Clubnacht mit ROMAN EMPIRE",
+            List.of(party("blitz","BallroomBlitz!")),Map.of("blitz",List.of("Blitz Clubnacht")));
+        assertThat(aliased.parties()).extracting(PartySeriesRecognition.DetectedParty::id).containsExactly("blitz");
+        for (String title:List.of("Tanzen mit Freunden","Tanz mit MIR","PARTY MIT HERZ","Party ohne Lineup"))
+            assertThat(PartySeriesRecognition.suggestedName(title)).isEqualTo(title);
+    }
     @Test void blueShellCooperationKeepsBothSeriesWithoutAnArbitraryPrimaryParty() {
         var parties=List.of(party("paradise","NEON PARADISE"),party("kult","NEON KULT"));
         var event=event("NEON PARADISE VS. NEON KULT VOL: 2 THE REVENGE",List.of("2026-11-07T23:00"),"UNCONFIRMED");
