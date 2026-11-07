@@ -251,3 +251,18 @@ Prioritätsfälle, der verlinkte Import nach Datenaktualisierung und die neue
 PLANNED-Darstellung bestehen nach der Korrektur. Damit insgesamt 20 verschiedene
 gezielte Frontendfälle erfolgreich. Der reguläre Hook wird für den korrigierten
 Abschlussstand vollständig gemäß seiner bestehenden Auswahl erneut ausgeführt.
+
+QUICK für `038b23d` erfolgreich: frische javac-/ECJ-Analyse ohne Projektdiagnosen,
+147 Backendtests bestanden, ein optionaler privater Replay mangels Snapshot
+übersprungen; TypeScript/ESLint ohne Diagnosen und 114 Frontendtests bestanden.
+
+Abschließender Datenintegritätsfall: Ein vorhandener manueller ACTIVE-Termin,
+den die erste Turnusplanung nur wegen seiner Existenz übersprungen hatte, wird
+später verschoben. Der Trigger merkt sich jetzt auch ohne vorherigen Plan-Nachweis
+den alten Kalendertag. So kann die Nachplanung ihn nicht erneut belegen. Ein neuer
+Regressionstest und vier unmittelbar betroffene Fälle (Schutz bei Turnusänderung,
+Bestätigung vorhandener Plantermine, manuelle Kalenderzuordnung und bewahrte
+manuelle Kalenderkorrektur nach Quellenkonflikt) bestanden in einer weiteren
+frischen isolierten Datenbank; Container entfernt. Damit insgesamt 23 verschiedene
+gezielte Datenbankfälle erfolgreich. Unveränderte Frontend-Ergebnisse bleiben
+gültig. Die Trigger-/Testergänzung erhält erneut den regulären QUICK-Hook.

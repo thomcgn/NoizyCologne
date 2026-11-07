@@ -26,6 +26,13 @@ BEGIN
     ON CONFLICT(party_id,event_date) DO UPDATE SET protected=true;
   END IF;
  ELSE
+  -- An edited legacy/manual event may never have belonged to a generated plan.
+  -- Preserve its original slot too, without attaching the same entry to two ledger rows.
+  IF OLD.party_id IS NOT NULL THEN
+   INSERT INTO calendar_recurrence_occurrences(party_id,event_date,calendar_entry_id,protected)
+    VALUES(OLD.party_id,OLD.event_date,NULL,true)
+    ON CONFLICT(party_id,event_date) DO UPDATE SET protected=true;
+  END IF;
   UPDATE calendar_recurrence_occurrences SET protected=true WHERE calendar_entry_id=OLD.id;
  END IF;
  RETURN NULL;

@@ -150,6 +150,20 @@ class RecurrencePlanningIntegrationTests {
         assertThat(store.jdbc().queryForMap("SELECT event_date,notes FROM calendar_entries WHERE id=?",id(first)))
             .containsEntry("event_date",java.sql.Date.valueOf(moved)).containsEntry("notes","Manuell verschoben");
     }
+    @Test void legacyManualOccurrenceMovedAfterRecurrenceSetupDoesNotReappear() {
+        var party=series.createParty(request("BallroomBlitz!",null));created.add(party.id());
+        LocalDate original=today.plusWeeks(1);String moved=original.plusDays(1).toString();
+        var manual=calendar.createEntry(new CalendarEntryRequest(original.toString(),venue.getId(),"event","Manuell bestätigt","10 €",party.id(),"21:00",null,Set.of()));
+        series.updateParty(party.id(),request(party.name(),rule("weekly",original.getDayOfWeek().getValue()%7,null)));
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_recurrence_occurrences WHERE party_id=? AND event_date=?",Integer.class,party.id(),original)).isZero();
+        calendar.updateEntry(manual.id(),new CalendarEntryRequest(moved,venue.getId(),"event","Manuell verschoben","10 €",party.id(),"21:00",null,Set.of()));
+        planning.extendHorizon();planning.extendHorizon();
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE party_id=? AND event_date=?",Integer.class,party.id(),original)).isZero();
+        assertThat(store.jdbc().queryForMap("SELECT event_date,event_status,notes FROM calendar_entries WHERE id=?",manual.id()))
+            .containsEntry("event_date",java.sql.Date.valueOf(moved)).containsEntry("event_status","ACTIVE").containsEntry("notes","Manuell verschoben");
+        assertThat(store.jdbc().queryForMap("SELECT calendar_entry_id,protected FROM calendar_recurrence_occurrences WHERE party_id=? AND event_date=?",party.id(),original))
+            .containsEntry("calendar_entry_id",null).containsEntry("protected",true);
+    }
     @Test void rollingHorizonUsesInjectedBerlinClockAndRetainsExistingPlans() {
         var party=create(rule("weekly",0,null));
         var initial=entries(party.id());
