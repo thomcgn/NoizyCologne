@@ -49,6 +49,24 @@ class DiscoveryExclusionIntegrationTests {
         store.jdbc().update("INSERT INTO discovery_operations(id,kind,request_hash,matcher_version,status) VALUES (?,'KEYWORD_TEST','test','test','RUNNING')",id.toString());
         return new DiscoveryResetService.Request(DiscoveryResetService.Mode.ALL,false,null,preview.token(),id);
     }
+    @Test void commaSeparatedBatchPersistsIndividualRulesAndSkipsDuplicates() {
+        var result=keywords.saveBatch(List.of("Karneval","B2B","Ausverkauft","b2b"),null,true);
+        assertThat(result.created()).isEqualTo(3);
+        assertThat(result.alreadyPresent()).isEqualTo(1);
+        var stored=keywords.list().stream()
+            .filter(row -> List.of("Karneval","B2B","Ausverkauft").contains(row.get("keyword")))
+            .toList();
+        assertThat(stored).hasSize(3);
+        assertThat(stored).allSatisfy(row -> {
+            assertThat(row.get("enabled")).isEqualTo(true);
+            assertThat((String)row.get("reason")).startsWith("Automatischer Ausschluss: ");
+        });
+        var repeated=keywords.saveBatch(List.of("Karneval","b2b","Ausverkauft"),"Ein anderer Grund",true);
+        assertThat(repeated.created()).isZero();
+        assertThat(repeated.alreadyPresent()).isEqualTo(3);
+        // The test's fixtures must not leave rules behind for another isolated test.
+        store.jdbc().update("DELETE FROM discovery_keyword_rules WHERE keyword IN ('Karneval','B2B','Ausverkauft')");
+    }
     @Test void keywordRulesOverrideOpenLegacyReviewForUnknownLocationButNeverConfirmedVenues() {
         keywords.save(rule,"Release Party","Keine Release-Veranstaltungen",false);
         var event=event("legacy-keyword","2027-02-13");
