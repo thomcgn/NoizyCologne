@@ -659,12 +659,47 @@ test('special-source edit conflict retains edited values and leaves the existing
 });
 
 
+test('geography accordion starts collapsed and retains its contents and live count when toggled',async()=>{
+  await mount([]);
+  const geography=document.querySelector('section[aria-label="Standortklärung"]');
+  const accordion=geography.querySelector('details');
+  const header=accordion.querySelector('summary');
+  assert.equal(accordion.open,false);
+  assert.equal(header.getAttribute('aria-expanded'),'false');
+  assert.match(header.textContent,/Standortklärung 0/);
+  geoRows=[{id:'unknown',title:'Ungeklärte Party',status:'UNRESOLVED',source_url:'https://portal.example/event',location:'Club',reason:'Kein Ortsbeleg'},
+    {id:'bonn',title:'Auswärtige Party',status:'OUTSIDE',source_url:'https://portal.example/bonn',location:'Gleis8',reason:'Ort Bonn'}];
+  await settle(()=>poll());
+  assert.equal(accordion.open,false);
+  assert.match(header.textContent,/Standortklärung 1/);
+  header.focus();
+  assert.ok(document.activeElement===header);
+  await settle(()=>header.click());
+  assert.equal(accordion.open,true);
+  assert.equal(header.getAttribute('aria-expanded'),'true');
+  const clarify=button('Standort klären',geography);
+  assert.match(geography.textContent,/Ungeklärte Party/);
+  assert.match(geography.textContent,/Außerhalb Kölns \(1\)/);
+  assert.ok(button('Gespeicherte Standorte neu bewerten',geography));
+  await settle(()=>header.click());
+  assert.equal(accordion.open,false);
+  assert.equal(header.getAttribute('aria-expanded'),'false');
+  await settle(()=>header.click());
+  assert.equal(accordion.open,true);
+  assert.equal(header.getAttribute('aria-expanded'),'true');
+  assert.ok(button('Standort klären',geography)===clarify);
+});
+
 test('unknown geography stays separate from party review until an explicit address confirmation',async()=>{
   await mount(candidate({special_source:true,geo_status:'UNRESOLVED',venue_id:null}));
   geoRows=[{id:'geo-one',title:'Ungeklärte Indie Party',source_url:'https://portal.example/event',status:'UNRESOLVED',location:'Blue Shell',reason:'Kein Ortsbeleg',place:{city:'',street:''}}];
   await settle(()=>poll());
   assert.equal(document.querySelector('section[aria-label="Prüfbedarf"] [data-record-id]'),null);
   assert.match(document.querySelector('section[aria-label="Standortklärung"]').textContent,/Ungeklärte Indie Party/);
+  const geography=document.querySelector('section[aria-label="Standortklärung"]');
+  const header=geography.querySelector('summary');
+  assert.match(header.textContent,/Standortklärung 1/);
+  await settle(()=>header.click());
   await settle(()=>button('Standort klären').click());
   assert.equal(button('Kölner Standort bestätigen',dialog()).disabled,true);
   change(control('Location'),'blue-shell');change(control('Straße und Hausnummer'),'Luxemburger Straße 32');
@@ -675,6 +710,9 @@ test('unknown geography stays separate from party review until an explicit addre
   const saved=calls.find(call=>call.url.endsWith('/geography/geo-one/confirm'));
   assert.deepEqual(JSON.parse(saved.body),{venueId:'blue-shell',venueName:null,city:'Köln',street:'Luxemburger Straße 32',proofUrl:'https://portal.example/event',confirmed:true});
   assert.equal(document.querySelector('[role="dialog"]'),null);
+  assert.match(header.textContent,/Standortklärung 0/);
+  assert.equal(header.getAttribute('aria-expanded'),'true');
+  assert.match(geography.textContent,/Keine ungeklärten Standortfunde/);
   assert.equal(calls.some(call=>call.url.includes('/candidates/')&&call.method==='POST'),false);
 });
 
@@ -683,6 +721,8 @@ test('outside geography is excluded from normal review and never offers a Cologn
   geoRows=[{id:'bonn',title:'Köln Party',source_url:'https://portal.example/koeln',status:'OUTSIDE',location:'Gleis8',reason:'Ort Bonn',place:{city:'Bonn',street:'Straße 1'}}];
   await settle(()=>poll());
   const geography=document.querySelector('[aria-label="Standortklärung"]');
+  await settle(()=>geography.querySelector('summary').click());
+  assert.match(geography.querySelector('summary').textContent,/Standortklärung 0/);
   assert.match(geography.textContent,/Außerhalb Kölns \(1\)/);assert.match(geography.textContent,/Gleis8 · Bonn/);
   assert.equal([...geography.querySelectorAll('button')].some(item=>item.textContent==='Standort klären'),false);
   assert.equal(document.querySelectorAll('[data-record-id]').length,0);
@@ -690,7 +730,7 @@ test('outside geography is excluded from normal review and never offers a Cologn
 
 test('geography confirmation failures preserve the new location and proof inputs',async()=>{
   await mount([]);geoRows=[{id:'unknown',title:'Party',source_url:'https://portal.example/event',status:'UNRESOLVED',location:'Neuer Club',reason:'Unbekannt'}];
-  await settle(()=>poll());await settle(()=>button('Standort klären').click());
+  await settle(()=>poll());await settle(()=>document.querySelector('section[aria-label="Standortklärung"] summary').click());await settle(()=>button('Standort klären').click());
   change(control('Location'),'new');change(control('Name der neuen Location'),'Neuer Club Köln');change(control('Straße und Hausnummer'),'Straße 12');
   await settle(()=>dialog().querySelector('input[type="checkbox"]').click());
   globalThis.fetch=async()=>new Response(JSON.stringify({message:'Ortsbelege widersprechen sich'}),{status:409});
