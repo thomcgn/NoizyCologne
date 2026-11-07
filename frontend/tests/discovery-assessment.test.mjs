@@ -9,6 +9,8 @@ const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http:
 for (const name of ['window', 'document', 'HTMLElement', 'HTMLDetailsElement', 'Event', 'MouseEvent', 'KeyboardEvent']) {
   globalThis[name] = dom.window[name];
 }
+// jsdom has no layout/scroll implementation; configuration links still exercise their real click handler.
+HTMLElement.prototype.scrollIntoView = () => {};
 globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 window.confirm = () => true;

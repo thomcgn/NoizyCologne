@@ -175,3 +175,13 @@ dieser Synchronisierung erneut erfolgreich ausgeführt; Testcontainer entfernt,
 keine Speichergrenze erreicht. Die unveränderten Unit-Ergebnisse bleiben gültig;
 der reguläre Hook prüft den zusammengeführten Stand vor dem Synchronisierungscommit.
 Für die Erweiterung ist ein Folge-PR erforderlich, da #22 bereits gemergt ist.
+
+QUICK des synchronisierten Stands `62c8931` bestand mit 143 Backendtests und
+einem optionalen privaten Replay-Skip sowie 110 Frontendtests. Der komplette
+Frontendlauf zeigte zusätzlich einen jsdom-Laufzeitfehler im aus Main übernommenen
+Konfigurationslink-Test: `scrollIntoView` ist dort nicht implementiert. Die bereits
+betroffene Testdatei stellt die fehlende DOM-Methode nun ausdrücklich als No-op
+bereit; keine Konsolenunterdrückung und keine Änderung am Produktionscode. Die
+beiden betroffenen Schlagwort-/Konfigurationsdialogtests bestehen damit ohne
+Laufzeitfehler. Ein weiterer regulärer QUICK-Hook prüft den finalen Frontendstand;
+die unveränderten Backend- und isolierten Datenbankergebnisse bleiben gültig.
