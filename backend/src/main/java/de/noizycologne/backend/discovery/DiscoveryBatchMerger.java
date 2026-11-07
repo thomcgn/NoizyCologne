@@ -34,7 +34,9 @@ final class DiscoveryBatchMerger {
             var starts=ordered.stream().flatMap(i -> i.event().starts().stream()).distinct().toList();
             var dates=starts.stream().map(EventNormalizer::date).filter(Objects::nonNull).distinct().toList();
             var times=starts.stream().map(EventNormalizer::time).filter(Objects::nonNull).distinct().toList();
-            boolean conflict=dates.size()>1 || times.size()>1 || ordered.stream().anyMatch(i -> EventVerification.assess(i.event(),venue).conflicting());
+            boolean conflict=dates.size()>1 || times.size()>1
+                || ordered.stream().map(i -> EventLifecycle.signal(i.event())).distinct().count()>1
+                || ordered.stream().anyMatch(i -> EventVerification.assess(i.event(),venue).conflicting());
             if (dates.size()==1 && times.size()<=1) starts=List.of(dates.getFirst()+(times.isEmpty() ? "" : "T"+times.getFirst()));
             StringBuilder states=new StringBuilder();StringBuilder evidence=new StringBuilder();
             for (var origin:ordered) {
@@ -56,9 +58,10 @@ final class DiscoveryBatchMerger {
     private static boolean separateEditions(Input left,Input right,Set<String> repeating) {
         var first=EventChangeMonitor.date(left.event());var second=EventChangeMonitor.date(right.event());
         if(first==null || second==null || first.equals(second)) return false;
-        if(left.sourceId().equals(right.sourceId())) return true;
-        // A stable shared external identity still reports source contradictions as before.
+        // Repeated observations of one external occurrence must be checked together,
+        // including disagreements between pages of the same source.
         if(!left.event().identity().isBlank() && left.event().identity().equals(right.event().identity())) return false;
+        if(left.sourceId().equals(right.sourceId())) return true;
         return repeating.contains(seriesKey(left)) || repeating.contains(seriesKey(right));
     }
     private static String seriesKey(Input input) { return input.sourceId()+"|"+EventNormalizer.text(input.event().title()); }

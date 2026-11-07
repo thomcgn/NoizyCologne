@@ -236,6 +236,17 @@ class DiscoveryIntegrationTests {
         assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,venue.getId())).isZero();
         assertThat(store.jdbc().queryForObject("SELECT status FROM discovery_candidates WHERE venue_id=?",String.class,venue.getId())).isEqualTo("NEEDS_INQUIRY");
     }
+    @Test void contradictoryTimesInOneBatchNeverCreateACalendarEntry() throws Exception {
+        when(discovery.discover(eq(root),any())).thenReturn(List.of(new VenueSourceDiscoveryService.Found(URI.create(root),new EventExtractor.Extraction(
+            List.of(event("same-event",party.getName(),"2027-01-09T22:00",""),
+                event("same-event",party.getName(),"2027-01-09T23:00","")),"EVENTS_FOUND"))));
+        scheduler.scan();
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,venue.getId())).isZero();
+        var rows=store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE venue_id=?",venue.getId());
+        assertThat(rows).hasSize(1);
+        assertThat(requireNonNull(rows.getFirst())).containsEntry("status","NEEDS_INQUIRY").containsEntry("start_time",null)
+            .containsEntry("calendar_entry_id",null);
+    }
     @Test void apiSerializesDatesAndValidatesSources() throws Exception {
         found(event("api",party.getName(),"2027-01-09","")); scheduler.scan();
         var mvc=org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup(requireNonNull(context)).build();

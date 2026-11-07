@@ -112,3 +112,41 @@ Alle intensiven Schritte nacheinander mit Heap-/RSS-Grenzen und laufender RAM-
 Überwachung, bisher mindestens 6.845 MiB verfügbar, kein Speicherabbruch.
 Kein Live-Suchlauf, Produktionsdatenzugriff, Browser, lokaler STANDARD/FULL- oder
 Produktionsbuild. FULL bleibt vor Integration der GitHub-CI vorbehalten.
+
+### CI-Konfliktregressionen korrigiert (07.11.2026, PR #18)
+
+Bestandsaufnahme: sauberer Branch `fix/discovery-yearless-dates`, letzter Commit
+`8ae6641`. Zuerst ausschließlich `SpecialSourcesIntegrationTests` und
+`DiscoveryIntegrationTests` gegen eine neue isolierte PostgreSQL-Testdatenbank
+ausgeführt: 54 Tests, genau die beiden gemeldeten Konfliktfälle fehlgeschlagen.
+
+Ursache: `DiscoveryBatchMerger.separateEditions` trennte unterschiedliche Tage
+derselben Quelle vor dem Vergleich der stabilen externen Veranstaltungs-ID.
+Diese ID hat jetzt Vorrang: widersprüchliche Beobachtungen derselben Veranstaltung
+bleiben gemeinsam prüfpflichtig, mit beiden Datumsbelegen und `SOURCE_CONFLICT`.
+Widersprüchliche Lifecycle-Signale erhalten ebenfalls diesen Konfliktmarker.
+Getrennte Ausgaben einer Reihe und die deutsche Jahresauflösung bleiben erhalten.
+`SpecialSourceService` und `DiscoveryScheduler` sammeln bereits vor der
+Kandidatenverarbeitung den gesamten begrenzten Batch. `EventVerification` und
+die bestehende Auswertung blockieren `CONFLICTING_DATA`; die Schutzpfade für
+manuelle Entscheidungen und vorhandene Kalenderdaten bleiben unverändert.
+
+Nach der Korrektur dieselben beiden Integrationstestklassen erneut ausgeführt:
+55 Tests bestanden, einschließlich beider unveränderter CI-Regressionen und
+eines zusätzlichen Uhrzeitkonflikts ohne Kalenderimport. Danach 58 unmittelbar
+betroffene Unit-Regressionen bestanden: Batch-Merger, Assessment, Lifecycle,
+deutsche Jahresauflösung/Programme, Extraktion und statischer Fetcher.
+Neue Merger-Fälle prüfen widersprüchliche Tage/Uhrzeiten derselben Quellen-ID
+und Absage/Aktiv-Widersprüche jeweils in beiden Eingabereihenfolgen.
+Die Integrationstests prüfen auch die bestehenden manuellen Entscheidungen,
+Kalendereinträge und die Aktualisierung jahresloser Altvorschläge.
+
+Prüfbefehle: Maven `test-compile surefire:test` mit
+`-Dtest=SpecialSourcesIntegrationTests,DiscoveryIntegrationTests`, danach
+`surefire:test` mit `-Dtest=DiscoveryBatchMergerTests,DiscoveryAssessmentTests,EventLifecycleTests,GermanYearlessDateTests,GermanProgramExtractionTests,StaticPartyFetchTests,DiscoveryTests`.
+Einzelprotokolle unter `.quality/calendar-visibility/conflicts-*.log`.
+Beide isolierten Testcontainer entfernt; keine Entwicklungs-/Produktionsdatenbank
+verwendet. Intensive Schritte nacheinander mit Speicherprüfung und laufender
+Überwachung, bisher mindestens 7.319 MiB verfügbar, kein Speicherabbruch.
+Abschlussprüfung über den regulären QUICK-Commit-Hook; FULL bleibt in GitHub
+Actions. Kein zusätzlicher PR, Browser, lokaler Build, Merge oder Deployment.
