@@ -105,7 +105,7 @@ async function mount(item, failInitial = false) {
       return new Response(JSON.stringify({created,alreadyPresent,skipped:[]}));
     }
     if(url.startsWith('/api/v1/discovery/keyword-rules') && ['POST','PUT'].includes(options.method)){
-      const rule={id:'keyword-test',...JSON.parse(options.body)};keywordRows=options.method==='PUT' ? keywordRows.map(item=>item.id==='keyword-test-0' ? {...item,...rule,id:item.id} : item) : [...keywordRows,rule];
+      const rule={id:'keyword-test',...JSON.parse(options.body)};keywordRows=options.method==='PUT' ? keywordRows.map(item=>item.id===url.split('/').pop() ? {...item,...rule,id:item.id} : item) : [...keywordRows,rule];
       return new Response(JSON.stringify({id:rule.id}));
     }
     if (url === '/api/v1/genres') return new Response(JSON.stringify(genreRows));
@@ -858,7 +858,7 @@ test('comma-separated keyword rules are created together and individually editab
  const field=label=>[...section.querySelectorAll('label')].find(item=>item.textContent.trim().startsWith(label)).querySelector('input, textarea');
  await settle(()=>change(field('Schlagwörter (durch Komma getrennt)'),'Karneval, B2B, Ausverkauft, Jecke, b2b'));
  await settle(()=>section.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
- assert.deepEqual(keywordRows.map(row=>row.keyword),['Karneval','Jecke','B2B','Ausverkauft'].sort((a,b)=>a.localeCompare(b))); 
+ assert.deepEqual(keywordRows.map(row=>row.keyword),['Karneval','B2B','Ausverkauft','Jecke']); 
  assert.ok(keywordRows.every(row=>row.enabled && row.reason.startsWith('Automatischer Ausschluss: ')));
  assert.ok(calls.some(call=>call.method==='POST' && call.url.endsWith('/keyword-rules/batch')));
  await settle(()=>button('Bearbeiten: B2B',section).click());
