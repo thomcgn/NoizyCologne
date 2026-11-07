@@ -27,6 +27,7 @@ let sourceRows=[];
 let geoRows=[];
 let operationRows=[];
 let genreRows=[];
+let keywordRows=[];
 let reloadedEntries;
 let reloadedParties;
 let reloadedDrafts;
@@ -89,6 +90,10 @@ async function mount(item, failInitial = false) {
   candidates = Array.isArray(item) ? item : [item]; sourceRows=[]; geoRows=[]; operationRows=[]; genreRows=[{id:"emo",displayName:"Emo",active:true},{id:"indie",displayName:"Indie",active:true},{id:"metal",displayName:"Metalcore",active:true},{id:"retired",displayName:"Pop",active:false}]; calls.length = 0; reloadedEntries = 0; reloadedParties = 0; reloadedDrafts = 0;
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url, ...options });
+    if(url==='/api/v1/discovery/keyword-rules' && (!options.method || options.method==='GET'))return new Response(JSON.stringify(keywordRows));
+    if(url.startsWith('/api/v1/discovery/keyword-rules') && ['POST','PUT'].includes(options.method)){
+      const rule={id:'keyword-test',...JSON.parse(options.body)};keywordRows=[rule];return new Response(JSON.stringify({id:rule.id}));
+    }
     if (url === '/api/v1/genres') return new Response(JSON.stringify(genreRows));
     if (url.endsWith('/geography') && !failInitial) return new Response(JSON.stringify({items:geoRows}));
     if (failInitial) return new Response(JSON.stringify({message: 'Quelle nicht erreichbar'}), {status: 503});
@@ -520,36 +525,50 @@ test('the review shows the standards of the locally selected party instead of a 
   } finally {catalogue.parties=previous;}
 });
 
-test('instant rejection saves only a durable decision without opening or overwriting the editor', async () => {
+test('rejection marking is local, deduplicated, survives polling and can be undone', async () => {
   await mount(candidate({inquiry_status:'SENT',dm_text:'Geprüfter Text'}));
+  const posts=()=>calls.filter(call=>call.method==='POST').length;
+  const before=posts();const mark=button('Ablehnung vormerken');await settle(()=>{mark.click();mark.click();});
+  assert.equal(posts(),before);assert.ok(!document.querySelector('[role="dialog"]'));assert.equal(document.querySelectorAll('[data-record-id]').length,0);
+  assert.match(document.body.textContent,/1 vorgemerkt/);assert.equal(candidates[0].status,'NEEDS_REVIEW');assert.equal(candidates[0].dm_text,'Geprüfter Text');
+  await settle(()=>poll());assert.equal(document.querySelectorAll('[data-record-id]').length,0);
+  await settle(()=>button(`Vormerkung zurücknehmen: ${candidates[0].title}`).click());assert.ok(document.querySelector('[data-record-id]'));assert.match(document.body.textContent,/0 vorgemerkt/);
+});
+
+test('failed batch keeps marks and error in confirmation and cancelling sends no request', async () => {
+  await mount(candidate());await settle(()=>button('Ablehnung vormerken').click());
+  const before=calls.filter(call=>call.method==='POST').length;
+  await settle(()=>button('Ablehnen').click());await settle(()=>button('Abbrechen',dialog()).click());assert.equal(calls.filter(call=>call.method==='POST').length,before);
+  await settle(()=>button('Ablehnen').click());
+  const fallback=globalThis.fetch;globalThis.fetch=async(url,options={})=>url.endsWith('/reject-batch') ? new Response(JSON.stringify({message:'Bereits übernommen'}),{status:409}) : fallback(url,options);
+  await settle(()=>button('1 Veranstaltungen ablehnen',dialog()).click());assert.match(dialog().textContent,/Bereits übernommen/);assert.match(document.body.textContent,/1 vorgemerkt/);
+  assert.equal(candidates[0].status,'NEEDS_REVIEW');await settle(()=>button('Abbrechen',dialog()).click());
+  await settle(()=>button(`Vormerkung zurücknehmen: ${candidates[0].title}`).click());assert.ok(document.querySelector('[data-record-id]'));
+});
+
+test('one hundred marks span both lists and one batch handles partial results without catalogue reloads',async()=>{
+  await mount(candidate());
+  candidates=Array.from({length:100},(_,index)=>candidate({id:`mark-${index}`,title:`Markierte Party ${index}`,updated_at:'2026-11-07T12:00:00Z',...(index%2 ? {assessment:assessment({recognition:{status:'NONE',parties:[]}}),genreCoverage:{eligible:true,percent:75,names:['Emo']}} : {})}));
+  await settle(()=>poll());
+  const before=calls.length;
+  for(let index=0;index<100;index++)await settle(()=>button('Ablehnung vormerken').click());
+  assert.equal(calls.length,before);assert.match(document.body.textContent,/100 vorgemerkt/);assert.equal(document.querySelectorAll('[data-record-id]').length,0);
+  await settle(()=>poll());assert.equal(document.querySelectorAll('[data-record-id]').length,0);
   const fallback=globalThis.fetch;
-  globalThis.fetch=async (url,options={})=>{
-    if(url.endsWith('/reject')) {
-      calls.push({url,...options});
-      candidates=candidates.map(item=>({...item,status:'REJECTED',decision_origin:'MANUAL'}));
-      return new Response(null,{status:204});
+  globalThis.fetch=async(url,options={})=>{
+    if(url.endsWith('/reject-batch')){
+      calls.push({url,...options});const ids=JSON.parse(options.body).candidateIds;
+      assert.equal(new Set(ids).size,100);
+      const rejectedIds=ids.slice(0,99);candidates=candidates.map(item=>rejectedIds.includes(item.id)?{...item,status:'REJECTED',decision_origin:'MANUAL'}:item);
+      return new Response(JSON.stringify({requested:100,rejected:99,alreadyRejected:0,rejectedIds,alreadyRejectedIds:[],conflicts:[{id:ids[99],reason:'Inzwischen geändert'}]}));
     }
     return fallback(url,options);
   };
-  const reject=button('Sofort ablehnen');
-  await settle(()=>{reject.click();reject.click();});
-  assert.equal(calls.filter(call=>call.url.endsWith('/reject')).length,1);
-  assert.equal(document.querySelector('[role="dialog"]'),null);
-  assert.equal(document.querySelectorAll('[data-record-id]').length,0);
-  assert.equal(calls.some(call=>call.method==='PUT'||call.url.endsWith('/confirm')),false);
-  assert.equal(candidates[0].dm_text,'Geprüfter Text');
-  assert.match(document.body.textContent,/manuelle Entscheidung bleibt/);
-  await settle(()=>poll());
-  assert.equal(document.querySelectorAll('[data-record-id]').length,0);
-});
-
-test('failed instant rejection keeps the proposal visible with an actionable error', async () => {
-  await mount(candidate());
-  globalThis.fetch=async()=>new Response(JSON.stringify({message:'Bereits übernommen'}),{status:409});
-  await settle(()=>button('Sofort ablehnen').click());
-  assert.ok(document.querySelector('[data-record-id]'));
-  assert.match(document.querySelector('[role="alert"]').textContent,/Bereits übernommen/);
-  assert.equal(button('Sofort ablehnen').disabled,false);
+  await settle(()=>button('Ablehnen').click());assert.match(dialog().textContent,/100 Veranstaltungen/);
+  await settle(()=>button('100 Veranstaltungen ablehnen',dialog()).click());
+  assert.equal(calls.filter(call=>call.url.endsWith('/reject-batch')).length,1);assert.equal(calls.some(call=>call.url.endsWith('/reject')),false);
+  assert.match(document.body.textContent,/99 Veranstaltungen abgelehnt/);assert.match(document.body.textContent,/1 Konflikte/);assert.match(document.body.textContent,/1 vorgemerkt/);
+  assert.equal(reloadedEntries+reloadedParties+reloadedDrafts,0);
 });
 
 test('special-source proposals require an explicit venue without a default and confirm it atomically', async () => {
@@ -777,4 +796,23 @@ test('genre-catalog errors and failed creation preserve the inputs and selected 
   assert.ok(dialog().querySelector('[aria-label="Genre Emo entfernen"]'));
   act(()=>dialog().querySelector('[aria-label="Genre Emo entfernen"]').click());
   assert.equal(emo.checked,false);
+});
+
+test('keyword rules start empty, persist a reason and can be edited and deactivated',async()=>{
+ await mount(candidate());await settle(()=>button('Quellen & Konfiguration').click());
+ const section=document.querySelector('[aria-label="Schlagwort-Ausschlüsse"]');assert.ok(section);assert.equal(keywordRows.length,0);
+ const field=label=>[...section.querySelectorAll('label')].find(item=>item.textContent.trim().startsWith(label)).querySelector('input');
+ change(field('Schlagwort / Wortgruppe'),'B2B');change(field('Ausschlussgrund'),'Keine B2B-Veranstaltungen');
+ await settle(()=>section.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ assert.equal(keywordRows.length,1);assert.equal(keywordRows[0].keyword,'B2B');assert.equal(keywordRows[0].enabled,true);
+ await settle(()=>button('Bearbeiten: B2B',section).click());assert.equal(field('Ausschlussgrund').value,'Keine B2B-Veranstaltungen');
+ await settle(()=>field('Aktiv').click());
+ await settle(()=>section.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ assert.equal(keywordRows[0].enabled,false);assert.ok(calls.some(call=>call.method==='PUT' && call.url.endsWith('/keyword-rules/keyword-test')));
+});
+
+test('keyword warnings on a confirmed venue stay visible in review rather than new-series promotion',async()=>{
+ await mount(candidate({keywordWarning:'Schlagwortfilter „B2B“: Ausdrücklich prüfen',assessment:assessment({recognition:{status:'NONE',parties:[]}}),genreCoverage:{eligible:true,percent:100,names:['Emo']}}));
+ assert.match(document.querySelector('[aria-label="Prüfbedarf"]').textContent,/Schlagwortfilter.*B2B.*Ausdrücklich prüfen/);
+ assert.equal(document.querySelector('[aria-label="Neue Partyreihen"] [data-record-id]'),null);
 });

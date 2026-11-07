@@ -162,3 +162,16 @@ Gezielte Prüfungen des Erweiterungsstands:
 Ein erster QUICK-Lauf stoppte vor dem Commit wegen einer Nulltyp-Warnung im
 neuen Integrationstest. Der Katalogwert wird jetzt ausdrücklich auf NULL geprüft;
 die fachlichen Datenbankergebnisse bleiben dadurch unverändert gültig.
+
+QUICK für `7819e7b` erfolgreich: javac/ECJ ohne Projektdiagnosen, 131 Backendtests
+bestanden und ein optionaler privater Replay mangels Snapshot übersprungen;
+TypeScript/ESLint ohne Diagnosen, 107 Frontendtests bestanden. Während der Arbeit
+wurden PR #21 und #22 extern gemergt. Der aktuelle Main-Stand wurde deshalb in
+den Feature-Branch übernommen; Ausschlusshinweis und Namensvorschlag sowie beide
+Ergänzungen des Kandidatentyps bleiben gemeinsam erhalten. Der Vergleich mit
+Main enthält weiterhin ausschließlich die zehn Dateien dieser Erweiterung.
+Die drei isolierten Datenbanktests und elf gezielten Frontendtests wurden nach
+dieser Synchronisierung erneut erfolgreich ausgeführt; Testcontainer entfernt,
+keine Speichergrenze erreicht. Die unveränderten Unit-Ergebnisse bleiben gültig;
+der reguläre Hook prüft den zusammengeführten Stand vor dem Synchronisierungscommit.
+Für die Erweiterung ist ein Folge-PR erforderlich, da #22 bereits gemergt ist.

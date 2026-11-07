@@ -180,3 +180,104 @@ aus; kein Hook wird umgangen. Für den Hooklauf werden die bereits geprüften
 lokalen Maven-Abhängigkeiten offline verwendet und die mit dem bestehenden
 Mockito-Agenten inkompatible CDS-Optimierung nur im Prüfprozess deaktiviert.
 Compilerregeln, Agent und Testauswahl bleiben unverändert.
+
+## Persistente Ausschlüsse und Sammelablehnung (07.11.2026)
+
+Auftrag auf `feat/discovery-exclusions-batch`, vom sauberen aktuellen `origin/main`
+aus begonnen, ohne Worktree. Vorhandene Advisory Locks, Event-Identitäten,
+Quellen-/Geo-Zuordnungen, Audit- und Resetpfade werden weiterverwendet.
+
+V22 legt eine leere Schlagwortverwaltung an und ergänzt nullable Filterbelege,
+Regelkonfiguration bei individueller Wiederfreigabe und letzten Quellenfund.
+Keine Beispielregeln, Löschungen oder Änderung vorhandener Kalenderdaten.
+Regel-ID, Wortgruppe, Grund und Beleg werden zusätzlich als unveränderlicher
+Entscheidungs-Snapshot im vorhandenen Audit gespeichert. Unbekannte Locations
+werden automatisch archiviert; bestätigte Portfolio-Location-IDs bleiben bei
+Regeltreffern zur manuellen Prüfung, mit Importsperre. Manuelle Entscheidungen
+und importierte Kalenderdaten bleiben geschützt. Eindeutige gleiche Funde zweier
+Quellen nutzen dieselbe Kandidaten-ID; eine andere Ausgabe an einem anderen Tag
+bleibt selbst bei wiederverwendeter Quellen-ID getrennt. Identische Scans erzeugen
+keine neuen Ausschlussentscheidungen. Quellenzuordnung und letzter Fund bleiben
+aktuell. Individuelle Wiederfreigaben sind für dieselbe semantische
+Regelkonfiguration geschützt, auch nach unverändertem Speichern einer Regel.
+
+Reset-Vorschau und Anwendung berücksichtigen die aktuelle Regelkonfiguration und
+zählen Ausschlüsse, bekannte Locations, geschützte Ablehnungen und mögliche
+Wiederaufnahme nach Deaktivierung. Konfigurationsänderungen entwerten alte Tokens.
+Batch-Ablehnung arbeitet unter einer Transaktion mit dem bestehenden Advisory
+Lock, maximal 500 unterschiedlichen IDs, Wiederholungs-/Teilergebnissen und
+Auditierung. Die Oberfläche sendet zusätzlich die beim Vormerken bekannten
+Änderungsstände; inzwischen bearbeitete oder importierte Kandidaten werden
+übersprungen. Erfolgreiche IDs und Konflikte werden getrennt zurückgegeben.
+
+Die gemeinsame Set-basierte Vormerkung im Discovery-Container blendet Kandidaten
+sofort aus und aktualisiert die sichtbaren Kennzahlen. Kein Request oder
+Katalog-/Kalenderreload beim Vormerken. Polling stellt vormerkte IDs nicht wieder
+her. Rücknahme ist pro Titel möglich; die Vormerkung gilt für die geöffnete Seite
+und ist vor der Sammelbestätigung ausdrücklich noch keine Backendentscheidung.
+Ein Bestätigungsmodal sendet genau einen Batch-Request, entfernt nur erfolgreiche
+oder bereits abgelehnte IDs und hält Konflikte zur weiteren Klärung vor.
+Verlauf trennt Schlagwortfilter, manuelle Ablehnungen, Importe, Dubletten und
+sonstige ignorierte Veranstaltungen und bietet individuelle Wiederfreigabe.
+
+Gezielte Entwicklungstests: Die sieben neuen Ausschluss-/Batch-Integrationstests
+und 13 bestehenden Reset-Integrationstests bestehen auf frischen isolierten
+PostgreSQL-Testdatenbanken. Ein anfänglich unvollständiger Kalender-Testdatensatz
+wurde durch einen gültigen Veranstaltungseintrag ersetzt. Der Backend-Compile
+bestand. Frontend: 40 bestehende/angepasste Discovery-Fälle erfolgreich, ein
+Label-Selektor im neuen Regeltest anschließend korrigiert; beide ergänzten
+Regel-/Warnungsfälle danach gezielt bestanden. Ein erwarteter Fixture-Endpunkt
+für die Regelverwaltung wurde ergänzt. Weitere unmittelbar betroffene Scan- und
+Sonderquellenregressionen bestanden ebenfalls: 63 Tests aus Ausschlüssen,
+Discovery und Sonderquellen. Anschließend den echten HTTP-Batch mit 100 IDs und
+den von der API gelieferten Änderungsständen gezielt erfolgreich geprüft. Protokolle unter `.quality/calendar-visibility/exclusions-*.log`.
+Alle intensiven Schritte seriell mit RAM-Prüfung und laufendem Wächter, bisher
+kein Speicherabbruch. QUICK läuft über den regulären Commit-Hook; kein manueller
+QUICK unmittelbar davor. FULL bleibt GitHub Actions für den akzeptierten Commit
+vorbehalten. Keine lokalen Produktionsbuilds, Browser, Produktionsdatenänderungen,
+eigenen Merges oder Deployments. Das vorhandene visuelle Sonderquellen-Skript
+wurde an die neue Bestätigungs-/Batchaktion angepasst, aber nicht gestartet.
+
+Abschlussphase: finaler Diff einschließlich additiver V22 und Audit-Snapshots
+geprüft, `git diff --check` erfolgreich. Der reguläre QUICK-Hook führt die
+verpflichtende strikte Haupt-/Testkompilierung, frische ECJ-Analyse,
+TypeScript/ESLint und seine ausgewählten Regressionen aus. Die gezielten
+Datenbanktests ergänzen QUICK und ersetzen den CI-FULL-Nachweis nicht. Nach
+Korrekturen nur betroffene Fälle erneut geprüft; alle isolierten Testcontainer
+sind entfernt. Bis zum Commit mindestens 7.157 MiB verfügbar, kein Speicherabbruch.
+
+Der erste QUICK-Hook blockierte fünf Nulltyp-Diagnosen ausschließlich im neuen
+Integrationstest. Explizite Nullprüfungen an Bibliotheksrückgaben und Testdaten
+korrigieren diese Übergänge; keine unterdrückten Diagnosen oder geänderten
+fachlichen Testwerte. Die Hauptquellenanalyse war bereits ohne Befund.
+
+Bei der Schlussprüfung zusätzlich Quellenbeobachtungen mit unterschiedlichem
+Beschreibungstext abgesichert: Die unzugeordnete Zeile behält ihre ursprüngliche
+Quellen-/Identitätskombination und dieselbe Kandidaten-ID; weitere Quellen werden
+über vorhandene Geo-/Beobachtungszuordnungen geführt. Gleiche Filterentscheidung
+bei wechselnden technischen Belegen erzeugt keine neue Ausschlussentscheidung.
+Der laufende QUICK-Hook wurde für diese gezielte Ergänzung regulär abgebrochen,
+bevor ein Commit entstand. Nur die betroffenen Ausschlussfälle werden zusätzlich
+gezielt geprüft, anschließend läuft der verpflichtende QUICK-Hook erneut.
+
+Die sieben Ausschlussfälle bestanden danach erneut, einschließlich wechselnder
+Beschreibungen beider Quellen ohne zusätzliche Ausschlussentscheidung. Zwei
+gezielte Folgeprüfungen sichern die Ausgabeabgrenzung: Nur ein aktiver,
+widerspruchsfrei belegter neuer Termin wird von einer früher ausgeschlossenen
+Ausgabe getrennt. Eine ausdrücklich gemeldete Verschiebung darf die frühere
+manuelle Ablehnung nicht umgehen. Beide Prüfungen bestanden; alle verwendeten
+isolierten Testcontainer wurden entfernt. Anschließend erneut regulärer QUICK-
+Commit-Hook für den finalen Stand, keine Umgehung der Prüfungen.
+
+QUICK für den ersten Abschlussstand bestanden: javac und frische ECJ-Analyse
+ohne Diagnose, TypeScript/ESLint ohne Befund, 143 ausgewählte Backendfälle
+(142 bestanden, nur optionaler privater Snapshot-Replay übersprungen) und alle
+93 Frontendtests bestanden. Vor Veröffentlichung die Vorschauzählung bei der
+bestehenden ausdrücklich bestätigten Wiederöffnung manueller Ablehnungen
+präzisiert: Nur tatsächlich geschützte Ablehnungen werden als geschützt gezählt.
+Der gezielte Integrationsfall prüft beide Auswahlvarianten erfolgreich. Derselbe
+Fall sichert außerdem ab, dass unterschiedliche Groß-/Kleinschreibung des Titels
+bei eindeutig identischer Veranstaltung zweier Quellen keine neue Zeile erzeugt.
+Die datumsgestützte Suche nutzt den neuen Index; die eigentliche Zusammenführung
+bleibt an normalisierten Titel und eindeutige Identitäts-/Locationbelege gebunden.
+Nach diesen kleinen Präzisierungen erneut regulärer QUICK-Hook vor dem Push.

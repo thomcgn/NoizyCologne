@@ -12,6 +12,7 @@ import java.time.LocalDate;
 @RestController
 @RequestMapping("/api/v1/discovery")
 public class DiscoveryController {
+    private final DiscoveryKeywordService keywords;
     private final DiscoveryStore store;
     private final DiscoveryScheduler scheduler;
     private final VenueSourceDiscoveryService discovery;
@@ -21,8 +22,8 @@ public class DiscoveryController {
     private final DiscoveryEvaluationService evaluator;
     private final DiscoveryOnboardingService onboarding;
     private final DiscoveryPortfolioService portfolio;
-    public DiscoveryController(DiscoveryStore store,DiscoveryScheduler scheduler,VenueSourceDiscoveryService discovery,EventImportService importer,DiscoveryResetService resets,EventChangeService changes,DiscoveryEvaluationService evaluator,DiscoveryOnboardingService onboarding,DiscoveryPortfolioService portfolio) {
-        this.store=store; this.scheduler=scheduler; this.discovery=discovery; this.importer=importer; this.resets=resets; this.changes=changes;this.evaluator=evaluator;this.onboarding=onboarding;this.portfolio=portfolio;
+    public DiscoveryController(DiscoveryKeywordService keywords,DiscoveryStore store,DiscoveryScheduler scheduler,VenueSourceDiscoveryService discovery,EventImportService importer,DiscoveryResetService resets,EventChangeService changes,DiscoveryEvaluationService evaluator,DiscoveryOnboardingService onboarding,DiscoveryPortfolioService portfolio) {
+        this.keywords=keywords;this.store=store; this.scheduler=scheduler; this.discovery=discovery; this.importer=importer; this.resets=resets; this.changes=changes;this.evaluator=evaluator;this.onboarding=onboarding;this.portfolio=portfolio;
     }
     @GetMapping("/changes") public List<Map<String,Object>> changes() { return changes.list(); }
     @GetMapping("/changes/{id}/replacements") public List<Map<String,Object>> replacements(@PathVariable String id) { return changes.replacements(id); }
@@ -107,6 +108,14 @@ public class DiscoveryController {
     @PostMapping("/candidates/{id}/confirm") public Map<String,String> confirm(@PathVariable String id,@Valid @RequestBody Confirmation r) {
         return Map.of("calendarEntryId",importer.confirm(id,r.partyId(),r.date(),r.inquiryStatus(),Objects.toString(r.dmText(),""),r.seriesAlias(),r.venueId()));
     }
+    public record KeywordRule(@NotBlank @Size(max=200) String keyword,@NotBlank @Size(max=1000) String reason,boolean enabled) { }
+    @GetMapping("/keyword-rules") public List<Map<String,Object>> keywordRules() {return keywords.list();}
+    @PostMapping("/keyword-rules") public Map<String,String> addKeyword(@Valid @RequestBody KeywordRule rule) {return Map.of("id",keywords.save(null,rule.keyword(),rule.reason(),rule.enabled()));}
+    @PutMapping("/keyword-rules/{id}") public void editKeyword(@PathVariable String id,@Valid @RequestBody KeywordRule rule) {keywords.save(id,rule.keyword(),rule.reason(),rule.enabled());}
+    public record RejectBatch(@NotNull @Size(min=1,max=500) List<@NonNull @NotBlank @Size(max=100) String> candidateIds,
+                              @Size(max=500) Map<String,String> expectedRevisions) { }
+    @PostMapping("/candidates/reject-batch") public DiscoveryKeywordService.Batch rejectBatch(@Valid @RequestBody RejectBatch request) {return keywords.rejectBatch(request.candidateIds(),request.expectedRevisions(),importer);}
+    @PostMapping("/candidates/{id}/reopen") public void reopen(@PathVariable String id) {keywords.reopen(id);}
     @PostMapping("/candidates/{id}/reject") public void reject(@PathVariable String id) { importer.reject(id); }
     @GetMapping("/candidates/{id}/dm") public Map<String,String> dm(@PathVariable String id) { return Map.of("text",importer.dm(id)); }
     public record PortfolioApproval(@NotBlank @Size(max=200) String name,@Size(max=200) String seriesAlias,

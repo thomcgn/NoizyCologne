@@ -10,6 +10,7 @@ import java.util.*;
 /** Pure matching plus read-only calendar checks, shared by previews, resets and scans. */
 @Service
 public class DiscoveryEvaluationService {
+    private final DiscoveryKeywordService keywords;
     private final DiscoveryStore store;
     private final PartySeriesRepository parties;
     private final DiscoveryGenreFilter genres;
@@ -21,8 +22,8 @@ public class DiscoveryEvaluationService {
             this(parties,aliases,genres,List.of());
         }
     }
-    public DiscoveryEvaluationService(DiscoveryStore store,PartySeriesRepository parties,DiscoveryGenreFilter genres,EventMatcher matcher,DiscoveryGeographyService geography) {
-        this.store=store;this.parties=parties;this.genres=genres;this.matcher=matcher;this.geography=geography;
+    public DiscoveryEvaluationService(DiscoveryKeywordService keywords,DiscoveryStore store,PartySeriesRepository parties,DiscoveryGenreFilter genres,EventMatcher matcher,DiscoveryGeographyService geography) {
+        this.keywords=keywords;this.store=store;this.parties=parties;this.genres=genres;this.matcher=matcher;this.geography=geography;
     }
     public Rules rules() { var coverage=genres.coverageGenres();
         Set<String> terms=new LinkedHashSet<>();
@@ -33,6 +34,8 @@ public class DiscoveryEvaluationService {
     /** Additive API diagnostics; persisted editorial decisions remain authoritative and unchanged. */
     public Map<String,Object> forApi(Map<String,Object> row,Rules rules) {
         var event=event(row);
+        var keyword=keywords.match(event);
+
         if(Boolean.TRUE.equals(row.get("special_source")) && row.get("calendar_entry_id")==null) {
             var geo=geography.assess(event);
             if(!geo.inside()) {
@@ -58,6 +61,7 @@ public class DiscoveryEvaluationService {
         for (var detected:recognition.parties()) for (var party:rules.parties()) if (party.getId().equals(detected.id())) standards.addAll(party.getStandardGenres());
         if (row.get("party_id") instanceof String selected) for (var party:rules.parties()) if (party.getId().equals(selected)) standards.addAll(party.getStandardGenres());
         result.put("suggestedSeriesName",PartySeriesRecognition.suggestedName(event.title()));
+        if(keyword!=null) result.put("keywordWarning",keyword.explanation());
         result.put("reported_location",event.location());
         result.put("genreCoverage",GenreCoverage.assess(event,rules.coverageGenres(),standards));
         result.put("assessment",new Assessment(recognition,verification,lifecycle,eligible,List.copyOf(blockers)));
@@ -85,6 +89,11 @@ public class DiscoveryEvaluationService {
         return EventVerification.assess(event,verifiedVenueName(event,venueId,venueName));
     }
     public EventMatcher.Match evaluate(EventExtractor.Event event,String venueId,String venueName,boolean approved,Rules rules) {
+        return evaluate(event,venueId,venueName,approved,rules,true);
+    }
+    private EventMatcher.Match evaluate(EventExtractor.Event event,String venueId,String venueName,boolean approved,Rules rules,boolean applyKeywords) {
+        var keyword=applyKeywords ? keywords.match(event) : null;
+        if(keyword!=null) return new EventMatcher.Match(venueId==null ? "IGNORED" : "NEEDS_REVIEW",null,keyword.explanation(),"UNVERIFIED");
         var result=matcher.match(event,venueId==null ? "" : verifiedVenueName(event,venueId,venueName),rules.parties(),rules.aliases(),rules.genres(),venueId!=null && approved);
         if (venueId==null && !result.status().equals("IGNORED")) return new EventMatcher.Match("NEEDS_REVIEW",result.partyId(),"Veranstaltungsort aus der Sonderquelle redaktionell zuordnen; "+result.reason(),result.classification());
         if (!result.status().equals("READY")) return result;
@@ -131,7 +140,8 @@ public class DiscoveryEvaluationService {
         return duplicate;
     }
     public EventMatcher.Match evaluate(Map<String,Object> row,Rules rules) {
+        if(!keywords.released(row) && keywords.match(event(row))!=null) return evaluate(event(row),(String)row.get("venue_id"),(String)row.get("venue_name"),Boolean.TRUE.equals(row.get("approved")),rules);
         if(Boolean.TRUE.equals(row.get("special_source"))) {var geo=geography.assess(event(row));if(!geo.inside())return new EventMatcher.Match("NEEDS_REVIEW",(String)row.get("party_id"),"Standortklärung: "+geo.reason(),"UNVERIFIED");}
-        return evaluate(event(row),(String)row.get("venue_id"),(String)row.get("venue_name"),Boolean.TRUE.equals(row.get("approved")),rules);
+        return evaluate(event(row),(String)row.get("venue_id"),(String)row.get("venue_name"),Boolean.TRUE.equals(row.get("approved")),rules,!keywords.released(row));
     }
 }
