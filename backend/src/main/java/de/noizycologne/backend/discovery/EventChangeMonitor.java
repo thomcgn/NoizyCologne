@@ -98,7 +98,11 @@ public class EventChangeMonitor {
                 boolean unchanged=!history.isEmpty() && fingerprint(sourceBefore).equals(fingerprint(event));
                 boolean supplement=history.isEmpty() && compatibleSupplement(old,event,venue.getName());
                 if (unchanged || supplement) {
-                    rememberOrigin((String)candidate.get("id"),found.sourceId(),event,operation);
+                    // A resolved source day must also replace an undated technical baseline.
+                    // record() never writes manual decisions or calendar values.
+                    if(found.official() && date(old)==null && date(event)!=null && EventVerification.assess(event,venue.getName()).sufficient())
+                        record((String)candidate.get("id"),found.sourceId(),event,operation);
+                    else rememberOrigin((String)candidate.get("id"),found.sourceId(),event,operation);
                     continue;
                 }
                 if (!found.official()) {

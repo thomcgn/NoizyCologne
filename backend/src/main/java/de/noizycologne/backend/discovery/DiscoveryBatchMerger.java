@@ -9,9 +9,17 @@ final class DiscoveryBatchMerger {
     record Merged(Input primary,EventExtractor.@NonNull Event event,List<@NonNull Input> origins) { }
     private DiscoveryBatchMerger() { }
     static List<@NonNull Merged> merge(List<@NonNull Input> inputs,String venue) {
+        Map<String,Set<java.time.LocalDate>> listedDays=new HashMap<>();
+        for(var input:inputs) {
+            var day=EventChangeMonitor.date(input.event());
+            if(day!=null) listedDays.computeIfAbsent(seriesKey(input),key -> new HashSet<>()).add(day);
+        }
+        Set<String> repeating=new HashSet<>();
+        listedDays.forEach((key,days) -> {if(days.size()>1) repeating.add(key);});
         List<List<@NonNull Input>> groups=new ArrayList<>();
         for (var input:inputs) {
-            var related=groups.stream().filter(group -> group.stream().anyMatch(other -> related(input,other,venue))).toList();
+            var related=groups.stream().filter(group -> group.stream().noneMatch(other -> separateEditions(input,other,repeating))
+                && group.stream().anyMatch(other -> related(input,other,venue,repeating))).toList();
             List<@NonNull Input> group=new ArrayList<>();
             for (var previous:related) {group.addAll(previous);groups.remove(previous);}
             group.add(input);
@@ -26,7 +34,9 @@ final class DiscoveryBatchMerger {
             var starts=ordered.stream().flatMap(i -> i.event().starts().stream()).distinct().toList();
             var dates=starts.stream().map(EventNormalizer::date).filter(Objects::nonNull).distinct().toList();
             var times=starts.stream().map(EventNormalizer::time).filter(Objects::nonNull).distinct().toList();
-            boolean conflict=dates.size()>1 || times.size()>1 || ordered.stream().anyMatch(i -> EventVerification.assess(i.event(),venue).conflicting());
+            boolean conflict=dates.size()>1 || times.size()>1
+                || ordered.stream().map(i -> EventLifecycle.signal(i.event())).distinct().count()>1
+                || ordered.stream().anyMatch(i -> EventVerification.assess(i.event(),venue).conflicting());
             if (dates.size()==1 && times.size()<=1) starts=List.of(dates.getFirst()+(times.isEmpty() ? "" : "T"+times.getFirst()));
             StringBuilder states=new StringBuilder();StringBuilder evidence=new StringBuilder();
             for (var origin:ordered) {
@@ -45,9 +55,20 @@ final class DiscoveryBatchMerger {
         }
         return result;
     }
-    private static boolean related(Input left,Input right,String venue) {
+    private static boolean separateEditions(Input left,Input right,Set<String> repeating) {
+        var first=EventChangeMonitor.date(left.event());var second=EventChangeMonitor.date(right.event());
+        if(first==null || second==null || first.equals(second)) return false;
+        // Repeated observations of one external occurrence must be checked together,
+        // including disagreements between pages of the same source.
+        if(!left.event().identity().isBlank() && left.event().identity().equals(right.event().identity())) return false;
+        if(left.sourceId().equals(right.sourceId())) return true;
+        return repeating.contains(seriesKey(left)) || repeating.contains(seriesKey(right));
+    }
+    private static String seriesKey(Input input) { return input.sourceId()+"|"+EventNormalizer.text(input.event().title()); }
+    private static boolean related(Input left,Input right,String venue,Set<String> repeating) {
         var a=left.event();var b=right.event();
         if (!EventMatcher.nameMatches(a.title(),b.title()) && !EventMatcher.nameMatches(b.title(),a.title())) return false;
+        if(separateEditions(left,right,repeating)) return false;
         boolean sameIdentity=!a.identity().isBlank() && a.identity().equals(b.identity());
         if (sameIdentity) return true;
         if (EventNormalizer.distinctTimedOccurrences(a,b)) return false;

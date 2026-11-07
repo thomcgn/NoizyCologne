@@ -51,3 +51,102 @@ Live-Java-Abruf: Robots erlaubt, HTML lesbar, 22 Einträge ohne JavaScript extra
 QUICK läuft einmal im verpflichtenden Commit-Hook. FULL bleibt ausschließlich
 GitHub Actions vor Abnahme des exakten Commits vorbehalten. Keine UI-Änderung und
 keine Browserprüfung; CLI-Ergebnisse sind kein Nachweis der Live-IDE-Diagnosen.
+
+## Jahreslose Programmdaten (Folgeauftrag 06./07.11.2026)
+
+Die allgemeine HTML-Kartenauswertung löst jetzt deutsche Tages-/Monatsangaben
+wie „Freitag, 04. Dezember“, „Sa. 05. Dez.“ und „04.12.“ anhand vollständiger
+Startdaten derselben Geschwister-Programmliste auf. Beschreibungstexte mit
+vollständigem Datum liefern dabei einen Jahresanker für die Kartenliste;
+Ausgabe und Auflösung erhalten die DOM-Reihenfolge. Keine Domainabfrage oder
+neue Crawler-Architektur. Explizite Quellenprofile behalten ihre Datumsselektoren.
+
+Ein Monatsrücksprung in einer chronologischen Liste erhöht das belegte Jahr,
+auch bei ausgelassenen Dezemberterminen. Ein Tagesrücksprung innerhalb desselben
+Monats, widersprüchliche Jahresanker, falsche Wochentage oder ungültige Daten
+führen nicht zu einer geratenen Auflösung. Ohne Anker wird kein aktuelles Jahr
+angenommen. HEUTE/MORGEN beziehen sich auf eine injizierbare Clock in
+Europe/Berlin. Uhrzeiten werden aus relativen Beginnangaben nicht abgeleitet.
+Bestehende vollständige Startzeiten bleiben erhalten. Die ursprünglichen
+absatzbasierten Vorschau-/Jahresbereichsregeln bleiben unverändert.
+
+Bei geändertem Datumsformat ordnet der Processor einen datierten Fund nur einem
+eindeutigen Altvorschlag derselben Quelle, desselben vollständigen Titels und
+passenden Tages-/Monatsbelegs zu. Relative Altbelege benötigen ihr gespeichertes
+Beobachtungsdatum. Neue Identitätshashes werden als vorhandene Identitätsaliase
+vermerkt. Mehrdeutige Altzuordnungen erzeugen keinen dritten Kandidaten und
+keinen automatischen Import. Mehrere gelistete Ausgaben derselben Reihe bleiben
+getrennt, auch über zusätzliche Quellenbeobachtungen; stabile externe Identitäten
+mit widersprüchlichen Angaben behalten die bisherigen Konfliktprüfungen.
+
+Manuelle/Legacy-Entscheidungen und abgelehnte Kandidaten bleiben geschützt,
+einschließlich eines historisch als AUTOMATIC markierten REJECTED-Status.
+Geschützte Datums-/Party-/Rückfragewerte und Kalenderdaten werden nicht durch
+neue Quellenwerte überschrieben. Ein unvollständiger technischer Monitoring-
+Vergleichsstand wird bei bestätigter Wiederbeobachtung aktualisiert, ohne daraus
+eine Terminverschiebung zu behaupten.
+
+Gezielte Prüfungen: sieben neue Jahreslos-/Fixturetests, sechs Batch-Merger-
+Tests und bestehende deutsche Programm-, Extraktions- und statische Fetcher-
+Regressionen bestanden. Die Fixture prüft unter einer fremden Domain alle 22
+Karten, konkrete Dezember-/Januartage, zwei ROMAN-EMPIRE-Ausgaben sowie dieselbe
+Auflösung ohne HEUTE/MORGEN und mit einer absichtlich abweichenden Clock 2040.
+Weitere Fälle: fehlender/lokal getrennter Anker, Wochentags-/Jahreswiderspruch,
+Schaltjahrfehler, Berlin-Mitternacht/Sommerzeit und relative Beginnangaben.
+
+Vier gezielte Datenbankfälle: 22 Alt-IDs nach zwei Scans erhalten; manuelle
+Entscheidungen, Antworttexte und Kalenderzeile unverändert; keine zusätzlichen
+Änderungsmeldungen; technischer Vergleichsstand auf vollständigem Quelldatum;
+falscher Wochentag verhindert Import; mehrdeutige Altzeilen werden nicht gewählt
+oder vermehrt; abgelehnter Altvorschlag wird nicht erneut übernommen. Zunächst
+fand die Bestandsregression eine falsche innere Kartengruppierung und geänderte
+DOM-Reihenfolge; nach Korrektur nur die betroffenen Fälle erneut erfolgreich
+geprüft. Ausschließlich neue isolierte Testdatenbanken, anschließend entfernt.
+
+Inkrementelle javac-Prüfungen bestanden. Befunde der Nullanalyse wurden mit
+expliziten Prüfungen an Bibliotheksgrenzen und präzisem Listentyp korrigiert.
+Frische ECJ-Haupt-/Testanalyse ohne Diagnosen bestanden. Der reguläre QUICK-
+Commit-Hook ist die abschließende Commitprüfung;
+Einzelprotokolle unter `.quality/calendar-visibility/yearless-*` und `.quality/run.*/`.
+Alle intensiven Schritte nacheinander mit Heap-/RSS-Grenzen und laufender RAM-
+Überwachung, bisher mindestens 6.845 MiB verfügbar, kein Speicherabbruch.
+Kein Live-Suchlauf, Produktionsdatenzugriff, Browser, lokaler STANDARD/FULL- oder
+Produktionsbuild. FULL bleibt vor Integration der GitHub-CI vorbehalten.
+
+### CI-Konfliktregressionen korrigiert (07.11.2026, PR #18)
+
+Bestandsaufnahme: sauberer Branch `fix/discovery-yearless-dates`, letzter Commit
+`8ae6641`. Zuerst ausschließlich `SpecialSourcesIntegrationTests` und
+`DiscoveryIntegrationTests` gegen eine neue isolierte PostgreSQL-Testdatenbank
+ausgeführt: 54 Tests, genau die beiden gemeldeten Konfliktfälle fehlgeschlagen.
+
+Ursache: `DiscoveryBatchMerger.separateEditions` trennte unterschiedliche Tage
+derselben Quelle vor dem Vergleich der stabilen externen Veranstaltungs-ID.
+Diese ID hat jetzt Vorrang: widersprüchliche Beobachtungen derselben Veranstaltung
+bleiben gemeinsam prüfpflichtig, mit beiden Datumsbelegen und `SOURCE_CONFLICT`.
+Widersprüchliche Lifecycle-Signale erhalten ebenfalls diesen Konfliktmarker.
+Getrennte Ausgaben einer Reihe und die deutsche Jahresauflösung bleiben erhalten.
+`SpecialSourceService` und `DiscoveryScheduler` sammeln bereits vor der
+Kandidatenverarbeitung den gesamten begrenzten Batch. `EventVerification` und
+die bestehende Auswertung blockieren `CONFLICTING_DATA`; die Schutzpfade für
+manuelle Entscheidungen und vorhandene Kalenderdaten bleiben unverändert.
+
+Nach der Korrektur dieselben beiden Integrationstestklassen erneut ausgeführt:
+55 Tests bestanden, einschließlich beider unveränderter CI-Regressionen und
+eines zusätzlichen Uhrzeitkonflikts ohne Kalenderimport. Danach 58 unmittelbar
+betroffene Unit-Regressionen bestanden: Batch-Merger, Assessment, Lifecycle,
+deutsche Jahresauflösung/Programme, Extraktion und statischer Fetcher.
+Neue Merger-Fälle prüfen widersprüchliche Tage/Uhrzeiten derselben Quellen-ID
+und Absage/Aktiv-Widersprüche jeweils in beiden Eingabereihenfolgen.
+Die Integrationstests prüfen auch die bestehenden manuellen Entscheidungen,
+Kalendereinträge und die Aktualisierung jahresloser Altvorschläge.
+
+Prüfbefehle: Maven `test-compile surefire:test` mit
+`-Dtest=SpecialSourcesIntegrationTests,DiscoveryIntegrationTests`, danach
+`surefire:test` mit `-Dtest=DiscoveryBatchMergerTests,DiscoveryAssessmentTests,EventLifecycleTests,GermanYearlessDateTests,GermanProgramExtractionTests,StaticPartyFetchTests,DiscoveryTests`.
+Einzelprotokolle unter `.quality/calendar-visibility/conflicts-*.log`.
+Beide isolierten Testcontainer entfernt; keine Entwicklungs-/Produktionsdatenbank
+verwendet. Intensive Schritte nacheinander mit Speicherprüfung und laufender
+Überwachung, bisher mindestens 7.319 MiB verfügbar, kein Speicherabbruch.
+Abschlussprüfung über den regulären QUICK-Commit-Hook; FULL bleibt in GitHub
+Actions. Kein zusätzlicher PR, Browser, lokaler Build, Merge oder Deployment.

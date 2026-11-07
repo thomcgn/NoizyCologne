@@ -1,13 +1,14 @@
 package de.noizycologne.backend.discovery;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import java.time.*;
 import java.util.*;
 import java.util.regex.Pattern;
 
-/** Parses explicit German dates and year-scoped text schedules; never supplies the current year. */
+/** Parses dates using source-local programme anchors, never an assumed current year. */
 final class GermanProgramText {
     private static final Pattern FULL_DATE = Pattern.compile(
             "(?<!\\d)(\\d{1,2})\\.\\s*(\\d{1,2}|\\p{L}+)\\.?\\s*(\\d{4})(?:\\s*,?\\s+(\\d{1,2}):(\\d{2}))?(?!\\d)");
@@ -57,6 +58,103 @@ final class GermanProgramText {
         return dates.isEmpty() ? List.of(text) : dates.stream().distinct().toList();
     }
 
+
+    private static final Pattern MONTH_DAY=Pattern.compile("(?<!\\d)(\\d{1,2})\\.\\s*(\\d{1,2}|\\p{L}+)\\.?",Pattern.CASE_INSENSITIVE);
+    private static final Pattern WEEKDAY=Pattern.compile("^(montag|mo|dienstag|di|mittwoch|mi|donnerstag|do|freitag|fr|samstag|sa|sonntag|so)\\.?\\s*,?\\s*(?=\\d|$)",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
+    record DateEvidence(String label,List<@NonNull String> starts) { }
+    record ResolvedDate(List<@NonNull String> starts,boolean conflict) { }
+    private record Day(@Nullable MonthDay monthDay,@Nullable LocalDate anchor,@Nullable DayOfWeek weekday,boolean invalid) { }
+
+    static @Nullable MonthDay monthDay(String text) {
+        Set<MonthDay> days=new HashSet<>();
+        var matches=MONTH_DAY.matcher(clean(text));
+        while (matches.find()) try {
+            String month=matches.group(2).toLowerCase(Locale.ROOT);
+            days.add(MonthDay.of(month.matches("\\d+") ? Integer.parseInt(month) : MONTHS.getOrDefault(month,0),Integer.parseInt(matches.group(1))));
+        } catch(DateTimeException | NumberFormatException ignored) { return null; }
+        return days.size()==1 ? days.iterator().next() : null;
+    }
+    private static @Nullable DayOfWeek weekday(String label) {
+        var match=WEEKDAY.matcher(clean(label));
+        if (!match.find()) return null;
+        return switch(match.group(1).substring(0,2).toLowerCase(Locale.ROOT)) {
+            case "mo" -> DayOfWeek.MONDAY; case "di" -> DayOfWeek.TUESDAY;
+            case "mi" -> DayOfWeek.WEDNESDAY; case "do" -> DayOfWeek.THURSDAY;
+            case "fr" -> DayOfWeek.FRIDAY; case "sa" -> DayOfWeek.SATURDAY;
+            default -> DayOfWeek.SUNDAY;
+        };
+    }
+    private static @Nullable LocalDate relative(String label,LocalDate fetchedOn) {
+        return switch(clean(label).toUpperCase(Locale.ROOT)) {
+            case "HEUTE" -> fetchedOn; case "MORGEN" -> fetchedOn.plusDays(1); default -> null;
+        };
+    }
+    private static Day day(DateEvidence evidence,LocalDate fetchedOn) {
+        var full=evidence.starts().stream().map(EventNormalizer::date).filter(Objects::nonNull).distinct().toList();
+        LocalDate anchor=full.size()==1 ? Objects.requireNonNull(full.getFirst()) : null;
+        var relative=relative(evidence.label(),fetchedOn);
+        var monthDay=monthDay(evidence.label());
+        var weekday=weekday(evidence.label());
+        boolean invalid=full.size()>1 || (relative!=null && anchor!=null && !relative.equals(anchor));
+        if (relative!=null) anchor=relative;
+        if (anchor!=null) {
+            invalid |= monthDay!=null && !monthDay.equals(MonthDay.from(anchor));
+            invalid |= weekday!=null && weekday!=anchor.getDayOfWeek();
+            if (monthDay==null) monthDay=MonthDay.from(anchor);
+        }
+        return new Day(monthDay,invalid ? null : anchor,weekday,invalid);
+    }
+    /** One chronological sibling list only; a month wrap advances the anchored year. */
+    static List<@NonNull ResolvedDate> resolve(List<@NonNull DateEvidence> evidence,LocalDate fetchedOn) {
+        var days=evidence.stream().map(item -> day(item,fetchedOn)).toList();
+        int[] offsets=new int[days.size()];int offset=0;
+        Integer base=null;MonthDay previous=null;boolean consistent=true;
+        for(int i=0;i<days.size();i++) {
+            var item=Objects.requireNonNull(days.get(i));var current=item.monthDay();
+            if(current!=null) {
+                if(previous!=null && current.isBefore(previous)) {
+                    if(previous.getMonthValue()>current.getMonthValue()) offset++;
+                    else consistent=false;
+                }
+                previous=current;
+            }
+            offsets[i]=offset;
+            var anchor=item.anchor();
+            if(anchor!=null) {
+                int candidate=anchor.getYear()-offset;
+                if(base!=null && base!=candidate) consistent=false;
+                base=candidate;
+            }
+        }
+        List<@NonNull ResolvedDate> result=new ArrayList<>();
+        for(int i=0;i<days.size();i++) {
+            var item=Objects.requireNonNull(days.get(i));var original=Objects.requireNonNull(evidence.get(i));
+            LocalDate resolved=item.anchor();boolean conflict=item.invalid();
+            var monthDay=item.monthDay();var weekday=item.weekday();
+            if(resolved==null && monthDay!=null && base!=null && consistent && !conflict) try {
+                int year=base+offsets[i];
+                // MonthDay.atYear silently adjusts Feb 29; LocalDate.of must reject that instead.
+                resolved=LocalDate.of(year,monthDay.getMonthValue(),monthDay.getDayOfMonth());
+                conflict=weekday!=null && weekday!=resolved.getDayOfWeek();
+            } catch(DateTimeException ignored) { conflict=true; }
+            if(item.anchor()==null && base!=null && !consistent) conflict=true;
+            boolean alreadyDated=original.starts().stream().anyMatch(start -> EventNormalizer.date(start)!=null);
+            List<@NonNull String> starts=resolved==null || conflict || alreadyDated ? original.starts() : List.of(Objects.requireNonNull(resolved.toString()));
+            result.add(new ResolvedDate(starts,conflict));
+        }
+        return result;
+    }
+    /** Legacy reconciliation needs a source day, never a series-name-only match. */
+    static boolean sameUndatedOccurrence(EventExtractor.Event old,LocalDate resolved,@Nullable LocalDate observedOn) {
+        if(old.starts().isEmpty() || old.starts().stream().anyMatch(start -> EventNormalizer.date(start)!=null)) return false;
+        for(String start:old.starts()) {
+            var day=monthDay(start);
+            if(day!=null && day.equals(MonthDay.from(resolved))) continue;
+            if(observedOn!=null && resolved.equals(relative(start,observedOn))) continue;
+            return false;
+        }
+        return true;
+    }
     static List<EventExtractor.@org.jspecify.annotations.NonNull Event> events(Document doc, String page) {
         List<EventExtractor.@org.jspecify.annotations.NonNull Event> events = new ArrayList<>();
         Element parent = null;

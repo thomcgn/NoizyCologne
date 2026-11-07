@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 
 class StaticPartyFetchTests {
     private final URI root=URI.create("https://club.example/parties");
-    private final EventExtractor extractor=new EventExtractor();
+    private final EventExtractor extractor=new EventExtractor(java.time.Clock.fixed(java.time.Instant.parse("2026-11-06T12:00:00Z"),java.time.ZoneOffset.UTC));
     private @org.jspecify.annotations.NonNull String fixture(String name) throws IOException {
         try(var in=getClass().getResourceAsStream("/discovery/"+name)) {
             return new String(requireNonNull(in).readAllBytes(),StandardCharsets.UTF_8);
@@ -36,9 +36,9 @@ class StaticPartyFetchTests {
         var blitz=requireNonNull(result.events().stream().filter(e->e.title().equals("BallroomBlitz! mit ANJA HELLFIRE")).findFirst().orElseThrow());
         var rotten=requireNonNull(result.events().stream().filter(e->e.title().equals("ROTTEN FLOWERS vol.4")).findFirst().orElseThrow());
         var shake=requireNonNull(result.events().stream().filter(e->e.title().equals("Shake Appeal mit DANYELL")).findFirst().orElseThrow());
-        assertThat(blitz.starts()).containsExactly("HEUTE");
-        assertThat(rotten.starts()).containsExactly("MORGEN");
-        assertThat(shake.starts()).containsExactly("Samstag, 14. November");
+        assertThat(blitz.starts()).containsExactly("2026-11-06");
+        assertThat(rotten.starts()).containsExactly("2026-11-07");
+        assertThat(shake.starts()).containsExactly("2026-11-14");
         assertThat(blitz.evidence()).contains("PunkRockRollHitz");
         assertThat(blitz.evidence()).doesNotContain("ROTTEN FLOWERS");
         assertThat(rotten.evidence()).contains("Heavy-Psych");
@@ -48,7 +48,7 @@ class StaticPartyFetchTests {
             assertThat(PartyOnlyPolicy.concert(event)).isFalse();
             assertThat(EventTiming.relativeStart(event)).isEqualTo("nach dem Konzert");
             assertThat(event.starts()).noneMatch(start->EventNormalizer.time(start)!=null);
-            assertThat(EventVerification.assess(event,"").sufficient()).isFalse();
+            assertThat(EventVerification.assess(event,"").sufficient()).isTrue();
             assertThat(event.url()).isEqualTo(page.url().toString());
         }
     }
