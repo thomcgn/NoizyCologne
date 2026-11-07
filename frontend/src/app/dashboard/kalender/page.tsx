@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { berlinDate } from "./calendarNavigation";
+import { useDayPreview } from "./useDayPreview";
 import {
   toDateKey,
   useCatalog,
@@ -81,16 +82,6 @@ function CalendarContent() {
     );
   }, [month]);
 
-  const entriesByDate = useMemo(() => {
-    const result = new Map<string, CalendarEntry[]>();
-    for (const entry of entries) {
-      const existing = result.get(entry.date) ?? [];
-      existing.push(entry);
-      result.set(entry.date, existing);
-    }
-    return result;
-  }, [entries]);
-
   const editingEntry = entries.find((item) => item.id === editingId) ?? null;
   const infoEntry = entries.find((item) => item.id === infoEntryId) ?? null;
   const infoVenue = infoEntry ? venues.find((venue) => venue.id === infoEntry.locationId) : undefined;
@@ -152,6 +143,24 @@ function CalendarContent() {
       return firstKey.localeCompare(secondKey);
     });
   }, [actors, entrySearch, entries, parties, venues, typeFilter, locationFilter]);
+
+  const entriesByDate = useMemo(() => {
+    const result = new Map<string, CalendarEntry[]>();
+    for (const entry of filteredEntries) {
+      const existing = result.get(entry.date) ?? [];
+      existing.push(entry);
+      result.set(entry.date, existing);
+    }
+    return result;
+  }, [filteredEntries]);
+
+  const previewScope = useMemo(() => ({ entriesByDate, month, calendarOpen, infoEntryId, editorOpen, entriesLoading, entriesError }), [entriesByDate, month, calendarOpen, infoEntryId, editorOpen, entriesLoading, entriesError]);
+  const preview = useDayPreview(previewScope, calendarOpen && !infoEntryId && !editorOpen && !entriesLoading && !entriesError);
+  const previewEntries = [...(entriesByDate.get(preview.date ?? "") ?? [])].sort((a, b) => {
+    const first = a.type === "event" ? a.startTime : "";
+    const second = b.type === "event" ? b.startTime : "";
+    return (first || "99:99").localeCompare(second || "99:99");
+  });
 
   function dateFromKey(dateKey: string): Date {
     const [year, monthIndex, day] = dateKey.split("-").map(Number);
@@ -371,16 +380,9 @@ function CalendarContent() {
                       key={toDateKey(date)}
                       onClick={() => selectDay(date)}
                       onDoubleClick={() => openNewEntryForDay(date)}
-                      onKeyDown={(event) => {
-                        if (event.target !== event.currentTarget) return;
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          selectDay(date);
-                        }
-                      }}
-                      role="button"
-                      tabIndex={0}
-                      aria-pressed={isSelected}
+                      role="group"
+                      data-calendar-day={toDateKey(date)}
+                      {...preview.handlers(toDateKey(date), dayEntries.length > 0)}
                       aria-label={`${date.toLocaleDateString("de-DE", {
                         weekday: "long",
                         day: "numeric",
@@ -403,9 +405,11 @@ function CalendarContent() {
                             : "hover:bg-neutral-800",
                       ].join(" ")}
                     >
-                      <span className="block text-sm font-medium">
+                      <button type="button" data-day-select aria-pressed={isSelected}
+                        aria-label={date.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                        className="block rounded-sm text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2">
                         {date.getDate()}
-                      </span>
+                      </button>
 
                       <span className="mt-1 block space-y-1">
                         {dayEntries.slice(0, 2).map((entry) => (
@@ -431,10 +435,12 @@ function CalendarContent() {
                             {getEntryName(entry)}
                           </button>
                         ))}
-                        {dayEntries.length > 2 && (
-                          <span className="block text-[10px] text-neutral-400 sm:text-xs">
-                            +{dayEntries.length - 2} weitere
-                          </span>
+                        {dayEntries.length > 0 && (
+                          <button type="button" className="block max-w-full rounded-sm text-left text-[10px] leading-tight text-neutral-300 underline focus-visible:outline-2 focus-visible:outline-offset-2 sm:text-xs"
+                            onClick={event => { event.stopPropagation(); const cell = event.currentTarget.closest<HTMLElement>("[data-calendar-day]"); if (cell) preview.open(toDateKey(date), cell); }}
+                            onDoubleClick={event => event.stopPropagation()} aria-haspopup="dialog">
+                            Alle {dayEntries.length} ansehen
+                          </button>
                         )}
                       </span>
                     </div>
@@ -451,6 +457,26 @@ function CalendarContent() {
           : entriesError ? <p className="cc-message" role="alert">Die Liste ist wegen des Ladefehlers nicht verfügbar.</p>
           : <DataCollection items={filteredEntries} columns={columns} label="Kalendereinträge" storageKey="noizy-view-calendar" getName={getEntryName} onOpen={entry => setInfoEntryId(entry.id)} openDisabled={deletingId !== null} initialSortKey="date" query={entrySearch} onQueryChange={setEntrySearch} searchLabel="Kalendereinträge durchsuchen" empty={entries.length ? "Keine passenden Einträge gefunden." : "Noch keine Einträge vorhanden."} toolbar={<><label className="cc-inline-filter">Art<select className="cc-input" value={typeFilter} onChange={event => setTypeFilter(event.target.value)}><option value="all">Alle</option><option value="event">Partys</option><option value="closure">Sperren</option></select></label><label className="cc-inline-filter">Location<select className="cc-input" value={locationFilter} onChange={event => setLocationFilter(event.target.value)}><option value="">Alle</option>{venues.map(venue => <option key={venue.id} value={venue.id}>{venue.name}</option>)}</select></label></>} actions={entry => <div className="cc-inline-actions"><button type="button" className="cc-button" disabled={deletingId !== null} onClick={() => editFromList(entry)}>Bearbeiten</button><button type="button" className="cc-button cc-button-danger" onClick={() => void deleteEntry(entry)} disabled={deletingId !== null}>{deletingId === entry.id ? "Löschen ..." : "Löschen"}</button></div>} />}
         </section>
+
+        {preview.date && previewEntries.length > 0 && <DashboardModal open onClose={preview.close}
+          title={dateFromKey(preview.date).toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })}
+          description={`${previewEntries.length} ${previewEntries.length === 1 ? "Veranstaltung" : "Veranstaltungen"}`}>
+          <ul className="calendar-day-preview">
+            {previewEntries.map(entry => {
+              const location = venues.find(venue => venue.id === entry.locationId)?.name;
+              return <li key={entry.id}>
+                <button type="button" onClick={() => { preview.close(); setInfoEntryId(entry.id); }}
+                  className="calendar-day-preview-entry" style={{ borderLeftColor: getEntryColor(entry) }}>
+                  <span className="font-semibold">{entry.type === "event" && entry.startTime && <span>{entry.startTime} · </span>}{getEntryName(entry)}</span>
+                  {location && <span className="text-sm text-neutral-400">{location}</span>}
+                  <span className={`text-xs ${entry.eventStatus === "CANCELLED" ? "text-red-400" : "text-neutral-400"}`}>
+                    {entry.type === "closure" ? "Location-Sperre" : "Party"}{entry.eventStatus === "CANCELLED" ? " · ABGESAGT" : ""}
+                  </span>
+                </button>
+              </li>;
+            })}
+          </ul>
+        </DashboardModal>}
 
         {editorOpen && selectedDate && <DashboardModal variant="drawer" protectChanges open onClose={() => {setEditorOpen(false); setEditingId(null);}} title={editingEntry ? "Kalendereintrag bearbeiten" : "Neuer Kalendereintrag"}>
           <EntryEditor key={`${toDateKey(selectedDate)}-${editingId ?? "new"}`} date={selectedDate} entry={editingEntry} onSaved={() => {setEditorOpen(false); setEditingId(null);}} onCancel={() => {setEditorOpen(false); setEditingId(null);}} />
