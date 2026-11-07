@@ -87,6 +87,38 @@ class DiscoveryIntegrationTests {
         assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,venue.getId())).isEqualTo(1);
         assertThat(store.jdbc().queryForObject("SELECT count(*) FROM event_changes WHERE venue_id=?",Integer.class,venue.getId())).isZero();
     }
+    @Test void reviewedBallroomBlitzWithoutDateReceivesVerifiedDateWithoutLosingDecision() throws Exception {
+        String html;
+        try(var in=getClass().getResourceAsStream("/discovery/sonic-ballroom-parties.html")) {
+            html=new String(requireNonNull(in).readAllBytes(),java.nio.charset.StandardCharsets.UTF_8);
+        }
+        var events=new EventExtractor(Clock.fixed(Instant.parse("2026-11-06T12:00:00Z"),ZoneOffset.UTC))
+            .extract(new EventPageFetcher.Page(URI.create(root),html,"text/html"),EventExtractor.Profile.defaults()).events();
+        var resolved=requireNonNull(events.stream().filter(event -> event.title().equals("BallroomBlitz! mit DER GRAUE KLAUS")).findFirst().orElseThrow());
+        foundEvents(List.of(new EventExtractor.Event(resolved.identity(),resolved.title(),resolved.url(),List.of("Freitag, 04. Dezember"),
+            resolved.evidence(),resolved.state(),resolved.location(),resolved.place())));
+        scheduler.scan();
+        String id=requireNonNull(store.jdbc().queryForObject("SELECT id FROM discovery_candidates WHERE venue_id=?",String.class,venue.getId()));
+        importer.review(id,party.getId(),null,"NEEDS_INQUIRY","ANSWERED","Belegte Teamentscheidung");
+        String reason=(String)store.candidate(id).get("reason");
+        foundEvents(List.of(requireNonNull(resolved)));scheduler.scan();scheduler.scan();
+        var row=store.candidate(id);
+        assertThat(evaluation.event(row).starts()).containsExactly("2026-12-04");
+        assertThat(row).containsEntry("event_date",java.sql.Date.valueOf("2026-12-04"))
+            .containsEntry("decision_origin","MANUAL").containsEntry("status","NEEDS_INQUIRY")
+            .containsEntry("party_id",party.getId()).containsEntry("inquiry_status","ANSWERED")
+            .containsEntry("dm_text","Belegte Teamentscheidung").containsEntry("reason",reason).containsEntry("calendar_entry_id",null);
+        // Also repair the already refreshed raw-event/fingerprint state left by older scans.
+        store.jdbc().update("UPDATE discovery_candidates SET event_date=NULL WHERE id=?",id);
+        scheduler.scan();
+        assertThat(store.candidate(id)).containsEntry("event_date",java.sql.Date.valueOf("2026-12-04"));
+        var mvc=org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup(requireNonNull(context)).build();
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/discovery/candidates/"+id))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.event_date").value("2026-12-04"));
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates WHERE venue_id=?",Integer.class,venue.getId())).isEqualTo(1);
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,venue.getId())).isZero();
+    }
     @Test void conflictingWeekdayStaysReviewableAndNeverImportsKnownParty() throws Exception {
         String html="<main><div><strong class='date'>16.12.2026</strong><h1>Anchor Party</h1></div><div><strong class='date'>Donnerstag, 18. Dezember</strong><h1>"+party.getName()+"</h1><p>Indie Party, nach dem Konzert</p></div></main>";
         var events=new EventExtractor(Clock.fixed(Instant.parse("2026-11-06T12:00:00Z"),ZoneOffset.UTC)).extract(new EventPageFetcher.Page(URI.create(root),html,"text/html"),EventExtractor.Profile.defaults()).events();
