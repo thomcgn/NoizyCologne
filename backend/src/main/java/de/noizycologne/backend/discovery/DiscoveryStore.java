@@ -17,6 +17,9 @@ public class DiscoveryStore {
     public List<Map<String,Object>> candidates() { return candidates("ALL"); }
     public List<Map<String,Object>> candidates(String filter) {
         String where=switch(filter) {
+            case "KEYWORD_FILTER" -> "c.status='IGNORED' AND c.filter_origin='KEYWORD_FILTER'";
+            case "OTHER_IGNORED" -> "c.status='IGNORED' AND c.filter_origin IS DISTINCT FROM 'KEYWORD_FILTER'";
+            case "DUPLICATE" -> "c.status='DUPLICATE'";
             case "AUTOMATIC_IGNORED" -> "c.status='IGNORED' AND c.decision_origin='AUTOMATIC'";
             case "MANUAL_REJECTED" -> "c.status='REJECTED' AND c.decision_origin='MANUAL'";
             case "UNVERIFIED", "POSSIBLE_MATCH" -> "c.matching_class='"+filter+"' AND c.status NOT IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED')";
@@ -76,14 +79,14 @@ public class DiscoveryStore {
     }
     public void audit(String id,String oldStatus,String operation,String oldClass) {
         db.update("""
-            INSERT INTO discovery_decisions(candidate_id,operation_id,old_status,new_status,origin,matching_class,old_matching_class,reason,matcher_version)
-            SELECT id,?,?,status,decision_origin,matching_class,?,reason,matcher_version FROM discovery_candidates WHERE id=?
+            INSERT INTO discovery_decisions(candidate_id,operation_id,old_status,new_status,origin,matching_class,old_matching_class,reason,matcher_version,filter_origin,filter_rule_id,filter_keyword,filter_reason,filter_evidence)
+            SELECT id,?,?,status,decision_origin,matching_class,?,reason,matcher_version,filter_origin,filter_rule_id,filter_keyword,filter_reason,filter_evidence FROM discovery_candidates WHERE id=?
             """,operation,oldStatus,oldClass,id);
     }
     public void technicalAudit(String id,String oldClass,String operation) {
         db.update("""
-            INSERT INTO discovery_decisions(candidate_id,operation_id,old_status,new_status,origin,matching_class,old_matching_class,reason,matcher_version)
-            SELECT id,?,status,status,'AUTOMATIC',matching_class,?,automatic_reason,matcher_version FROM discovery_candidates WHERE id=?
+            INSERT INTO discovery_decisions(candidate_id,operation_id,old_status,new_status,origin,matching_class,old_matching_class,reason,matcher_version,filter_origin,filter_rule_id,filter_keyword,filter_reason,filter_evidence)
+            SELECT id,?,status,status,'AUTOMATIC',matching_class,?,automatic_reason,matcher_version,filter_origin,filter_rule_id,filter_keyword,filter_reason,filter_evidence FROM discovery_candidates WHERE id=?
             """,operation,oldClass,id);
     }
     public List<Map<String,Object>> evaluationRows() {

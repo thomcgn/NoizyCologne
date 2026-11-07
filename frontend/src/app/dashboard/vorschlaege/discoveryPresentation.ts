@@ -11,12 +11,13 @@ export function canApprovePortfolio(candidate: Candidate) {
 }
 
 export function isNewSeries(candidate: Candidate) {
-  return canApprovePortfolio(candidate) && !!candidate.genreCoverage?.eligible && !candidate.assessment?.importBlockers.length && candidate.decision_origin === "AUTOMATIC" &&
+  return !candidate.keywordWarning && canApprovePortfolio(candidate) && !!candidate.genreCoverage?.eligible && !candidate.assessment?.importBlockers.length && candidate.decision_origin === "AUTOMATIC" &&
     !["PREPARED", "SENT"].includes(candidate.inquiry_status) &&
     candidate.assessment?.verification.status === "VERIFIED" && !!candidate.event_date;
 }
 
 export function reviewReason(candidate: Candidate) {
+  if(candidate.keywordWarning) return candidate.keywordWarning;
   const assessment = candidate.assessment;
   if (["PREPARED", "SENT"].includes(candidate.inquiry_status)) return "Eine Rückfrage ist noch offen. Die Antwort bitte hier ergänzen.";
   if (assessment?.lifecycle && assessment.lifecycle !== "ACTIVE") return "Ein Hinweis auf eine Änderung oder Absage muss geklärt werden.";

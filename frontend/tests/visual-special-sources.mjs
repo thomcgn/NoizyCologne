@@ -22,6 +22,7 @@ try {
     const proposal={...candidate('portal','Karnevalsnacht – bereits am Titel erkennbar unpassend'),special_source:true,venue_id:null,venue_name:'Veranstaltungsort offen',reported_location:'Blue Shell',source_name:'QRUSH',party_id:'party-0',status:'NEEDS_REVIEW',assessment:{recognition:{status:'SINGLE',parties:[]},verification:{status:'VERIFIED',date:'2027-01-09',reasons:[]},lifecycle:'ACTIVE',automaticImportEligible:false,importBlockers:[]}};
     data.discovery.candidates=[proposal];data.discovery.sources=[{id:'location-source',venue_id:'venue-0',venue_name:'Versteckte Location-Quelle',url:'https://hidden.example/',source_type:'OFFICIAL',status:'FAILED',quality:'FAILED'}];
     const calls=[];await mockControlCenterApi(context,data,{onRequest:request=>calls.push(request)});
+    await context.route('**/api/v1/discovery/keyword-rules',route=>route.fulfill({json:[]}));
     await context.route('**/api/v1/discovery/special-sources',async route=>{
       const body=route.request().postDataJSON();assert.equal(body.name,'QRUSH');assert.equal(body.url,'https://qrushapp.de/');assert.equal(body.venueId,undefined);
       calls.push({path:'/api/v1/discovery/special-sources',method:'POST'});
@@ -37,10 +38,10 @@ try {
       await route.fulfill({status:204});
     });
     let rejectionAttempts=0;
-    await context.route('**/api/v1/discovery/candidates/portal/reject',async route=>{
-      calls.push({path:'/api/v1/discovery/candidates/portal/reject',method:route.request().method()});rejectionAttempts++;
+    await context.route('**/api/v1/discovery/candidates/reject-batch',async route=>{
+      calls.push({path:'/api/v1/discovery/candidates/reject-batch',method:route.request().method()});rejectionAttempts++;
       if(rejectionAttempts===1) return route.fulfill({status:503,json:{message:'Testfehler: Bitte erneut versuchen'}});
-      proposal.status='REJECTED';proposal.decision_origin='MANUAL';await route.fulfill({status:204});
+      proposal.status='REJECTED';proposal.decision_origin='MANUAL';await route.fulfill({json:{requested:1,rejected:1,alreadyRejected:0,rejectedIds:['portal'],alreadyRejectedIds:[],conflicts:[]}});
     });
     const page=await context.newPage();page.setDefaultTimeout(15000);const errors=[];page.on('pageerror',error=>errors.push(error.message));
     await page.goto(`${origin}/dashboard/vorschlaege`);
@@ -69,17 +70,18 @@ try {
     await page.locator('[aria-label="Sonderquellen"]').getByText('QRUSH Köln',{exact:false}).waitFor();
     await page.getByRole('button',{name:'Sonderquelle löschen',exact:true}).click();await page.getByText('Noch keine Sonderquellen hinterlegt.',{exact:true}).waitFor();
     assert.equal(await page.locator('[data-record-id="portal"]').count(),1);
-    const reject=page.getByRole('button',{name:'Sofort ablehnen',exact:true});
-    await reject.click();await page.getByRole('alert').filter({hasText:'Testfehler'}).waitFor();
-    assert.equal(await page.locator('[data-record-id="portal"]').count(),1);
-    await page.screenshot({path:`${out}/${theme}-${width}-reject-failed.png`});
-    await reject.click();await page.getByText('Abgelehnt:',{exact:false}).waitFor();
+    await page.getByRole('button',{name:'Ablehnung vormerken',exact:true}).click();
     await page.locator('[data-record-id="portal"]').waitFor({state:'detached'});
+    await page.getByRole('button',{name:'Ablehnen',exact:true}).click();
+    const reject=page.getByRole('dialog').getByRole('button',{name:'1 Veranstaltungen ablehnen',exact:true});
+    await reject.click();await page.getByRole('dialog').getByRole('alert').filter({hasText:'Testfehler'}).waitFor();
+    await page.screenshot({path:`${out}/${theme}-${width}-reject-failed.png`});
+    await reject.click();await page.getByText('1 Veranstaltungen abgelehnt',{exact:false}).waitFor();
     assert.equal(await page.getByRole('dialog').count(),0);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
     await page.screenshot({path:`${out}/${theme}-${width}-rejected.png`});
     assert.deepEqual(errors,[]);assert.equal(rejectionAttempts,2);
-    assert.ok(calls.filter(call=>call.method!=='GET').every(call=>/special-sources|\/reject$/.test(call.path)));
+    assert.ok(calls.filter(call=>call.method!=='GET').every(call=>/special-sources|\/reject-batch$/.test(call.path)));
     results.push({width,theme,passed:true});await context.close();
   }
 }finally{await browser.close();}
