@@ -11,6 +11,19 @@ public final class PartySeriesRecognition {
     public record Recognition(String status, List<@NonNull DetectedParty> parties) { }
     private record Hit(@NonNull DetectedParty party, int start, int end) { }
 
+    /** An editable proposal only: mixed-case series followed by an explicitly separated uppercase line-up. */
+    public static String suggestedName(String title) {
+        var separator=java.util.regex.Pattern.compile("(?iu)^(.+?)\\s+(?:mit|with|feat\\.?|featuring)\\s+(.+)$").matcher(title.trim());
+        if (!separator.matches()) return title.trim();
+        String stem=Objects.requireNonNull(separator.group(1)).trim();
+        String lineup=Objects.requireNonNull(separator.group(2)).trim();
+        long letters=lineup.codePoints().filter(Character::isLetter).count();
+        if (stem.codePoints().noneMatch(Character::isLowerCase) || letters<5
+                || lineup.codePoints().anyMatch(Character::isLowerCase)
+                || !lineup.matches("[\\p{L}\\p{N}\\s&,.+'’()!/-]+")) return title.trim();
+        return stem;
+    }
+
     public static boolean containsName(String title, String name) {
         String normalized=EventNormalizer.text(name);
         if (normalized.isBlank()) return false;

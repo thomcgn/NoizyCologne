@@ -25,6 +25,7 @@ class MultiSourceDiscoveryIntegrationTests {
     @Autowired DiscoveryScheduler scheduler;
     @Autowired DiscoveryController controller;
     @Autowired DiscoveryPortfolioService portfolio;
+    @Autowired EventImportService importer;
     @Autowired DiscoveryEvaluationService evaluation;
     @Autowired GenreRepository genres;
     @Autowired VenueRepository venues;
@@ -54,6 +55,44 @@ class MultiSourceDiscoveryIntegrationTests {
     }
     private void known() {
         var party=parties.saveAndFlush(new PartySeries("NEON PARADISE","","#E11D48","manual",null,null,null,null,Set.of(),Set.of()));createdParties.add(party.getId());
+    }
+    @Test void changingLineupsReuseOneSeriesPreserveOriginalCalendarTitlesAndManualAssignments() throws Exception {
+        String firstTitle="BallroomBlitz! mit DER GRAUE KLAUS",secondTitle="BallroomBlitz! mit ROMAN EMPIRE";
+        var first=event("blitz-1",firstTitle,ticket,"2026-12-04","Indie DJs","");
+        var second=event("blitz-2",secondTitle,ticket,"2026-12-11","Indie DJs","");
+        source(ticket,first);scheduler.scan();
+        String firstId=store.jdbc().queryForObject("SELECT id FROM discovery_candidates WHERE venue_id=? AND title=?",String.class,venue.getId(),firstTitle);
+        var api=controller.candidate(firstId);
+        assertThat(api.get("suggestedSeriesName")).isEqualTo("BallroomBlitz!");
+        source(ticket,second);scheduler.scan();
+        String secondId=store.jdbc().queryForObject("SELECT id FROM discovery_candidates WHERE venue_id=? AND title=?",String.class,venue.getId(),secondTitle);
+        String standard=requireNonNull(genres.findAllByActiveTrueOrderByCanonicalNameAsc().getFirst()).getDisplayName();
+        String series=portfolio.approve(firstId,(String)api.get("suggestedSeriesName"),null,"23:00",Set.of(standard));createdParties.add(series);
+        assertThat(portfolio.approve(secondId,secondTitle,null,"22:00",Set.of())).isEqualTo(series);
+        assertThat(store.candidate(secondId)).containsEntry("party_id",series).containsEntry("decision_origin","MANUAL");
+        assertThat(parties.findAll().stream().filter(p -> p.getName().startsWith("BallroomBlitz"))).hasSize(1);
+        assertThat(requireNonNull(parties.findById(series).orElseThrow()).getStandardGenres()).containsExactly(standard);
+        var coverage=(GenreCoverage.Result)controller.candidate(secondId).get("genreCoverage");
+        assertThat(requireNonNull(coverage).standardNames()).contains(requireNonNull(standard));
+        importer.confirm(firstId,series,java.time.LocalDate.of(2026,12,4),"NONE","",null);
+        importer.confirm(secondId,series,java.time.LocalDate.of(2026,12,11),"NONE","",null);
+        var entries=store.jdbc().queryForList("SELECT event_date,notes FROM calendar_entries WHERE location_id=? ORDER BY event_date",venue.getId());
+        assertThat(entries).hasSize(2);
+        assertThat(entries.getFirst()).containsEntry("event_date",java.sql.Date.valueOf("2026-12-04"));
+        assertThat(Objects.toString(entries.getFirst().get("notes"))).contains(firstTitle);
+        assertThat(Objects.toString(entries.getLast().get("notes"))).contains(secondTitle);
+        store.jdbc().update("INSERT INTO party_series_aliases(party_id,alias) VALUES (?,?)",series,"Blitz Clubnacht");
+        var third=event("blitz-3","Blitz Clubnacht mit WECHSELNDER GAST",ticket,"2026-12-18","Party","");
+        source(ticket,third);scheduler.scan();scheduler.scan();
+        var latest=store.jdbc().queryForMap("SELECT * FROM discovery_candidates WHERE venue_id=? AND title=?",venue.getId(),third.title());
+        assertThat(latest).containsEntry("party_id",series).containsEntry("status","IMPORTED");
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,venue.getId())).isEqualTo(3);
+        assertThat(store.candidate(firstId)).containsEntry("party_id",series).containsEntry("decision_origin","MANUAL").containsEntry("title",firstTitle);
+        // A stale creation request must never replace an explicit assignment to another series.
+        var other=parties.saveAndFlush(new PartySeries("Redaktionelle Zuordnung","","#E11D48","manual",null,null,null,null,Set.of(),Set.of()));createdParties.add(other.getId());
+        store.jdbc().update("UPDATE discovery_candidates SET party_id=?,decision_origin='MANUAL' WHERE id=?",other.getId(),latest.get("id"));
+        assertThatThrownBy(() -> portfolio.approve((String)latest.get("id"),"BallroomBlitz!")).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        assertThat(store.candidate((String)latest.get("id"))).containsEntry("party_id",other.getId());
     }
     @Test void mtcLikeBrowserFailureUsesConfiguredSourcesAndPreservesBothOriginsWithoutDuplicateCalendarOrAlerts() throws Exception {
         known();source(ticket,event("t1","NEON PARADISE",ticket,"2026-11-07","Party",""));

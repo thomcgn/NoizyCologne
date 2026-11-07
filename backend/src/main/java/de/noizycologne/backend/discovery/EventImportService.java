@@ -48,7 +48,7 @@ public class EventImportService {
         if (conflict!=null) throw new ResponseStatusException(HttpStatus.CONFLICT,conflict.reason());
         String time = c.get("start_time") == null ? null : c.get("start_time").toString().substring(0,5);
         String relative=EventTiming.relativeStart(evaluator.event(c));
-        String notes="Quelle: "+c.get("source_url")+(time==null && !relative.isBlank() ? "\nBeginn: "+relative : "");
+        String notes="Originaltitel: "+c.get("title")+"\nQuelle: "+c.get("source_url")+(time==null && !relative.isBlank() ? "\nBeginn: "+relative : "");
         var entry = calendar.createEntry(new CalendarEntryRequest(date.toString(), venue, "event", notes, EventAdmission.price(evaluator.event(c)), party, time, null, Set.of()));
         entityManager.flush();
         store.jdbc().update("UPDATE discovery_candidates SET calendar_entry_id=?,party_id=?,event_date=?,status='IMPORTED',reason=?,updated_at=now() WHERE id=?",

@@ -9,6 +9,8 @@ const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http:
 for (const name of ['window', 'document', 'HTMLElement', 'HTMLDetailsElement', 'Event', 'MouseEvent', 'KeyboardEvent']) {
   globalThis[name] = dom.window[name];
 }
+// jsdom has no layout/scroll implementation; configuration links still exercise their real click handler.
+HTMLElement.prototype.scrollIntoView = () => {};
 globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 window.confirm = () => true;
@@ -283,6 +285,26 @@ test('Sonic Boom preselects all four source genres after the catalog loads and s
   assert.deepEqual(payload.standardGenres, ['Garage Rock','Punkrock','Rock’n’Roll','Indie']);
   assert.ok(document.querySelector('[role="dialog"]'));
   assert.equal(control('Partyreihe zuordnen').value, 'approved');
+});
+
+for (const [title, suggestedSeriesName] of [
+  ['The Sonic Boom mit JAY TRIPLECHAIR & FRIENDS','The Sonic Boom'],
+  ['BallroomBlitz! mit DER GRAUE KLAUS','BallroomBlitz!'],
+  ['BallroomBlitz! mit ROMAN EMPIRE','BallroomBlitz!'],
+  ['Shake Appeal mit BEATMIKE, FACE B & HOLLY WOOD','Shake Appeal'],
+  ['Tanzen mit Freunden','Tanzen mit Freunden'],
+]) test(`portfolio stem proposal stays editable and preserves original title: ${title}`, async () => {
+  await mount(candidate({title,suggestedSeriesName,assessment:assessment({recognition:{status:'NONE',parties:[]}})}));
+  await openReview();
+  assert.equal(control('Name im Portfolio').value, suggestedSeriesName);
+  assert.ok(dialog().textContent.includes(title));
+  change(control('Name im Portfolio'), 'Manuell bestätigte Reihe');
+  candidates = candidates.map(item => ({...item,suggestedSeriesName:'Späterer Vorschlag'}));
+  await settle(() => poll());
+  assert.equal(control('Name im Portfolio').value, 'Manuell bestätigte Reihe');
+  change(control('Standard-Startuhrzeit'), '22:00');
+  await settle(() => button('Ins Portfolio übernehmen', dialog()).click());
+  assert.equal(JSON.parse(calls.find(call => call.url.endsWith('/portfolio') && call.method === 'POST').body).name, 'Manuell bestätigte Reihe');
 });
 
 test('genre defaults use current candidate source names and confirmed suggestions but preserve an empty manual selection', async () => {

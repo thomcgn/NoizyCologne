@@ -60,6 +60,7 @@ public class DiscoveryEvaluationService {
         Set<String> standards=new LinkedHashSet<>();
         for (var detected:recognition.parties()) for (var party:rules.parties()) if (party.getId().equals(detected.id())) standards.addAll(party.getStandardGenres());
         if (row.get("party_id") instanceof String selected) for (var party:rules.parties()) if (party.getId().equals(selected)) standards.addAll(party.getStandardGenres());
+        result.put("suggestedSeriesName",PartySeriesRecognition.suggestedName(event.title()));
         if(keyword!=null) result.put("keywordWarning",keyword.explanation());
         result.put("reported_location",event.location());
         result.put("genreCoverage",GenreCoverage.assess(event,rules.coverageGenres(),standards));

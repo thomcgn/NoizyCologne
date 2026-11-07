@@ -120,3 +120,68 @@ Katalogreihenfolge und ein Testdaten-Duplikat wurden korrigiert; abschließend
 keine Warnungen. Mindestens 7.454 MiB RAM verfügbar, kein Speicherabbruch.
 `git diff --check` erfolgreich. Abschlussprüfung über den regulären QUICK-Hook;
 FULL bleibt GitHub Actions vorbehalten. Keine lokalen Builds oder Browserläufe.
+
+## Nachkorrektur: Stammname und wechselndes Line-up trennen (07.11.2026)
+
+Bestandsaufnahme: Katalognamen und bestätigte Aliase wurden bereits innerhalb
+längerer Eventtitel erkannt; gepflegte Standardgenres wurden wiederverwendet.
+Der Aufnahmedialog schlug dagegen den vollständigen Eventtitel als Reihennamen
+vor. Die API liefert jetzt einen editierbaren `suggestedSeriesName`. Eine
+abgesetzte, großgeschriebene Line-up-Angabe nach „mit“, „with“ oder „feat.“ wird
+bei gemischt geschriebenem Stammnamen nur für diesen Vorschlag abgetrennt.
+Uneindeutige Titel bleiben vollständig als editierbarer Vorschlag erhalten;
+keine pauschale Entfernung von „mit“, keine automatische Änderung bestehender
+Namen oder Aliase. Der Dialog erklärt die manuelle Prüfung. Namensänderungen im
+Formular bleiben beim Polling erhalten; die bestätigte Eingabe wird gespeichert.
+
+Originaltitel und Rohdaten bleiben unverändert. Neue Kalenderübernahmen erhalten
+den vollständigen Titel zusätzlich in ihren Notizen. Bei zwei offenen Vorschlägen
+mit wechselndem Line-up verwendet die zweite Portfolioaufnahme eine inzwischen
+angelegte passende Reihe und ordnet sie tatsächlich zu; gepflegte Standardgenres
+werden nicht überschrieben. Eine abweichende manuelle Zuordnung bleibt geschützt.
+Keine Änderung der Eventidentität, Termintrennung oder Importbedingungen.
+
+Gezielte Prüfungen des Erweiterungsstands:
+
+- javac-Haupt-/Testkompilierung erfolgreich; sieben DiscoveryAssessment-Unit-Tests
+  bestanden, einschließlich aller vier Beispiele, Stamm-/Aliaserkennung und
+  Standardgenres sowie unverändertem „Tanzen mit Freunden“/„Tanz mit MIR“.
+- Drei Integrationstests gegen eine frische isolierte PostgreSQL-Datenbank
+  bestanden: wechselnde Line-ups/eine Reihe/getrennte Termine/Originaltitel/
+  Standardgenres/Alias/geschützte manuelle Zuordnung sowie bestehende
+  Portfolioaufnahme und Quellenkonflikt mit geschützter Ablehnung. Container
+  anschließend entfernt.
+- Elf gezielte Frontendtests bestanden: die vier editierbaren Namensvorschläge,
+  unveränderter uneindeutiger Titel, manuelle Eingabe über Polling bis zum
+  Speichern, aktive Eventgenres für neue und Standardgenres für bekannte Reihen.
+- Intensive Schritte seriell mit Speicherwächter; mindestens 6.775 MiB RAM
+  verfügbar, kein Speicherabbruch. `git diff --check` erfolgreich. Abschluss
+  über regulären QUICK-Hook, FULL ausschließlich in GitHub Actions. Keine
+  lokalen Produktionsbuilds, Browserprüfungen oder Datenmigrationen.
+
+Ein erster QUICK-Lauf stoppte vor dem Commit wegen einer Nulltyp-Warnung im
+neuen Integrationstest. Der Katalogwert wird jetzt ausdrücklich auf NULL geprüft;
+die fachlichen Datenbankergebnisse bleiben dadurch unverändert gültig.
+
+QUICK für `7819e7b` erfolgreich: javac/ECJ ohne Projektdiagnosen, 131 Backendtests
+bestanden und ein optionaler privater Replay mangels Snapshot übersprungen;
+TypeScript/ESLint ohne Diagnosen, 107 Frontendtests bestanden. Während der Arbeit
+wurden PR #21 und #22 extern gemergt. Der aktuelle Main-Stand wurde deshalb in
+den Feature-Branch übernommen; Ausschlusshinweis und Namensvorschlag sowie beide
+Ergänzungen des Kandidatentyps bleiben gemeinsam erhalten. Der Vergleich mit
+Main enthält weiterhin ausschließlich die zehn Dateien dieser Erweiterung.
+Die drei isolierten Datenbanktests und elf gezielten Frontendtests wurden nach
+dieser Synchronisierung erneut erfolgreich ausgeführt; Testcontainer entfernt,
+keine Speichergrenze erreicht. Die unveränderten Unit-Ergebnisse bleiben gültig;
+der reguläre Hook prüft den zusammengeführten Stand vor dem Synchronisierungscommit.
+Für die Erweiterung ist ein Folge-PR erforderlich, da #22 bereits gemergt ist.
+
+QUICK des synchronisierten Stands `62c8931` bestand mit 143 Backendtests und
+einem optionalen privaten Replay-Skip sowie 110 Frontendtests. Der komplette
+Frontendlauf zeigte zusätzlich einen jsdom-Laufzeitfehler im aus Main übernommenen
+Konfigurationslink-Test: `scrollIntoView` ist dort nicht implementiert. Die bereits
+betroffene Testdatei stellt die fehlende DOM-Methode nun ausdrücklich als No-op
+bereit; keine Konsolenunterdrückung und keine Änderung am Produktionscode. Die
+beiden betroffenen Schlagwort-/Konfigurationsdialogtests bestehen damit ohne
+Laufzeitfehler. Ein weiterer regulärer QUICK-Hook prüft den finalen Frontendstand;
+die unveränderten Backend- und isolierten Datenbankergebnisse bleiben gültig.
