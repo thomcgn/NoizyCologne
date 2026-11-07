@@ -62,6 +62,23 @@ public class EventCandidateProcessor {
             store.jdbc().update("UPDATE discovery_geo_events SET candidate_id=? WHERE id=?",old.get("id"),finding.id());
         }
         var result=old!=null && keywords.released(old) ? evaluator.evaluate(old,evaluator.rules()) : evaluator.evaluate(event,venueId,venueName,false,evaluator.rules());
+        // Keyword exclusion takes precedence over an unresolved legacy manual
+        // review. It never changes imported/rejected entries or explicit releases.
+        if(old!=null && venueId==null && old.get("calendar_entry_id")==null
+            && "MANUAL".equals(old.get("decision_origin"))
+            && List.of("NEEDS_REVIEW","NEEDS_INQUIRY","READY").contains(old.get("status"))
+            && keywords.match(event)!=null && !keywords.released(old)) {
+            String why=keywords.match(event).explanation();
+            store.jdbc().update("""
+                UPDATE discovery_candidates SET status='IGNORED',decision_origin='AUTOMATIC',reason=?,
+                automatic_reason=?,raw_event=?,fingerprint=?,evidence=?,source_url=?,
+                matcher_version=?,evaluated_at=now(),updated_at=now() WHERE id=?
+                """,why,why,evaluator.raw(event),fingerprint,event.evidence(),
+                SafeUrls.parse(event.url()).toString(),EventMatcher.VERSION,old.get("id"));
+            keywords.remember((String)old.get("id"),event);
+            store.audit((String)old.get("id"),(String)old.get("status"),operation);
+            return;
+        }
         if (old!=null && (!"AUTOMATIC".equals(old.get("decision_origin")) || "REJECTED".equals(old.get("status")))) {
             if (!fingerprint.equals(old.get("fingerprint")) || !EventMatcher.VERSION.equals(old.get("matcher_version"))) {
                 store.jdbc().update("UPDATE discovery_candidates SET raw_event=?,fingerprint=?,evidence=?,source_url=?,automatic_reason=?,matching_class=?,matcher_version=?,evaluated_at=now(),last_evaluation_id=?,updated_at=now() WHERE id=?",
