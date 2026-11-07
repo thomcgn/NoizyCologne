@@ -36,6 +36,34 @@ public class DiscoveryKeywordService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Schlagwortregel fehlt");
         return id;
     }
+    public record BatchSave(int created,int alreadyPresent,List<@NonNull String> skipped) { }
+    /** Bulk entry is atomic; identical normalized terms do not create duplicate rules. */
+    @Transactional
+    public BatchSave saveBatch(List<@NonNull String> input,@Nullable String commonReason,boolean enabled) {
+        if(input.isEmpty() || input.size()>100) throw new IllegalArgumentException("1 bis 100 Schlagwörter erforderlich");
+        String shared=commonReason==null ? "" : commonReason.trim();
+        if(shared.length()>1000) throw new IllegalArgumentException("Ausschlussgrund ist zu lang");
+        Map<String,String> requested=new LinkedHashMap<>();
+        for(String value:input) {
+            if(value==null || value.isBlank() || value.length()>200 || value.contains(","))
+                throw new IllegalArgumentException("Ungültiges Schlagwort: maximal 200 Zeichen, ohne Komma");
+            String term=value.trim(),normalized=EventNormalizer.text(term);
+            if(normalized.isBlank()) throw new IllegalArgumentException("Leeres Schlagwort");
+            requested.putIfAbsent(normalized,term);
+        }
+        store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
+        Set<String> known=new HashSet<>();
+        for(var row:list()) known.add(EventNormalizer.text((String)row.get("keyword")));
+        int created=0;List<@NonNull String> skipped=new ArrayList<>();
+        for(var entry:requested.entrySet()) {
+            if(!known.add(entry.getKey())) {skipped.add(entry.getValue());continue;}
+            String term=entry.getValue(),reason=shared.isBlank() ? "Automatischer Ausschluss: "+term : shared;
+            store.jdbc().update("INSERT INTO discovery_keyword_rules(id,keyword,reason,enabled) VALUES (?,?,?,?)",
+                UUID.randomUUID().toString(),term,reason,enabled);
+            created++;
+        }
+        return new BatchSave(created,skipped.size(),List.copyOf(skipped));
+    }
     public @Nullable Hit match(EventExtractor.Event event) {
         String text=" "+EventNormalizer.text(event.title()+" "+event.evidence())+" ";
         for(var row:list()) {
