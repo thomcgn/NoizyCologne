@@ -117,3 +117,51 @@ FULL bleibt vor Integration für den exakt akzeptierten Commit in GitHub CI
 verpflichtend. CLI-Ergebnisse sind kein Nachweis der Live-IDE-Diagnosen.
 Kein eigenständiger Merge oder Deployment. Der Feature-Branch behält seine
 bestehende Historie; die beiden neueren main-Commits wurden nicht übernommen.
+
+## Kalender-Tagesvorschau (07.11.2026)
+
+Feature-Branch `feat/calendar-day-preview`, ohne neuen Worktree auf aktuellem
+`origin/main` begonnen; der Arbeitsbaum war sauber. Ausschließlich Frontend:
+Die Monatszellen behalten maximal zwei Terminkennzeichnungen und bieten für
+jeden belegten Tag „Alle X ansehen“. Raster und Vorschau verwenden dieselben
+vorhandenen Such-/Art-/Locationfilter. Das vorhandene DashboardModal zeigt alle
+Tageseinträge, stabile Uhrzeitsortierung mit unbekannten Zeiten am Ende,
+Partyfarben, Locations, Absagen und getrennt bezeichnete Location-Sperren.
+Auswahl schließt die Vorschau und verwendet die vorhandenen Flyerdetails.
+
+Ein gemeinsamer ref-basierter Timer für den Monat öffnet nach 400 ms Maus-Hover
+mit passender Gerätefähigkeit beziehungsweise 550 ms primärem Touch-/Pen-Druck.
+Verlassen, Bewegung über acht Pixel, Scrollen, Pointer-Abbruch/-Loslassen,
+Fensterblur, Ansichts-/Filter-/Datenwechsel und Unmount verwerfen wartende Timer.
+Nach dem Öffnen bleibt das Modal erhalten; eine geometrische Sperre verhindert
+erneutes Hover-Öffnen über demselben Tag nach dem Schließen. Erkannte Long-Presses
+unterdrücken ihren Folgeklick/Doppelklick und ihr Kontextmenü, ohne native
+Scrollgesten oder direkt angetippte Termine umzubelegen. Tagesauswahl und
+Vorschauaktion sind eigenständige Buttons innerhalb einer nicht interaktiven
+Gruppe. Keine zusätzlichen API-Aufrufe oder Bibliotheken.
+
+Gezielte jsdom-Prüfung: zunächst 49 von 50 Tests bestanden; der bestehende
+Editor-Test verwendete einen zu weit gefassten Selektor für gedrückte Buttons.
+Dieser ist jetzt auf den tatsächlichen Dialog begrenzt. Die ersten acht neuen
+Gesten-/Vorschautests bestanden auch im Folgelauf. Der zusätzliche Filtertest
+verwendete eine nicht vorhandene Select-Option. Die anschließende fehlgeschlagene
+Assertion gab ein umfangreiches React-DOM-Objekt aus; der Speicherwächter brach
+bei 2.420 MiB Prozessgruppen-RSS und noch 6.627 MiB verfügbarem System-RAM ab
+(Exit 75). Kein automatischer Neustart. Auswahloption und Assertion-Ausgaben sind
+korrigiert; die gezielten Prüfungen sowie TypeScript/ESLint und der reguläre
+QUICK-Commit-Hook wurden bis zur ausdrücklichen Freigabe angehalten.
+Prüfprotokolle: `.quality/calendar-visibility/day-preview-*.log`.
+Keine Builds, Browser, Backend-/Datenbankänderungen, eigenen Merges oder Deployments.
+
+Nach ausdrücklicher Freigabe gezielt fortgesetzt: alle neun neuen Vorschautests
+bestanden (`node --test --test-concurrency=1 tests/calendar-day-preview.test.mjs`).
+Danach zwölf bestehende Kalender-/Fokus-/Navigationsregressionen bestanden
+(`node --test --test-concurrency=1 --test-name-pattern='calendar|Kalendereinträge'
+ tests/calendar-navigation.test.mjs tests/dashboard-modal.test.mjs`). Beide Läufe
+seriell mit Speicherprüfung und laufendem Wächter; nach Wiederaufnahme mindestens
+8.667 MiB verfügbar, kein weiterer Speicherabbruch. Keine vorher bestandenen
+unbetroffenen Testfälle zusätzlich manuell wiederholt. Der abschließende reguläre
+QUICK-Commit-Hook umfasst die nötigen Typ-/ESLint-/Frontendprüfungen; kein manuell
+vorweggenommener QUICK-Lauf. FULL bleibt für den akzeptierten Commit GitHub CI
+vorbehalten. jsdom und CLI-Prüfungen ersetzen keinen Nachweis realer Touchgeräte
+oder der Live-IDE-Diagnosen.

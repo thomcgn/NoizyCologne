@@ -209,6 +209,12 @@ html[data-density="compact"] .cc-description { max-width: 75ch; }
 .cc-color-dot { width: 8px; height: 8px; flex-shrink: 0; border: 1px solid var(--line-strong); border-radius: 50%; }
 .cc-drawer .cc-entry-form { margin: 0; border: 0; padding: 0; }
 .cc-drawer .dashboard-modal-content { min-height: 0; overscroll-behavior: contain; }
+.dashboard-modal:has(.calendar-day-preview) { width: min(560px, 100%); }
+.dashboard-modal:has(.calendar-day-preview) .dashboard-modal-content { overflow-x: hidden; }
+.calendar-day-preview { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; min-width: 0; }
+.calendar-day-preview-entry { display: grid; gap: 4px; width: 100%; min-width: 0; padding: 12px; text-align: left; overflow-wrap: anywhere; border: 1px solid var(--line); border-left-width: 3px; border-radius: 8px; background: var(--surface); color: var(--foreground); }
+.calendar-day-preview-entry:hover { background: var(--surface-muted); }
+.calendar-day-preview-entry:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 .cc-search-trigger kbd { color: var(--muted); font-size: 0.65rem; }
 .cc-command-input { width: 100%; }
 .cc-command-results { margin-top: 18px; }

@@ -761,7 +761,7 @@ test('calendar table keeps chronological order, cancellations and closure/locati
   assert.match(document.querySelector('[role="dialog"]').textContent, /Location-Sperre/);
   click(button('Bearbeiten'));
   assert.equal(document.querySelector('[role="dialog"] select').value, 'other');
-  assert.equal(document.querySelector('button[aria-pressed="true"]').textContent.trim(), 'Location-Sperre');
+  assert.equal(document.querySelector('[role="dialog"] button[aria-pressed="true"]').textContent.trim(), 'Location-Sperre');
 });
 
 for (const [file, props] of [['portfolio/page.tsx', {standalone: true}], ['portfolio/akteure/page.tsx', {}], ['kalender/page.tsx', {}]]) {
