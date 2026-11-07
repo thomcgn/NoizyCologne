@@ -15,13 +15,17 @@ export default function DiscoveryGeography({data,busy,error,action,onReevaluate}
  const outsideCount=data?.counts?.OUTSIDE??outside.length;
  const [selected,setSelected]=useState<GeographyItem|null>(null);
  const [visible,setVisible]=useState(20);
- return <section className="discovery-section" aria-label="Standortklärung"><h2>Standortklärung <span className="discovery-count">{data?pendingCount:"–"}</span></h2><p>Nur nachweislich in der Stadt Köln stattfindende Veranstaltungen gelangen in den normalen Prüfbereich. Ungeklärte Standorte werden hier separat geführt.</p>
+ const [expanded,setExpanded]=useState(false);
+ return <section className="discovery-section" aria-label="Standortklärung"><details className="discovery-geography" open={expanded} onToggle={event=>setExpanded(event.currentTarget.open)}>
+   <summary aria-expanded={expanded}><h2 className="inline">Standortklärung <span className="discovery-count">{data?pendingCount:"–"}</span></h2></summary>
+   <div className="discovery-history-content"><p>Nur nachweislich in der Stadt Köln stattfindende Veranstaltungen gelangen in den normalen Prüfbereich. Ungeklärte Standorte werden hier separat geführt.</p>
    <button type="button" className="discovery-button mt-3" disabled={busy} onClick={onReevaluate}>Gespeicherte Standorte neu bewerten</button>
    {!pending.length?<p className="cc-empty">{data?"Keine ungeklärten Standortfunde.":error?"Standorte derzeit nicht verfügbar.":"Standorte werden geladen …"}</p>:<div className="mt-3 space-y-3">{pending.slice(0,visible).map(item=><article key={item.id} className="rounded-lg border p-3"><h3 className="break-words font-semibold">{item.title}</h3><p>{item.location||"Location unbekannt"}{item.place?.city?` · ${item.place.city}`:""}</p><p>{item.reason}</p><div className="mt-2 flex flex-wrap gap-2"><a className="cc-button" href={sourceLink(item.source_url)} target="_blank" rel="noreferrer">Ortsbeleg öffnen</a><button type="button" disabled={busy} className="cc-button" onClick={()=>setSelected(item)}>Standort klären</button></div></article>)}</div>}
    {pendingCount>pending.length&&<p>Zeigt {pending.length} von {pendingCount} Standortfunden. Nach dem Klären werden weitere Funde nachgeladen.</p>}
    {pending.length>visible&&<button className="discovery-button" onClick={()=>setVisible(value=>value+20)}>Weitere Standorte anzeigen</button>}
    <details className="mt-4"><summary>Außerhalb Kölns ({outsideCount})</summary><p>Diese Funde werden vor Party- und Genreprüfung ausgeschlossen. Vorhandene Teamentscheidungen und Termine bleiben erhalten.</p>{outsideCount>outside.length&&<p>Anzeige der letzten {outside.length} von {outsideCount} auswärtigen Funden.</p>}{outside.map(item=><article className="mt-3 break-words border-t pt-2" key={item.id}><strong>{item.title}</strong><p>{item.location} · {item.place?.city||item.reason}</p><a className="underline" href={sourceLink(item.source_url)} target="_blank" rel="noreferrer">Ortsbeleg öffnen</a></article>)}</details>
    {selected&&<LocationConfirmation key={selected.id} item={selected} onClose={()=>setSelected(null)} busy={busy} error={error} action={action}/>}
+   </div></details>
  </section>;
 }
 function LocationConfirmation({item,onClose,busy,error,action}:{item:GeographyItem;onClose:()=>void;busy:boolean;error:string;action:(work:()=>Promise<void>)=>Promise<void>}) {

@@ -106,3 +106,21 @@ offline gelesen: strukturierter Ort Chemnitz → OUTSIDE. Kein neuer Live-Portal
 kein Datenbankzugriff für dieses Beispiel und keine Produktionsdatenänderung. Der Grenzsnapshot
 ist versioniert; Änderungen daran benötigen erneute Regressionen. FULL in CI für
 den exakt akzeptierten Commit bleibt vor Merge erforderlich.
+
+## UI-Nachtrag: Standortklärung als Accordion (07.11.2026)
+
+Bestand: Der bisher offene Standortbereich verwendet bereits aktuelle API-Zähler
+und lädt sie nach einer bestätigten Zuordnung neu. Backend und Datenmodell bleiben
+unverändert. Umsetzung: Der gesamte Bereich ist standardmäßig geschlossen und
+nutzt natives `details`/`summary` mit `aria-expanded`, vorhandenen Fokuszuständen
+und dem bestehenden Accordion-Stil einschließlich 44-px-Kopfbereich. Titel und
+Zähler bleiben sichtbar; alle Inhalte und Aktionen bleiben beim Zuklappen erhalten.
+
+Gezielte Prüfung: `node --test --test-concurrency=1 --test-name-pattern='geography|source'
+frontend/tests/discovery-assessment.test.mjs` – 14 Tests bestanden. Abgedeckt sind
+geschlossener Anfangszustand, fokussierbarer Header, Öffnen/Schließen,
+`aria-expanded`, unveränderte Inhalte/Aktionen, aktualisierter Zähler nach Zuordnung
+und erhaltene Formulareingaben bei Fehlern. Speicherwächter: mindestens 7.945 MiB
+verfügbar, kein Abbruch. Abschluss über den regulären QUICK-Commit-Hook; FULL
+bleibt GitHub Actions vorbehalten. Keine lokalen Builds, Browserprüfungen oder
+Datenbanktests für diese UI-Anpassung; keine Live-Geräte-/IDE-Abnahme.
