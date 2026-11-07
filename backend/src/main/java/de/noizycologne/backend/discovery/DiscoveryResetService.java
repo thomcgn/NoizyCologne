@@ -57,20 +57,27 @@ public class DiscoveryResetService {
                 if(!geo.inside() && keywords.match(evaluator.event(row))==null && !"KEYWORD_FILTER".equals(row.get("filter_origin"))){if(!"AUTOMATIC".equals(row.get("decision_origin")))preserved++;if(manualRejection)protectedRejections++;continue;}
             }
             boolean changedRelease=keywords.releaseChanged(row);
-            if (!selected(row,selection) && !changedRelease) {
+            // An active exclusion is final for an unassigned venue even if a legacy
+            // proposal was previously opened for manual review. Explicit releases
+            // and already rejected/imported entries remain protected.
+            boolean keywordAutoExclude=row.get("venue_id")==null
+                && row.get("calendar_entry_id")==null
+                && List.of("NEEDS_REVIEW","NEEDS_INQUIRY","READY").contains(row.get("status"))
+                && keywords.match(evaluator.event(row))!=null && !keywords.released(row);
+            if (!selected(row,selection) && !changedRelease && !keywordAutoExclude) {
                 if(manualRejection) protectedRejections++;
                 if (!"AUTOMATIC".equals(row.get("decision_origin"))) preserved++;
                 continue;
             }
             var result=evaluator.evaluate(row,rules);
             boolean manual="MANUAL".equals(row.get("decision_origin"));
-            String status=manual && !changedRelease ? "NEEDS_REVIEW" : result.status();
+            String status=manual && !changedRelease && !keywordAutoExclude ? "NEEDS_REVIEW" : result.status();
             if(changedRelease && status.equals("READY")) status="NEEDS_REVIEW";
             var hit=keywords.match(evaluator.event(row));
             if(hit!=null && status.equals("IGNORED")) keywordExcluded++;
             if(hit!=null && row.get("venue_id")!=null) keywordReview++;
             if("KEYWORD_FILTER".equals(row.get("filter_origin")) && "IGNORED".equals(row.get("status")) && !status.equals("IGNORED")) keywordRestored++;
-            String reason=manual && !changedRelease ? "Manuell abgelehnt; ausdrücklich erneut zur Prüfung vorgelegt. "+result.reason() : result.reason();
+            String reason=manual && !changedRelease && !keywordAutoExclude ? "Manuell abgelehnt; ausdrücklich erneut zur Prüfung vorgelegt. "+result.reason() : result.reason();
             if (!manual && selection.mode()==Mode.RESCAN && status.equals("READY")) {
                 status="NEEDS_REVIEW";
                 reason="Neuer Abruf vor automatischer Übernahme erforderlich; "+reason;
@@ -107,6 +114,11 @@ public class DiscoveryResetService {
                 """,item.newStatus(),item.reason(),item.automaticReason(),item.classification(),item.partyId(),EventMatcher.VERSION,
                 item.oldStatus(),request.operationId().toString(),item.id());
             keywords.remember(item.id(),evaluator.event(before));
+            if("IGNORED".equals(item.newStatus()) && before.get("venue_id")==null
+                && "MANUAL".equals(before.get("decision_origin"))
+                && List.of("NEEDS_REVIEW","NEEDS_INQUIRY","READY").contains(before.get("status"))
+                && !keywords.released(before) && keywords.match(evaluator.event(before))!=null)
+                store.jdbc().update("UPDATE discovery_candidates SET decision_origin='AUTOMATIC' WHERE id=?",item.id());
             if(keywords.releaseChanged(before)) store.jdbc().update("UPDATE discovery_candidates SET keyword_release_version=?,decision_origin=? WHERE id=?",keywords.version(),item.newStatus().equals("IGNORED") ? "AUTOMATIC" : "MANUAL",item.id());
             // An explicitly reopened manual rejection stays manual and can never auto-import.
             store.audit(item.id(),item.oldStatus(),request.operationId().toString(),(String)before.get("matching_class"));
