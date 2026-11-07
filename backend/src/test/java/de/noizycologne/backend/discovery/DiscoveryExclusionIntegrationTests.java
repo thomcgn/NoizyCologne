@@ -49,6 +49,34 @@ class DiscoveryExclusionIntegrationTests {
         store.jdbc().update("INSERT INTO discovery_operations(id,kind,request_hash,matcher_version,status) VALUES (?,'KEYWORD_TEST','test','test','RUNNING')",id.toString());
         return new DiscoveryResetService.Request(DiscoveryResetService.Mode.ALL,false,null,preview.token(),id);
     }
+    @Test void keywordRulesOverrideOpenLegacyReviewForUnknownLocationButNeverConfirmedVenues() {
+        keywords.save(rule,"Release Party","Keine Release-Veranstaltungen",false);
+        var event=event("legacy-keyword","2027-02-13");
+        processor.processSpecial(portal,event,null);
+        String candidate=unassigned();
+        store.jdbc().update("UPDATE discovery_candidates SET status='NEEDS_REVIEW',decision_origin='MANUAL',dm_text='Vorherige Klärung' WHERE id=?",candidate);
+        keywords.save(rule,"Release Party","Keine Release-Veranstaltungen",true);
+        var preview=resets.preview(new DiscoveryResetService.Selection(DiscoveryResetService.Mode.ALL,false));
+        assertThat(preview.items().stream().anyMatch(item -> item.id().equals(candidate) && item.newStatus().equals("IGNORED"))).isTrue();
+        resets.apply(request());
+        assertThat(store.candidate(candidate)).containsEntry("status","IGNORED")
+            .containsEntry("decision_origin","AUTOMATIC")
+            .containsEntry("filter_origin","KEYWORD_FILTER")
+            .containsEntry("dm_text","Vorherige Klärung");
+        processor.processSpecial(portal,event,null);
+        assertThat(store.candidate(candidate)).containsEntry("status","IGNORED");
+
+        keywords.save(rule,"Release Party","Keine Release-Veranstaltungen",false);
+        var secondEvent=event("legacy-keyword-scan","2027-02-20");
+        processor.processSpecial(portal,secondEvent,null);
+        String secondId=requireNonNull(store.jdbc().queryForObject(
+            "SELECT id FROM discovery_candidates WHERE source_id=? AND event_date='2027-02-20'",String.class,portal));
+        store.jdbc().update("UPDATE discovery_candidates SET status='NEEDS_INQUIRY',decision_origin='MANUAL' WHERE id=?",secondId);
+        keywords.save(rule,"Release Party","Keine Release-Veranstaltungen",true);
+        processor.processSpecial(portal,secondEvent,null);
+        assertThat(store.candidate(secondId)).containsEntry("status","IGNORED")
+            .containsEntry("decision_origin","AUTOMATIC");
+    }
     @Test void unknownLocationIsPersistentlyFilteredAcrossScansAndTwoSourcesWithoutAuditDuplicates() {
         var event=event("https://organizer.example/events/release","2027-01-09");
         processor.processSpecial(portal,event,null);String id=unassigned();
