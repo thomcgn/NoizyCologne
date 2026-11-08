@@ -18,7 +18,6 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -60,7 +59,7 @@ public class FactoryResetService {
                                DiscoveryWorkLock discoveryWorkLock,
                                @Value("${noizy.media.root:./uploads}") String mediaRoot) {
         this.jdbc = jdbc;
-        this.transactions = new TransactionTemplate(transactionManager);
+        this.transactions = new TransactionTemplate(Objects.requireNonNull(transactionManager));
         this.discoveryWorkLock = discoveryWorkLock;
         this.mediaRoot = Path.of(mediaRoot).toAbsolutePath().normalize();
     }
@@ -171,14 +170,16 @@ public class FactoryResetService {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                 "Das Medienverzeichnis ist nicht sicher eingebunden oder nicht beschreibbar. Kein Reset.");
         try (Stream<Path> walk = Files.walk(mediaRoot)) {
-            List<@NonNull Path> entries = walk.filter(path -> !path.equals(mediaRoot)).toList();
+            List<@NonNull Path> entries = new ArrayList<>();
+            walk.filter(path -> !path.equals(mediaRoot))
+                .forEach(path -> entries.add(Objects.requireNonNull(path)));
             for (Path path : entries) {
                 if (!path.normalize().startsWith(mediaRoot) || Files.isSymbolicLink(path))
                     throw new IOException("Unsicherer Medienpfad");
             }
             long files = entries.stream().filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)).count();
             List<@NonNull Path> descending = new ArrayList<>(entries);
-            descending.sort(Comparator.comparingInt(Path::getNameCount).reversed());
+            descending.sort((first, second) -> Integer.compare(second.getNameCount(), first.getNameCount()));
             return new MediaInventory(List.copyOf(descending), files);
         } catch (IOException exception) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
