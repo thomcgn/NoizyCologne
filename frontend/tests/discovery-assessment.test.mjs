@@ -438,6 +438,37 @@ test('failed initial requests do not claim that Discovery is empty or up to date
 });
 
 
+test('Prüfbedarf starts collapsed, shows its live count and preserves review controls across toggles', async () => {
+  await mount([candidate({id:'review-a',title:'Alpha'}),candidate({id:'review-b',title:'Beta'})]);
+  const section=document.querySelector('section[aria-label="Prüfbedarf"]');
+  const accordion=section.querySelector('details.discovery-review');
+  const summary=accordion.querySelector('summary');
+  assert.ok(accordion);
+  assert.equal(accordion.open,false);
+  assert.equal(summary.getAttribute('aria-expanded'),'false');
+  assert.match(summary.textContent,/Prüfbedarf 2/);
+  assert.equal(document.querySelector('section[aria-label="Neue Partyreihen"] details'),null);
+
+  await settle(()=>summary.click());
+  assert.equal(accordion.open,true);
+  assert.equal(summary.getAttribute('aria-expanded'),'true');
+  const search=section.querySelector('input[type="search"]');
+  change(search,'Alpha');
+  assert.deepEqual([...section.querySelectorAll('[data-record-id]')].map(row=>row.dataset.recordId),['review-a']);
+
+  await settle(()=>summary.click());
+  assert.equal(accordion.open,false);
+  assert.equal(summary.getAttribute('aria-expanded'),'false');
+  candidates=[...candidates,candidate({id:'review-c',title:'Gamma'})];
+  await settle(()=>poll());
+  assert.match(summary.textContent,/Prüfbedarf 3/);
+  await settle(()=>summary.click());
+  assert.equal(accordion.open,true);
+  assert.equal(search.value,'Alpha');
+  assert.deepEqual([...section.querySelectorAll('[data-record-id]')].map(row=>row.dataset.recordId),['review-a']);
+  assert.ok(!calls.some(call=>['PUT','POST'].includes(call.method)));
+});
+
 test('Discovery search, sorting, genre filter and persisted card view preserve the candidate set', async () => {
   await mount([
     candidate({id: 'z', title: 'Zulu', genreCoverage: {percent: 50, matched: 1, total: 2, names: ['Indie']}}),
