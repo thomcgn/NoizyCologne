@@ -64,23 +64,23 @@ class FactoryResetIntegrationTests {
     @Test void a_invalidOrMissingServiceSecretCannotPreviewOrReset() throws Exception {
         mvc.perform(get("/internal/maintenance/factory-reset"))
             .andExpect(status().isForbidden());
-        mvc.perform(post("/internal/maintenance/factory-reset")
+        mvc.perform(java.util.Objects.requireNonNull(post("/internal/maintenance/factory-reset")
                 .header("X-Noizy-Reset-Key", "wrong")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"phrase\":\"Kompletter Reset\"}"))
+                .content("{\"phrase\":\"Kompletter Reset\"}")))
             .andExpect(status().isForbidden());
-        mvc.perform(post("/internal/maintenance/factory-reset")
+        mvc.perform(java.util.Objects.requireNonNull(post("/internal/maintenance/factory-reset")
                 .header("X-Noizy-Reset-Key", SECRET)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"phrase\":\"RESET\"}"))
+                .content("{\"phrase\":\"RESET\"}")))
             .andExpect(status().isBadRequest());
         assertThat(jdbc.queryForObject("SELECT count(*) FROM venues WHERE id=?",Long.class,venueId)).isEqualTo(1L);
     }
 
     @Test void b_previewIsReadOnlyAndReportsAllMediaAndDatabaseRows() throws Exception {
         Files.writeString(MEDIA.resolve("poster.jpg"), "fixture");
-        mvc.perform(get("/internal/maintenance/factory-reset")
-                .header("X-Noizy-Reset-Key", SECRET))
+        mvc.perform(java.util.Objects.requireNonNull(get("/internal/maintenance/factory-reset")
+                .header("X-Noizy-Reset-Key", SECRET)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.recordCount").isNumber())
             .andExpect(jsonPath("$.mediaFileCount").value(1));
@@ -92,10 +92,10 @@ class FactoryResetIntegrationTests {
         Files.writeString(MEDIA.resolve("protected.png"), "fixture");
         try (var lease = discoveryLock.tryAcquire()) {
             assertThat(lease).isNotNull();
-            mvc.perform(post("/internal/maintenance/factory-reset")
+            mvc.perform(java.util.Objects.requireNonNull(post("/internal/maintenance/factory-reset")
                     .header("X-Noizy-Reset-Key", SECRET)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .content("{\"phrase\":\"Kompletter Reset\"}"))
+                    .content("{\"phrase\":\"Kompletter Reset\"}")))
                 .andExpect(status().isConflict());
         }
         assertThat(Files.exists(MEDIA.resolve("protected.png"))).isTrue();
@@ -105,10 +105,10 @@ class FactoryResetIntegrationTests {
     @Test void d_schemaDriftFailsClosedWithoutDeletingAnything() throws Exception {
         jdbc.execute("CREATE TABLE factory_reset_unexpected_fixture(id integer)");
         try {
-            mvc.perform(post("/internal/maintenance/factory-reset")
+            mvc.perform(java.util.Objects.requireNonNull(post("/internal/maintenance/factory-reset")
                     .header("X-Noizy-Reset-Key", SECRET)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .content("{\"phrase\":\"Kompletter Reset\"}"))
+                    .content("{\"phrase\":\"Kompletter Reset\"}")))
                 .andExpect(status().isConflict());
             assertThat(jdbc.queryForObject("SELECT count(*) FROM venues WHERE id=?",Long.class,venueId)).isEqualTo(1L);
         } finally {
@@ -121,11 +121,11 @@ class FactoryResetIntegrationTests {
         Path nested = MEDIA.resolve("flyers");
         Files.createDirectories(nested);
         Files.writeString(nested.resolve("event.png"), "event");
-        long migrations = jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history",Long.class);
-        mvc.perform(post("/internal/maintenance/factory-reset")
+        long migrations = java.util.Objects.requireNonNull(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history",Long.class));
+        mvc.perform(java.util.Objects.requireNonNull(post("/internal/maintenance/factory-reset")
                 .header("X-Noizy-Reset-Key", SECRET)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"phrase\":\"Kompletter Reset\"}"))
+                .content("{\"phrase\":\"Kompletter Reset\"}")))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.deletedFiles").value(2))
             .andExpect(jsonPath("$.partial").value(false));
