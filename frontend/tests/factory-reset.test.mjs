@@ -23,7 +23,7 @@ function compile(path, imported = {}) {
   }).outputText;
   const compiledModule = { exports: {} };
   new Function('require', 'module', 'exports', output)(
-    name => imported[name] ?? require(name), module, compiledModule.exports,
+    name => imported[name] ?? require(name), compiledModule, compiledModule.exports,
   );
   return compiledModule.exports;
 }
