@@ -22,7 +22,13 @@ export default function KeywordRules({busy,action}: {busy:boolean;action:(work:(
     {error && <p role="alert">{error}</p>}
     <ul className="discovery-history-list">{rules.map(rule=><li key={rule.id}><div><strong>{rule.keyword}</strong><p>{rule.reason} · {rule.enabled ? "Aktiv" : "Inaktiv"}</p></div><button type="button" className="discovery-button" disabled={busy} onClick={()=>{setEditing(rule.id);setKeyword(rule.keyword);setReason(rule.reason);setEnabled(rule.enabled);}}>Bearbeiten: {rule.keyword}</button></li>)}</ul>
     {!editing && <form className="space-y-3 rounded-lg border border-white/15 p-3" onSubmit={event=>{event.preventDefault();
-      const terms=[...new Map(bulkKeywords.split(",").map(value=>value.trim()).filter(Boolean).map(value=>[value.toLocaleLowerCase("de-DE"),value])).values()];
+      const seen=new Set<string>();
+      const terms=bulkKeywords.split(",").map(value=>value.trim()).filter(value=>{
+        const key=value.toLocaleLowerCase("de-DE");
+        if(!value || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
       if(terms.length===0){setError("Bitte mindestens ein Schlagwort eintragen.");return;}
       if(terms.length>100){setError("Maximal 100 Schlagwörter pro Vorgang.");return;}
       setError("");
