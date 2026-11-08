@@ -7,6 +7,7 @@ export default function KeywordRules({busy,action}: {busy:boolean;action:(work:(
   const [rules,setRules]=useState<Rule[]>([]);
   const [editing,setEditing]=useState<string | null>(null);
   const [keyword,setKeyword]=useState("");
+  const [bulkKeywords,setBulkKeywords]=useState("");
   const [reason,setReason]=useState("");
   const [enabled,setEnabled]=useState(true);
   const [error,setError]=useState("");
@@ -17,14 +18,39 @@ export default function KeywordRules({busy,action}: {busy:boolean;action:(work:(
   },[]);
   function clear(){setEditing(null);setKeyword("");setReason("");setEnabled(true);}
   return <section className="mt-5 space-y-3" aria-label="Schlagwort-Ausschlüsse">
-    <h2>Schlagwort-Ausschlüsse</h2><p>Aktive Regeln gelten bei Suchläufen und „Neu bewerten“. Bestätigte Portfolio-Locations bleiben zur manuellen Prüfung. Nach Regeländerungen gespeicherte Funde über „Neu bewerten“ prüfen.</p>
+    <h2>Schlagwort-Ausschlüsse</h2><p>Kommagetrennte Schlagwörter werden bei unbekannten Locations automatisch archiviert. Bestätigte Portfolio-Locations bleiben zur manuellen Prüfung. Bereits gespeicherte Funde nach Regeländerungen über „Neu bewerten“ erneut auswerten.</p>
     {error && <p role="alert">{error}</p>}
     <ul className="discovery-history-list">{rules.map(rule=><li key={rule.id}><div><strong>{rule.keyword}</strong><p>{rule.reason} · {rule.enabled ? "Aktiv" : "Inaktiv"}</p></div><button type="button" className="discovery-button" disabled={busy} onClick={()=>{setEditing(rule.id);setKeyword(rule.keyword);setReason(rule.reason);setEnabled(rule.enabled);}}>Bearbeiten: {rule.keyword}</button></li>)}</ul>
-    <form className="space-y-3" onSubmit={event=>{event.preventDefault();void action(async()=>{await api(editing ? `/keyword-rules/${editing}` : "/keyword-rules",editing ? "PUT" : "POST",{keyword,reason,enabled});setRules(await api<Rule[]>("/keyword-rules"));clear();});}}>
+    {!editing && <form className="space-y-3 rounded-lg border border-white/15 p-3" onSubmit={event=>{event.preventDefault();
+      const seen=new Set<string>();
+      const terms=bulkKeywords.split(",").map(value=>value.trim()).filter(value=>{
+        const key=value.toLocaleLowerCase("de-DE");
+        if(!value || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      if(terms.length===0){setError("Bitte mindestens ein Schlagwort eintragen.");return;}
+      if(terms.length>100){setError("Maximal 100 Schlagwörter pro Vorgang.");return;}
+      setError("");
+      void action(async()=>{const result=await api<{created:number;alreadyPresent:number}>("/keyword-rules/batch","POST",{keywords:terms,reason,enabled});
+        setRules(await api<Rule[]>("/keyword-rules"));setBulkKeywords("");setReason("");setEnabled(true);
+        if(result.alreadyPresent) setError(`${result.alreadyPresent} bereits vorhandene Schlagwörter wurden übersprungen.`);
+      });
+    }}>
+      <label className="block">Schlagwörter (durch Komma getrennt)
+        <textarea className="cc-input" required rows={3} maxLength={16000} placeholder="Karneval, B2B, Ausverkauft, Jecke, Release Party" value={bulkKeywords} onChange={event=>setBulkKeywords(event.target.value)} />
+      </label>
+      <label className="block">Gemeinsamer Ausschlussgrund (optional)
+        <input className="cc-input" maxLength={1000} placeholder="Leer lassen für individuellen Grund je Schlagwort" value={reason} onChange={event=>setReason(event.target.value)}/>
+      </label>
+      <label className="block"><input type="checkbox" checked={enabled} onChange={event=>setEnabled(event.target.checked)} /> Aktiv</label>
+      <button type="submit" className="discovery-button" disabled={busy}>Schlagwörter gesammelt hinzufügen</button>
+    </form>}
+    {editing && <form className="space-y-3" onSubmit={event=>{event.preventDefault();void action(async()=>{await api(`/keyword-rules/${editing}`,"PUT",{keyword,reason,enabled});setRules(await api<Rule[]>("/keyword-rules"));clear();});}}>
       <label className="block">Schlagwort / Wortgruppe<input className="cc-input" required maxLength={200} value={keyword} onChange={event=>setKeyword(event.target.value)} /></label>
       <label className="block">Ausschlussgrund<input className="cc-input" required maxLength={1000} value={reason} onChange={event=>setReason(event.target.value)} /></label>
       <label className="block"><input type="checkbox" checked={enabled} onChange={event=>setEnabled(event.target.checked)} /> Aktiv</label>
-      <button type="submit" className="discovery-button" disabled={busy}>{editing ? "Regel speichern" : "Regel hinzufügen"}</button>{editing && <button type="button" className="discovery-button" onClick={clear}>Bearbeiten abbrechen</button>}
-    </form>
+      <button type="submit" className="discovery-button" disabled={busy}>Regel speichern</button><button type="button" className="discovery-button" onClick={clear}>Bearbeiten abbrechen</button>
+    </form>}
   </section>;
 }

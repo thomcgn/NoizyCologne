@@ -93,8 +93,20 @@ async function mount(item, failInitial = false) {
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url, ...options });
     if(url==='/api/v1/discovery/keyword-rules' && (!options.method || options.method==='GET'))return new Response(JSON.stringify(keywordRows));
+    if(url==='/api/v1/discovery/keyword-rules/batch' && options.method==='POST'){
+      const body=JSON.parse(options.body);
+      const existing=new Set(keywordRows.map(row=>row.keyword.toLowerCase()));
+      let created=0,alreadyPresent=0;
+      for(const keyword of body.keywords){
+        if(existing.has(keyword.toLowerCase())){alreadyPresent++;continue;}
+        keywordRows.push({id:`keyword-test-${keywordRows.length}`,keyword,reason:body.reason || `Automatischer Ausschluss: ${keyword}`,enabled:body.enabled});created++;
+        existing.add(keyword.toLowerCase());
+      }
+      return new Response(JSON.stringify({created,alreadyPresent,skipped:[]}));
+    }
     if(url.startsWith('/api/v1/discovery/keyword-rules') && ['POST','PUT'].includes(options.method)){
-      const rule={id:'keyword-test',...JSON.parse(options.body)};keywordRows=[rule];return new Response(JSON.stringify({id:rule.id}));
+      const rule={id:'keyword-test',...JSON.parse(options.body)};keywordRows=options.method==='PUT' ? keywordRows.map(item=>item.id===url.split('/').pop() ? {...item,...rule,id:item.id} : item) : [...keywordRows,rule];
+      return new Response(JSON.stringify({id:rule.id}));
     }
     if (url === '/api/v1/genres') return new Response(JSON.stringify(genreRows));
     if (url.endsWith('/geography') && !failInitial) return new Response(JSON.stringify({items:geoRows}));
@@ -131,7 +143,9 @@ function control(label) {
 function change(element, value) {
   act(() => {
     element.focus();
-    const prototype = element.tagName === 'SELECT' ? dom.window.HTMLSelectElement.prototype : dom.window.HTMLInputElement.prototype;
+    const prototype = element.tagName === 'SELECT' ? dom.window.HTMLSelectElement.prototype
+      : element.tagName === 'TEXTAREA' ? dom.window.HTMLTextAreaElement.prototype
+      : dom.window.HTMLInputElement.prototype;
     Object.getOwnPropertyDescriptor(prototype, 'value').set.call(element, value);
     element.dispatchEvent(new Event(element.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
   });
@@ -840,17 +854,21 @@ test('genre-catalog errors and failed creation preserve the inputs and selected 
   assert.equal(emo.checked,false);
 });
 
-test('keyword rules start empty, persist a reason and can be edited and deactivated',async()=>{
+test('comma-separated keyword rules are created together and individually editable',async()=>{
  await mount(candidate());await settle(()=>button('Quellen & Konfiguration').click());
  const section=document.querySelector('[aria-label="Schlagwort-Ausschlüsse"]');assert.ok(section);assert.equal(keywordRows.length,0);
- const field=label=>[...section.querySelectorAll('label')].find(item=>item.textContent.trim().startsWith(label)).querySelector('input');
- change(field('Schlagwort / Wortgruppe'),'B2B');change(field('Ausschlussgrund'),'Keine B2B-Veranstaltungen');
+ const field=label=>[...section.querySelectorAll('label')].find(item=>item.textContent.trim().startsWith(label)).querySelector('input, textarea');
+ await settle(()=>change(field('Schlagwörter (durch Komma getrennt)'),'Karneval, B2B, Ausverkauft, Jecke, b2b'));
  await settle(()=>section.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
- assert.equal(keywordRows.length,1);assert.equal(keywordRows[0].keyword,'B2B');assert.equal(keywordRows[0].enabled,true);
- await settle(()=>button('Bearbeiten: B2B',section).click());assert.equal(field('Ausschlussgrund').value,'Keine B2B-Veranstaltungen');
+ assert.deepEqual(keywordRows.map(row=>row.keyword),['Karneval','B2B','Ausverkauft','Jecke']); 
+ assert.ok(keywordRows.every(row=>row.enabled && row.reason.startsWith('Automatischer Ausschluss: ')));
+ assert.ok(calls.some(call=>call.method==='POST' && call.url.endsWith('/keyword-rules/batch')));
+ await settle(()=>button('Bearbeiten: B2B',section).click());
+ await settle(()=>change(field('Ausschlussgrund'),'B2B gesperrt'));
  await settle(()=>field('Aktiv').click());
- await settle(()=>section.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
- assert.equal(keywordRows[0].enabled,false);assert.ok(calls.some(call=>call.method==='PUT' && call.url.endsWith('/keyword-rules/keyword-test')));
+ await settle(()=>section.querySelectorAll('form')[0].dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ assert.equal(keywordRows.find(row=>row.keyword==='B2B').enabled,false);
+ assert.ok(calls.some(call=>call.method==='PUT' && call.url.endsWith('/keyword-rules/keyword-test-1')));
 });
 
 test('keyword warnings on a confirmed venue stay visible in review rather than new-series promotion',async()=>{
