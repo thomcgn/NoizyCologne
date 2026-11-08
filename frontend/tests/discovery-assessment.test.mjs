@@ -143,7 +143,9 @@ function control(label) {
 function change(element, value) {
   act(() => {
     element.focus();
-    const prototype = element.tagName === 'SELECT' ? dom.window.HTMLSelectElement.prototype : dom.window.HTMLInputElement.prototype;
+    const prototype = element.tagName === 'SELECT' ? dom.window.HTMLSelectElement.prototype
+      : element.tagName === 'TEXTAREA' ? dom.window.HTMLTextAreaElement.prototype
+      : dom.window.HTMLInputElement.prototype;
     Object.getOwnPropertyDescriptor(prototype, 'value').set.call(element, value);
     element.dispatchEvent(new Event(element.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
   });
