@@ -21,11 +21,11 @@ function compile(path, imported = {}) {
   const output = ts.transpileModule(readFileSync(new URL(path, import.meta.url), 'utf8'), {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
-  const module = { exports: {} };
+  const compiledModule = { exports: {} };
   new Function('require', 'module', 'exports', output)(
-    name => imported[name] ?? require(name), module, module.exports,
+    name => imported[name] ?? require(name), module, compiledModule.exports,
   );
-  return module.exports;
+  return compiledModule.exports;
 }
 
 const modal = compile('../src/app/dashboard/DashboardModal.tsx').default;
