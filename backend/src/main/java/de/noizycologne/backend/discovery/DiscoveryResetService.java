@@ -56,6 +56,14 @@ public class DiscoveryResetService {
                 revisions.add("geo|"+row.get("id")+"|"+row.get("updated_at")+"|"+row.get("raw_event"));
                 if(!geo.inside() && keywords.match(evaluator.event(row))==null && !"KEYWORD_FILTER".equals(row.get("filter_origin"))){if(!"AUTOMATIC".equals(row.get("decision_origin")))preserved++;if(manualRejection)protectedRejections++;continue;}
             }
+            // An editor's decision on a registered venue is not an automatic suggestion.
+            // In particular, reset/re-evaluation must not discard a manually edited date,
+            // inquiry or association merely because the keyword configuration changed.
+            if(row.get("venue_id")!=null && "MANUAL".equals(row.get("decision_origin"))
+                && !"REJECTED".equals(row.get("status"))) {
+                preserved++;
+                continue;
+            }
             boolean changedRelease=keywords.releaseChanged(row);
             // Active exclusions are final also for known venues unless an editor
             // already reviewed that venue manually. Imports and releases stay protected.
