@@ -56,7 +56,7 @@ public class DiscoveryKeywordService {
         for(var row:list()) known.add(EventNormalizer.text((String)row.get("keyword")));
         int created=0;List<@NonNull String> skipped=new ArrayList<>();
         for(var entry:requested.entrySet()) {
-            if(!known.add(entry.getKey())) {skipped.add(entry.getValue());continue;}
+            if(!known.add(entry.getKey())) {skipped.add(Objects.requireNonNull(entry.getValue(),"Schlagwort fehlt"));continue;}
             String term=entry.getValue(),reason=shared.isBlank() ? "Automatischer Ausschluss: "+term : shared;
             store.jdbc().update("INSERT INTO discovery_keyword_rules(id,keyword,reason,enabled) VALUES (?,?,?,?)",
                 UUID.randomUUID().toString(),term,reason,enabled);
