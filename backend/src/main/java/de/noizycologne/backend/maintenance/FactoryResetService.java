@@ -103,7 +103,7 @@ public class FactoryResetService {
                     validateSchema();
                     Preview snapshot = counts(media.files());
                     String truncate = ORDERED_TABLES.stream()
-                        .map(name -> "public.\\\"" + name + "\\\"")
+                        .map(name -> "public.\"" + name + "\"")
                         .collect(java.util.stream.Collectors.joining(","));
                     jdbc.execute("TRUNCATE TABLE " + truncate + " RESTART IDENTITY CASCADE");
                     return snapshot;
@@ -144,7 +144,7 @@ public class FactoryResetService {
         long total = 0;
         for (String table : ORDERED_TABLES) {
             long count = Objects.requireNonNull(jdbc.queryForObject(
-                "SELECT count(*) FROM public.\\\"" + table + "\\\"", Long.class));
+                "SELECT count(*) FROM public.\"" + table + "\"", Long.class));
             tables.add(new TableCount(table, count));
             total += count;
         }
