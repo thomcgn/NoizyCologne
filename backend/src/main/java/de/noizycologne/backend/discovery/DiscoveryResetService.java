@@ -56,12 +56,19 @@ public class DiscoveryResetService {
                 revisions.add("geo|"+row.get("id")+"|"+row.get("updated_at")+"|"+row.get("raw_event"));
                 if(!geo.inside() && keywords.match(evaluator.event(row))==null && !"KEYWORD_FILTER".equals(row.get("filter_origin"))){if(!"AUTOMATIC".equals(row.get("decision_origin")))preserved++;if(manualRejection)protectedRejections++;continue;}
             }
+            // An editor's decision on a registered venue is not an automatic suggestion.
+            // In particular, reset/re-evaluation must not discard a manually edited date,
+            // inquiry or association merely because the keyword configuration changed.
+            if(row.get("venue_id")!=null && "MANUAL".equals(row.get("decision_origin"))
+                && !"REJECTED".equals(row.get("status"))) {
+                preserved++;
+                continue;
+            }
             boolean changedRelease=keywords.releaseChanged(row);
-            // An active exclusion is final for an unassigned venue even if a legacy
-            // proposal was previously opened for manual review. Explicit releases
-            // and already rejected/imported entries remain protected.
-            boolean keywordAutoExclude=row.get("venue_id")==null
-                && row.get("calendar_entry_id")==null
+            // Active exclusions are final also for known venues unless an editor
+            // already reviewed that venue manually. Imports and releases stay protected.
+            boolean keywordAutoExclude=row.get("calendar_entry_id")==null
+                && !(row.get("venue_id")!=null && "MANUAL".equals(row.get("decision_origin")))
                 && List.of("NEEDS_REVIEW","NEEDS_INQUIRY","READY").contains(row.get("status"))
                 && keywords.match(evaluator.event(row))!=null && !keywords.released(row);
             if (!selected(row,selection) && !changedRelease && !keywordAutoExclude) {
@@ -75,7 +82,7 @@ public class DiscoveryResetService {
             if(changedRelease && status.equals("READY")) status="NEEDS_REVIEW";
             var hit=keywords.match(evaluator.event(row));
             if(hit!=null && status.equals("IGNORED")) keywordExcluded++;
-            if(hit!=null && row.get("venue_id")!=null) keywordReview++;
+            if(hit!=null && row.get("venue_id")!=null && !status.equals("IGNORED")) keywordReview++;
             if("KEYWORD_FILTER".equals(row.get("filter_origin")) && "IGNORED".equals(row.get("status")) && !status.equals("IGNORED")) keywordRestored++;
             String reason=manual && !changedRelease && !keywordAutoExclude ? "Manuell abgelehnt; ausdrücklich erneut zur Prüfung vorgelegt. "+result.reason() : result.reason();
             if (!manual && selection.mode()==Mode.RESCAN && status.equals("READY")) {
@@ -114,7 +121,7 @@ public class DiscoveryResetService {
                 """,item.newStatus(),item.reason(),item.automaticReason(),item.classification(),item.partyId(),EventMatcher.VERSION,
                 item.oldStatus(),request.operationId().toString(),item.id());
             keywords.remember(item.id(),evaluator.event(before));
-            if("IGNORED".equals(item.newStatus()) && before.get("venue_id")==null
+            if("IGNORED".equals(item.newStatus())
                 && "MANUAL".equals(before.get("decision_origin"))
                 && List.of("NEEDS_REVIEW","NEEDS_INQUIRY","READY").contains(before.get("status"))
                 && !keywords.released(before) && keywords.match(evaluator.event(before))!=null)

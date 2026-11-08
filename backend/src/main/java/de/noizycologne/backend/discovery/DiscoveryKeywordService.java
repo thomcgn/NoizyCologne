@@ -73,8 +73,8 @@ public class DiscoveryKeywordService {
     }
     /**
      * Reconcile legacy open proposals when the application starts and whenever
-     * keyword rules change. Never delete records or reclassify confirmed venues,
-     * imported entries, manual rejections or explicit releases.
+     * keyword rules change. Never delete records or reclassify imported entries,
+     * manual decisions at confirmed venues, rejections or explicit releases.
      */
     @EventListener(ApplicationReadyEvent.class)
     @Transactional
@@ -90,8 +90,9 @@ public class DiscoveryKeywordService {
         var rows=store.jdbc().queryForList("""
             SELECT id,title,evidence,status,decision_origin,keyword_release_version
             FROM discovery_candidates
-            WHERE venue_id IS NULL AND calendar_entry_id IS NULL
+            WHERE calendar_entry_id IS NULL
               AND status IN ('NEEDS_REVIEW','NEEDS_INQUIRY','READY')
+              AND NOT (venue_id IS NOT NULL AND decision_origin='MANUAL')
             """);
         int archived=0;
         for(var row:rows) {
@@ -109,8 +110,9 @@ public class DiscoveryKeywordService {
                     previous_status=status,reason=?,automatic_reason=?,
                     filter_origin='KEYWORD_FILTER',filter_rule_id=?,filter_keyword=?,filter_reason=?,filter_evidence=?,
                     updated_at=now()
-                    WHERE id=? AND venue_id IS NULL AND calendar_entry_id IS NULL
+                    WHERE id=? AND calendar_entry_id IS NULL
                       AND status IN ('NEEDS_REVIEW','NEEDS_INQUIRY','READY')
+                      AND NOT (venue_id IS NOT NULL AND decision_origin='MANUAL')
                     """,reason,reason,hit.id(),hit.keyword(),hit.reason(),hit.evidence(),row.get("id"));
                 if(updated>0) {
                     store.audit((String)row.get("id"),(String)row.get("status"),null);

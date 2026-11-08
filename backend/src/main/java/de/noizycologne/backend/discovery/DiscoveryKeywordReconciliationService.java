@@ -57,7 +57,8 @@ public class DiscoveryKeywordReconciliationService {
             var hit=keywords.match(event);
             boolean knownVenue=row.get("venue_id")!=null;
             String id=(String)row.get("id");
-            if(hit!=null && !knownVenue && !keywords.released(row)) {
+            if(hit!=null && !keywords.released(row)
+                && !(knownVenue && "MANUAL".equals(row.get("decision_origin")))) {
                 String reason=hit.explanation();
                 if(open || !Objects.equals(row.get("reason"),reason)
                     || !Objects.equals(row.get("filter_rule_id"),hit.id())) {
@@ -69,12 +70,12 @@ public class DiscoveryKeywordReconciliationService {
                     keywords.remember(id,event);
                     store.audit(id,status,null,(String)row.get("matching_class"));
                 }
-            } else if(previouslyFiltered && (hit==null || knownVenue)) {
-                // Removing/deactivating a rule or confirming a portfolio venue restores review,
+            } else if(previouslyFiltered && hit==null) {
+                // Removing/deactivating a rule restores the candidate for review,
                 // but never starts an automatic import or changes the calendar.
                 var match=evaluator.evaluate(row,rules);
                 String newStatus="READY".equals(match.status()) ? "NEEDS_REVIEW" : match.status();
-                String reason=knownVenue && hit!=null ? hit.explanation() : match.reason();
+                String reason=match.reason();
                 store.jdbc().update("""
                     UPDATE discovery_candidates SET status=?,reason=?,automatic_reason=?,matching_class=?,
                     previous_status=?,matcher_version=?,evaluated_at=now(),updated_at=now() WHERE id=?
