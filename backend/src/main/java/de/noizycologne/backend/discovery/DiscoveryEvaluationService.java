@@ -93,7 +93,7 @@ public class DiscoveryEvaluationService {
     }
     private EventMatcher.Match evaluate(EventExtractor.Event event,String venueId,String venueName,boolean approved,Rules rules,boolean applyKeywords) {
         var keyword=applyKeywords ? keywords.match(event) : null;
-        if(keyword!=null) return new EventMatcher.Match(venueId==null ? "IGNORED" : "NEEDS_REVIEW",null,keyword.explanation(),"UNVERIFIED");
+        if(keyword!=null) return new EventMatcher.Match("IGNORED",null,keyword.explanation(),"UNVERIFIED");
         var result=matcher.match(event,venueId==null ? "" : verifiedVenueName(event,venueId,venueName),rules.parties(),rules.aliases(),rules.genres(),venueId!=null && approved);
         if (venueId==null && !result.status().equals("IGNORED")) return new EventMatcher.Match("NEEDS_REVIEW",result.partyId(),"Veranstaltungsort aus der Sonderquelle redaktionell zuordnen; "+result.reason(),result.classification());
         if (!result.status().equals("READY")) return result;
