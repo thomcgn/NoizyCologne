@@ -95,3 +95,38 @@ Profil-/Scheduler-/Authentifizierungskonfiguration müssen auf dem Zielhost vor
 Aktivierung geprüft werden. Keine Schutzmechanismen bei Kernel-/AppArmor-
 Problemen abschalten. Ausführliche Konfiguration, Netztopologie, Tests und
 Ressourcenbudgets: [Browser-Crawler](../../docs/BROWSER-CRAWLER.md).
+
+## Werkseinstellungen (vollständiger Datenreset)
+
+Unter **Einstellungen → Werkseinstellungen** gibt es eine gesondert bestätigte Funktion
+zum vollständigen Leeren der **Anwendungsdaten**, einschließlich sämtlicher hochgeladener
+Flyer und Bilder im vorhandenen `media_data`-Mount. **Der Docker-Volume-Container
+selbst wird nicht entfernt.** Der Login bleibt erhalten, weil `TEAM_USER`,
+`TEAM_PASSWORD_HASH` und `TEAM_SESSION_SECRET` nur im persistenten VPS-`.env`
+liegen. Auch Flyway-Migrationen, SSL, DNS, GHCR, Caddy und andere Volumes bleiben erhalten.
+
+Der Reset ist nur bei aktivem Login möglich, erfordert eine frische Vorschau,
+das **erneute Login-Passwort**, eine ausdrückliche Einwilligung, die exakte Eingabe
+`Kompletter Reset` und eine weitere Sicherheitsabfrage. Die Oberfläche ruft ausschließlich
+eine serverseitige Next.js-Route auf. Diese spricht die für den öffentlichen Caddy
+**nicht erreichbare** interne Backend-API über das Docker-Netz an und authentisiert
+sich dort mit `FACTORY_RESET_SECRET` (mindestens 32 Zeichen).
+
+`deploy.sh` erzeugt `FACTORY_RESET_SECRET` **einmalig kryptografisch zufällig**
+im bestehenden persistenten `.env`, falls er fehlt. Der Wert wird nicht ausgegeben,
+bei späteren Deployments nicht rotiert und nur an API und Frontend weitergereicht.
+Wenn bereits ein Schlüssel konfiguriert ist, wird er beibehalten. Der Reset ist
+bei fehlendem/ungültigem Schlüssel gesperrt, ohne den laufenden Dienst zu beeinträchtigen.
+
+**Fail-closed:** Nicht erwartete PostgreSQL-Tabellen, ein fehlendes/unsicheres
+Medienverzeichnis oder ein laufender Discovery-Prozess blockieren das Löschen.
+Die Datenbanktabellen werden in **einer Transaktion** geleert; `flyway_schema_history`
+bleibt erhalten. Die Dateibereinigung beginnt erst nach erfolgreichem Commit.
+Falls danach ein Dateisystemfehler auftritt, meldet die UI ausdrücklich einen
+**Teil-Erfolg**; ein Datenbank-Rollback ist zu diesem Zeitpunkt nicht mehr möglich.
+Vor der ersten produktiven Rücksetzung sollte ein geprüftes externes Backup
+von PostgreSQL **und** `media_data` existieren.
+
+Nach dem Reset die Anwendung neu laden; offene Browserzustände anderer Teammitglieder
+sind möglicherweise veraltet. Es wird **niemals** ein Reset bei Deployment,
+Start oder Datenbankmigration automatisch ausgeführt.
