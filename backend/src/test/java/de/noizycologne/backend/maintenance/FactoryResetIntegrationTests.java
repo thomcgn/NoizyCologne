@@ -67,12 +67,12 @@ class FactoryResetIntegrationTests {
         mvc.perform(post("/internal/maintenance/factory-reset")
                 .header("X-Noizy-Reset-Key", "wrong")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\\\"phrase\\\":\\\"Kompletter Reset\\\"}"))
+                .content("{\"phrase\":\"Kompletter Reset\"}"))
             .andExpect(status().isForbidden());
         mvc.perform(post("/internal/maintenance/factory-reset")
                 .header("X-Noizy-Reset-Key", SECRET)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\\\"phrase\\\":\\\"RESET\\\"}"))
+                .content("{\"phrase\":\"RESET\"}"))
             .andExpect(status().isBadRequest());
         assertThat(jdbc.queryForObject("SELECT count(*) FROM venues WHERE id=?",Long.class,venueId)).isEqualTo(1L);
     }
@@ -95,7 +95,7 @@ class FactoryResetIntegrationTests {
             mvc.perform(post("/internal/maintenance/factory-reset")
                     .header("X-Noizy-Reset-Key", SECRET)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .content("{\\\"phrase\\\":\\\"Kompletter Reset\\\"}"))
+                    .content("{\"phrase\":\"Kompletter Reset\"}"))
                 .andExpect(status().isConflict());
         }
         assertThat(Files.exists(MEDIA.resolve("protected.png"))).isTrue();
@@ -108,7 +108,7 @@ class FactoryResetIntegrationTests {
             mvc.perform(post("/internal/maintenance/factory-reset")
                     .header("X-Noizy-Reset-Key", SECRET)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .content("{\\\"phrase\\\":\\\"Kompletter Reset\\\"}"))
+                    .content("{\"phrase\":\"Kompletter Reset\"}"))
                 .andExpect(status().isConflict());
             assertThat(jdbc.queryForObject("SELECT count(*) FROM venues WHERE id=?",Long.class,venueId)).isEqualTo(1L);
         } finally {
@@ -125,7 +125,7 @@ class FactoryResetIntegrationTests {
         mvc.perform(post("/internal/maintenance/factory-reset")
                 .header("X-Noizy-Reset-Key", SECRET)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\\\"phrase\\\":\\\"Kompletter Reset\\\"}"))
+                .content("{\"phrase\":\"Kompletter Reset\"}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.deletedFiles").value(2))
             .andExpect(jsonPath("$.partial").value(false));
