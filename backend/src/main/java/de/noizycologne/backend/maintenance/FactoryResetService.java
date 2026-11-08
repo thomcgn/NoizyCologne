@@ -107,7 +107,8 @@ public class FactoryResetService {
                     jdbc.execute("SET LOCAL lock_timeout = '5s'");
                     jdbc.execute("LOCK TABLE " + targets + " IN ACCESS EXCLUSIVE MODE");
                     Preview snapshot = counts(media.files());
-                    jdbc.execute("TRUNCATE TABLE " + targets + " RESTART IDENTITY CASCADE");
+                    // Never CASCADE into an unknown table from another schema.
+                    jdbc.execute("TRUNCATE TABLE " + targets + " RESTART IDENTITY");
                     return snapshot;
                 }), "Reset-Transaktion lieferte kein Ergebnis");
 
