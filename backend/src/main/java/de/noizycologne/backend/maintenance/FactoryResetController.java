@@ -1,5 +1,6 @@
 package de.noizycologne.backend.maintenance;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -34,14 +35,14 @@ public class FactoryResetController {
 
     @GetMapping
     public FactoryResetService.Preview preview(
-            @RequestHeader(name="X-Noizy-Reset-Key", required=false) String provided) {
+            @RequestHeader(name="X-Noizy-Reset-Key", required=false) @Nullable String provided) {
         authenticate(provided);
         return service.preview();
     }
 
     @PostMapping
     public FactoryResetService.Result reset(
-            @RequestHeader(name="X-Noizy-Reset-Key", required=false) String provided,
+            @RequestHeader(name="X-Noizy-Reset-Key", required=false) @Nullable String provided,
             @RequestBody Confirmation request) {
         authenticate(provided);
         if (request == null || !CONFIRMATION.equals(request.phrase()))
@@ -50,7 +51,7 @@ public class FactoryResetController {
         return service.execute();
     }
 
-    private void authenticate(String provided) {
+    private void authenticate(@Nullable String provided) {
         if (configuredSecret.length() < 32)
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                 "Werkseinstellungen sind serverseitig nicht eingerichtet.");
