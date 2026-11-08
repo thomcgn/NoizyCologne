@@ -74,9 +74,10 @@ class DiscoveryExclusionIntegrationTests {
         String candidate=unassigned();
         store.jdbc().update("UPDATE discovery_candidates SET status='NEEDS_REVIEW',decision_origin='MANUAL',dm_text='Vorherige Klärung' WHERE id=?",candidate);
         keywords.save(rule,"Release Party","Keine Release-Veranstaltungen",true);
-        var preview=resets.preview(new DiscoveryResetService.Selection(DiscoveryResetService.Mode.ALL,false));
-        assertThat(preview.items().stream().anyMatch(item -> item.id().equals(candidate) && item.newStatus().equals("IGNORED"))).isTrue();
-        resets.apply(request());
+        // Rule activation archives the existing proposal immediately; no separate
+        // reset or another crawl is necessary.
+        assertThat(store.candidates("NEEDS_REVIEW").stream().noneMatch(row -> candidate.equals(row.get("id")))).isTrue();
+        assertThat(store.candidates("KEYWORD_FILTER").stream().anyMatch(row -> candidate.equals(row.get("id")))).isTrue();
         assertThat(store.candidate(candidate)).containsEntry("status","IGNORED")
             .containsEntry("decision_origin","AUTOMATIC")
             .containsEntry("filter_origin","KEYWORD_FILTER")
@@ -94,6 +95,36 @@ class DiscoveryExclusionIntegrationTests {
         processor.processSpecial(portal,secondEvent,null);
         assertThat(store.candidate(secondId)).containsEntry("status","IGNORED")
             .containsEntry("decision_origin","AUTOMATIC");
+    }
+    @Test void enablingKeywordImmediatelyArchivesPriorOpenCandidatesButPreservesKnownLocationsAndReleases() {
+        keywords.save(rule,"Release Party","Keine Release-Veranstaltungen",false);
+        var event=event("older-unassigned","2027-02-13");
+        processor.processSpecial(portal,event,null);
+        String id=unassigned();
+        assertThat(store.candidate(id)).containsEntry("status","NEEDS_REVIEW");
+        store.jdbc().update("UPDATE discovery_candidates SET decision_origin='MANUAL' WHERE id=?",id);
+
+        var knownEvent=new EventExtractor.Event("known-venue","Emo Release Party",
+            "https://keyword.example/venue",List.of("2027-02-13"),"Emo DJs","","");
+        processor.process(venue,official,knownEvent,parties.findAll(),Map.of(),List.of("Emo"),false);
+        String knownId=requireNonNull(store.jdbc().queryForObject(
+            "SELECT id FROM discovery_candidates WHERE venue_id=? AND title='Emo Release Party'",String.class,venue.getId()));
+
+        keywords.save(rule,"Release Party","Keine Release-Veranstaltungen",true);
+        assertThat(store.candidate(id)).containsEntry("status","IGNORED")
+            .containsEntry("decision_origin","AUTOMATIC")
+            .containsEntry("filter_origin","KEYWORD_FILTER");
+        assertThat(store.candidates("KEYWORD_FILTER").stream().anyMatch(row -> id.equals(row.get("id")))).isTrue();
+        assertThat(store.candidates("NEEDS_REVIEW").stream().noneMatch(row -> id.equals(row.get("id")))).isTrue();
+        assertThat(store.candidate(knownId)).containsEntry("status","NEEDS_REVIEW");
+        keywords.archiveExistingOnStartup();
+        assertThat(store.jdbc().queryForObject(
+            "SELECT count(*) FROM discovery_decisions WHERE candidate_id=? AND new_status='IGNORED'",
+            Integer.class,id)).isEqualTo(1);
+        keywords.reopen(id);
+        keywords.archiveExistingOnStartup();
+        assertThat(store.candidate(id)).containsEntry("status","NEEDS_REVIEW")
+            .containsEntry("decision_origin","MANUAL");
     }
     @Test void unknownLocationIsPersistentlyFilteredAcrossScansAndTwoSourcesWithoutAuditDuplicates() {
         var event=event("https://organizer.example/events/release","2027-01-09");
