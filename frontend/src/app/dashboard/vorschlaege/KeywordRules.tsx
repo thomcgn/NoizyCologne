@@ -45,6 +45,6 @@ export default function KeywordRules({busy,action}: {busy:boolean;action:(work:(
       <label className="block">Ausschlussgrund<input className="cc-input" required maxLength={1000} value={reason} onChange={event=>setReason(event.target.value)} /></label>
       <label className="block"><input type="checkbox" checked={enabled} onChange={event=>setEnabled(event.target.checked)} /> Aktiv</label>
       <button type="submit" className="discovery-button" disabled={busy}>Regel speichern</button><button type="button" className="discovery-button" onClick={clear}>Bearbeiten abbrechen</button>
-    </form>
+    </form>}
   </section>;
 }
