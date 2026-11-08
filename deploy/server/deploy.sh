@@ -41,6 +41,40 @@ ensure_media_volume() {
   fi
 }
 
+# Install one stable internal key on the VPS if none exists yet.
+# It is shared only by the backend and frontend containers and never printed.
+ensure_factory_reset_secret() {
+  if [[ ! -f .env ]]; then
+    echo "Deployment aborted: missing persistent .env" >&2
+    return 1
+  fi
+  if [[ -n "${FACTORY_RESET_SECRET:-}" ]]; then
+    if (( ${#FACTORY_RESET_SECRET} < 32 )); then
+      echo "Deployment aborted: FACTORY_RESET_SECRET is too short" >&2
+      return 1
+    fi
+    return
+  fi
+  if grep -q '^FACTORY_RESET_SECRET=' .env; then
+    local existing
+    existing="$(awk -F= '$1 == "FACTORY_RESET_SECRET" { print substr($0, index($0, "=") + 1); exit }' .env)"
+    if (( ${#existing} < 32 )); then
+      echo "Deployment aborted: existing FACTORY_RESET_SECRET is too short" >&2
+      return 1
+    fi
+    return
+  fi
+  local secret
+  secret="$(od -An -N32 -tx1 /dev/urandom | tr -d '[:space:]')"
+  if (( ${#secret} != 64 )); then
+    echo "Deployment aborted: could not generate factory reset key" >&2
+    return 1
+  fi
+  printf '\\nFACTORY_RESET_SECRET=%s\\n' "$secret" >> .env
+  chmod 600 .env
+  echo "Installed a dedicated internal factory-reset key (value withheld)"
+}
+
 prepare_media_volume_permissions() {
   local media_volume="${MEDIA_DATA_VOLUME:-}"
   local api_image="$1"
@@ -84,6 +118,7 @@ main() {
     fi
   }
 
+  ensure_factory_reset_secret
   ensure_media_volume
   "${compose[@]}" config >/dev/null
   IMAGE_TAG="$image_tag" "${compose[@]}" pull api frontend landing
