@@ -3,6 +3,8 @@ package de.noizycologne.backend.discovery;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
@@ -34,6 +36,7 @@ public class DiscoveryKeywordService {
             store.jdbc().update("INSERT INTO discovery_keyword_rules(id,keyword,reason,enabled) VALUES (?,?,?,?)",id,keyword.trim(),reason.trim(),enabled);
         } else if(store.jdbc().update("UPDATE discovery_keyword_rules SET keyword=?,reason=?,enabled=?,revision=revision+1,updated_at=now() WHERE id=?",keyword.trim(),reason.trim(),enabled,id)==0)
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Schlagwortregel fehlt");
+        archiveExistingOpenCandidates();
         return id;
     }
     public record BatchSave(int created,int alreadyPresent,List<@NonNull String> skipped) { }
@@ -65,8 +68,60 @@ public class DiscoveryKeywordService {
                 UUID.randomUUID().toString(),term,reason,enabled);
             created++;
         }
+        if(created>0) archiveExistingOpenCandidates();
         return new BatchSave(created,skipped.size(),List.copyOf(skipped));
     }
+    /**
+     * Reconcile legacy open proposals when the application starts and whenever
+     * keyword rules change. Never delete records or reclassify confirmed venues,
+     * imported entries, manual rejections or explicit releases.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    @Transactional
+    public void archiveExistingOnStartup() {
+        archiveExistingOpenCandidates();
+    }
+
+    private int archiveExistingOpenCandidates() {
+        store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
+        var enabledRules=list().stream().filter(rule -> Boolean.TRUE.equals(rule.get("enabled"))).toList();
+        if(enabledRules.isEmpty()) return 0;
+        String releaseVersion=version();
+        var rows=store.jdbc().queryForList("""
+            SELECT id,title,evidence,status,decision_origin,keyword_release_version
+            FROM discovery_candidates
+            WHERE venue_id IS NULL AND calendar_entry_id IS NULL
+              AND status IN ('NEEDS_REVIEW','NEEDS_INQUIRY','READY')
+            """);
+        int archived=0;
+        for(var row:rows) {
+            if(releaseVersion.equals(row.get("keyword_release_version"))) continue;
+            String searchable=" "+EventNormalizer.text(
+                Objects.toString(row.get("title"),"")+" "+Objects.toString(row.get("evidence"),""))+" ";
+            for(var rule:enabledRules) {
+                String keyword=Objects.toString(rule.get("keyword"),"");
+                if(!searchable.contains(" "+EventNormalizer.text(keyword)+" ")) continue;
+                var hit=new Hit((String)rule.get("id"),keyword,(String)rule.get("reason"),
+                    Objects.toString(row.get("title"),"")+"\\n"+Objects.toString(row.get("evidence"),""));
+                String reason=hit.explanation();
+                int updated=store.jdbc().update("""
+                    UPDATE discovery_candidates SET status='IGNORED',decision_origin='AUTOMATIC',
+                    previous_status=status,reason=?,automatic_reason=?,
+                    filter_origin='KEYWORD_FILTER',filter_rule_id=?,filter_keyword=?,filter_reason=?,filter_evidence=?,
+                    updated_at=now()
+                    WHERE id=? AND venue_id IS NULL AND calendar_entry_id IS NULL
+                      AND status IN ('NEEDS_REVIEW','NEEDS_INQUIRY','READY')
+                    """,reason,reason,hit.id(),hit.keyword(),hit.reason(),hit.evidence(),row.get("id"));
+                if(updated>0) {
+                    store.audit((String)row.get("id"),(String)row.get("status"),null);
+                    archived++;
+                }
+                break;
+            }
+        }
+        return archived;
+    }
+
     public @Nullable Hit match(EventExtractor.Event event) {
         String text=" "+EventNormalizer.text(event.title()+" "+event.evidence())+" ";
         for(var row:list()) {
