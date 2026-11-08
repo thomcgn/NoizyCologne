@@ -70,7 +70,7 @@ ensure_factory_reset_secret() {
     echo "Deployment aborted: could not generate factory reset key" >&2
     return 1
   fi
-  printf '\\nFACTORY_RESET_SECRET=%s\\n' "$secret" >> .env
+  printf '\nFACTORY_RESET_SECRET=%s\n' "$secret" >> .env
   chmod 600 .env
   echo "Installed a dedicated internal factory-reset key (value withheld)"
 }
