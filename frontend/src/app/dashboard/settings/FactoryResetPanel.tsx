@@ -77,8 +77,9 @@ export default function FactoryResetPanel() {
       setPhrase("");
       setAcknowledged(false);
       if (!outcome.partial) {
-        // Display and other browser-local preferences belong to the old project state.
-        window.localStorage.clear();
+        // Browser storage can be disabled; this must never turn a completed reset
+        // into a misleading error message.
+        try { window.localStorage.clear(); } catch { /* Browser preferences unavailable. */ }
       }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Der Reset konnte nicht bestätigt werden.");
