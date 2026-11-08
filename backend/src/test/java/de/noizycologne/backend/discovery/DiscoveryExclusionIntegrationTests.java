@@ -156,7 +156,8 @@ class DiscoveryExclusionIntegrationTests {
             .containsEntry("filter_origin","KEYWORD_FILTER");
         assertThat(store.candidates("KEYWORD_FILTER").stream().anyMatch(row -> id.equals(row.get("id")))).isTrue();
         assertThat(store.candidates("NEEDS_REVIEW").stream().noneMatch(row -> id.equals(row.get("id")))).isTrue();
-        assertThat(store.candidate(knownId)).containsEntry("status","NEEDS_REVIEW");
+        assertThat(store.candidate(knownId)).containsEntry("status","IGNORED").containsEntry("filter_origin","KEYWORD_FILTER");
+        assertThat(store.candidates("NEEDS_REVIEW").stream().noneMatch(row -> knownId.equals(row.get("id")))).isTrue();
         keywords.archiveExistingOnStartup();
         assertThat(store.jdbc().queryForObject(
             "SELECT count(*) FROM discovery_decisions WHERE candidate_id=? AND new_status='IGNORED'",
@@ -183,12 +184,38 @@ class DiscoveryExclusionIntegrationTests {
         resets.apply(request());
         assertThat(store.candidate(id)).containsEntry("status","REJECTED").containsEntry("decision_origin","MANUAL");
     }
+    @Test void knownVenueKeywordHitIsArchivedAcrossScansUnlessExplicitlyReopened() {
+        keywords.save(rule,"Karneval","Karneval",true);
+        var event=new EventExtractor.Event("11-11-karneval","11.11. KARNEVAL",
+            "https://keyword.example/karneval",List.of("2026-11-11"),"Clubparty","","");
+        processor.process(venue,official,event,parties.findAll(),Map.of(),List.of("Emo"),false);
+        String id=requireNonNull(store.jdbc().queryForObject(
+            "SELECT id FROM discovery_candidates WHERE venue_id=? AND title='11.11. KARNEVAL'",
+            String.class,venue.getId()));
+        assertThat(store.candidate(id)).containsEntry("status","IGNORED")
+            .containsEntry("venue_id",venue.getId()).containsEntry("filter_origin","KEYWORD_FILTER")
+            .containsEntry("filter_keyword","Karneval").containsEntry("calendar_entry_id",null);
+        assertThat(store.candidates("NEEDS_REVIEW")).noneMatch(row -> id.equals(row.get("id")));
+        assertThat(store.candidates("KEYWORD_FILTER")).anyMatch(row -> id.equals(row.get("id")));
+        Integer before=store.jdbc().queryForObject(
+            "SELECT count(*) FROM discovery_decisions WHERE candidate_id=?",Integer.class,id);
+        processor.process(venue,official,event,parties.findAll(),Map.of(),List.of("Emo"),false);
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates WHERE id=?",Integer.class,id)).isEqualTo(1);
+        assertThat(store.jdbc().queryForObject(
+            "SELECT count(*) FROM discovery_decisions WHERE candidate_id=?",Integer.class,id)).isEqualTo(before);
+        keywords.reopen(id);
+        processor.process(venue,official,event,parties.findAll(),Map.of(),List.of("Emo"),false);
+        keywords.archiveExistingOnStartup();
+        assertThat(store.candidate(id)).containsEntry("status","NEEDS_REVIEW")
+            .containsEntry("decision_origin","MANUAL");
+    }
     @Test void confirmedVenueRemainsReviewableAndEarlierManualDecisionsSurviveRuleChanges() {
         var event=new EventExtractor.Event("known","Emo Release Party","https://keyword.example/one",List.of("2027-01-09"),"Emo DJs","","");
         processor.process(venue,official,event,parties.findAll(),Map.of(),List.of("Emo"),false);
         String id=requireNonNull(store.jdbc().queryForObject("SELECT id FROM discovery_candidates WHERE venue_id=?",String.class,venue.getId()));
-        assertThat(store.candidate(id)).containsEntry("status","NEEDS_REVIEW").containsEntry("filter_rule_id",rule).containsEntry("calendar_entry_id",null);
+        assertThat(store.candidate(id)).containsEntry("status","IGNORED").containsEntry("filter_rule_id",rule).containsEntry("calendar_entry_id",null);
         assertThat(evaluation.forApi(store.candidate(id),evaluation.rules()).get("keywordWarning")).asString().contains("Release Party","Keine Release");
+        keywords.reopen(id);
         importer.review(id,null,java.time.LocalDate.of(2027,1,10),"NEEDS_INQUIRY","ANSWERED","Meine Entscheidung");
         keywords.save(rule,"Release Party","Neuer Grund",true);processor.process(venue,official,event,parties.findAll(),Map.of(),List.of("Emo"),false);resets.apply(request());
         assertThat(store.candidate(id)).containsEntry("status","NEEDS_INQUIRY").containsEntry("dm_text","Meine Entscheidung").containsEntry("event_date",java.sql.Date.valueOf("2027-01-10"));
