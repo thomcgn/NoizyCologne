@@ -1,6 +1,7 @@
 package de.noizycologne.backend.maintenance;
 
 import de.noizycologne.backend.discovery.DiscoveryWorkLock;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -12,9 +13,14 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
@@ -35,9 +41,43 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "noizy.discovery.monitor.enabled=false"
 })
 @TestMethodOrder(MethodOrderer.MethodName.class)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class FactoryResetIntegrationTests {
     private static final String SECRET = "fixture-factory-reset-secret-very-long-for-testing";
     private static final Path MEDIA = Path.of("target/test-factory-reset-media");
+    // This class intentionally wipes all app tables. Never run that test against
+    // the shared CI fixture DB (or any non-CI database).
+    private static String originalUrl;
+    private static String isolatedName;
+    private static String databaseUser;
+    private static String databasePassword;
+
+    @DynamicPropertySource
+    static void isolatedPostgres(DynamicPropertyRegistry registry) throws Exception {
+        originalUrl = java.util.Objects.requireNonNull(System.getenv("DB_URL"), "CI test DB_URL is required");
+        databaseUser = java.util.Objects.requireNonNull(System.getenv("DB_USER"), "CI DB_USER is required");
+        databasePassword = java.util.Objects.requireNonNull(System.getenv("DB_PASSWORD"), "CI DB_PASSWORD is required");
+        if (!originalUrl.matches("jdbc:postgresql://127\\.0\\.0\\.1:[0-9]{2,5}/noizy_quality")
+                || !"noizy_quality".equals(databaseUser) || databasePassword.length() < 16)
+            throw new IllegalStateException("Destructive integration test requires the isolated noizy_quality CI fixture database");
+        isolatedName = "noizy_factory_reset_" + UUID.randomUUID().toString().replace("-", "");
+        try (Connection connection = DriverManager.getConnection(originalUrl, databaseUser, databasePassword);
+             var statement = connection.createStatement()) {
+            statement.execute("CREATE DATABASE " + isolatedName);
+        }
+        String url = originalUrl.substring(0, originalUrl.lastIndexOf('/') + 1) + isolatedName;
+        registry.add("spring.datasource.url", () -> url);
+        registry.add("spring.flyway.url", () -> url);
+    }
+
+    @AfterAll
+    static void dropIsolatedPostgres() throws Exception {
+        if (originalUrl == null || isolatedName == null) return;
+        try (Connection connection = DriverManager.getConnection(originalUrl, databaseUser, databasePassword);
+             var statement = connection.createStatement()) {
+            statement.execute("DROP DATABASE IF EXISTS " + isolatedName + " WITH (FORCE)");
+        }
+    }
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
     @Autowired DiscoveryWorkLock discoveryLock;
