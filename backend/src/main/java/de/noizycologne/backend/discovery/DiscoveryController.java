@@ -109,7 +109,7 @@ public class DiscoveryController {
         return Map.of("calendarEntryId",importer.confirm(id,r.partyId(),r.date(),r.inquiryStatus(),Objects.toString(r.dmText(),""),r.seriesAlias(),r.venueId()));
     }
     public record KeywordRule(@NotBlank @Size(max=200) String keyword,@NotBlank @Size(max=1000) String reason,boolean enabled) { }
-    public record KeywordBatch(@NotNull @Size(min=1,max=100) List<@NotBlank @Size(max=200) String> keywords,
+    public record KeywordBatch(@NotNull @Size(min=1,max=100) List<@NonNull @NotBlank @Size(max=200) String> keywords,
                                @Size(max=1000) String reason,boolean enabled) { }
     @PostMapping("/keyword-rules/batch") public DiscoveryKeywordService.BatchSave addKeywords(@Valid @RequestBody KeywordBatch batch) {
         return keywords.saveBatch(batch.keywords(),batch.reason(),batch.enabled());
