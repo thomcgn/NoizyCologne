@@ -44,17 +44,20 @@ public class DiscoveryKeywordService {
         String shared=commonReason==null ? "" : commonReason.trim();
         if(shared.length()>1000) throw new IllegalArgumentException("Ausschlussgrund ist zu lang");
         Map<String,String> requested=new LinkedHashMap<>();
+        List<@NonNull String> skipped=new ArrayList<>();
         for(String value:input) {
             if(value==null || value.isBlank() || value.length()>200 || value.contains(","))
                 throw new IllegalArgumentException("Ungültiges Schlagwort: maximal 200 Zeichen, ohne Komma");
             String term=value.trim(),normalized=EventNormalizer.text(term);
             if(normalized.isBlank()) throw new IllegalArgumentException("Leeres Schlagwort");
-            requested.putIfAbsent(normalized,term);
+            // Report duplicates within the submitted list as skipped, too.
+            if(requested.putIfAbsent(normalized,term)!=null)
+                skipped.add(Objects.requireNonNull(term,"Schlagwort fehlt"));
         }
         store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
         Set<String> known=new HashSet<>();
         for(var row:list()) known.add(EventNormalizer.text((String)row.get("keyword")));
-        int created=0;List<@NonNull String> skipped=new ArrayList<>();
+        int created=0;
         for(var entry:requested.entrySet()) {
             if(!known.add(entry.getKey())) {skipped.add(Objects.requireNonNull(entry.getValue(),"Schlagwort fehlt"));continue;}
             String term=entry.getValue(),reason=shared.isBlank() ? "Automatischer Ausschluss: "+term : shared;
