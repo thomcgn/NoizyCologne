@@ -111,7 +111,7 @@ export default function FactoryResetPanel() {
               ? `Datenbank wurde geleert, aber ${result.filesNotDeleted} Mediendatei(en) konnten nicht entfernt werden. Bitte den Administrator informieren und den Medienbestand prüfen.`
               : `Werkseinstellungen wiederhergestellt: ${result.deletedRecords} Datenbankzeilen und ${result.deletedFiles} Mediendateien entfernt.`}
           </p>
-          <button type="button" className="cc-button cc-button-primary" onClick={() => window.location.assign("/dashboard/settings")}>Ansicht neu laden</button>
+          <button type="button" className="cc-button cc-button-primary" onClick={() => window.location.reload()}>Ansicht neu laden</button>
         </> : preview ? <>
           <p className="cc-factory-reset-counts"><strong>{preview.recordCount}</strong> Datenbankzeilen und <strong>{preview.mediaFileCount}</strong> Dateien im Medien-Volume sind betroffen.</p>
           <p>Bitte vor dem Fortfahren prüfen, ob ein externes Backup benötigt wird. Die Rücksetzung erhält Flyway-Migrationen, Zugangsdaten, SSL und Docker-Volumes.</p>
