@@ -16,6 +16,7 @@ class DiscoveryExclusionIntegrationTests {
     @Autowired org.springframework.web.context.WebApplicationContext context;
     @Autowired DiscoveryStore store;
     @Autowired DiscoveryKeywordService keywords;
+    @Autowired DiscoveryKeywordReconciliationService reconciliation;
     @Autowired EventCandidateProcessor processor;
     @Autowired EventImportService importer;
     @Autowired DiscoveryResetService resets;
@@ -49,6 +50,45 @@ class DiscoveryExclusionIntegrationTests {
         store.jdbc().update("INSERT INTO discovery_operations(id,kind,request_hash,matcher_version,status) VALUES (?,'KEYWORD_TEST','test','test','RUNNING')",id.toString());
         return new DiscoveryResetService.Request(DiscoveryResetService.Mode.ALL,false,null,preview.token(),id);
     }
+    @Test void editingRulesImmediatelyArchivesOldReviewCandidatesAndRestoresThemOnDisable() {
+        keywords.save(rule,"Release Party","Keine Release-Veranstaltungen",false);
+        var event=event("old-persisted-review","2027-02-06");
+        processor.processSpecial(portal,event,null);
+        String id=unassigned();
+        store.jdbc().update("UPDATE discovery_candidates SET decision_origin='MANUAL',status='NEEDS_REVIEW',dm_text='Notiz bleibt' WHERE id=?",id);
+        assertThat(store.candidate(id).get("status")).isEqualTo("NEEDS_REVIEW");
+
+        reconciliation.save(rule,"Release Party","Keine Release-Veranstaltungen",true);
+        assertThat(store.candidate(id)).containsEntry("status","IGNORED")
+            .containsEntry("decision_origin","AUTOMATIC")
+            .containsEntry("filter_origin","KEYWORD_FILTER")
+            .containsEntry("dm_text","Notiz bleibt");
+        assertThat(store.candidates("NEEDS_REVIEW").stream().noneMatch(row -> id.equals(row.get("id")))).isTrue();
+        assertThat(store.candidates("KEYWORD_FILTER").stream().anyMatch(row -> id.equals(row.get("id")))).isTrue();
+
+        processor.processSpecial(portal,event,null);
+        assertThat(store.candidate(id).get("status")).isEqualTo("IGNORED");
+        reconciliation.save(rule,"Release Party","Keine Release-Veranstaltungen",false);
+        assertThat(store.candidate(id).get("status")).isEqualTo("NEEDS_REVIEW");
+        assertThat(store.candidates("KEYWORD_FILTER").stream().noneMatch(row -> id.equals(row.get("id")))).isTrue();
+    }
+
+    @Test void addingCommaSeparatedRulesImmediatelyArchivesExistingPortalEvents() {
+        keywords.save(rule,"Release Party","Keine Release-Veranstaltungen",false);
+        var event=new EventExtractor.Event("source-akt","AKT","https://organizer.example/events/akt",
+            List.of("2027-02-06"),"Dance Querbeet","","Unbestätigter Club",
+            new EventPlace("Köln","DE","","","",null,null,false));
+        processor.processSpecial(portal,event,null);
+        String id=unassigned();
+        assertThat(store.candidate(id).get("status")).isEqualTo("NEEDS_REVIEW");
+
+        var saved=reconciliation.saveBatch(List.of("Karneval","Dance","Querbeet"),"Falsche Musikgruppe",true);
+        assertThat(saved.created()).isEqualTo(3);
+        assertThat(store.candidate(id)).containsEntry("status","IGNORED").containsEntry("filter_origin","KEYWORD_FILTER");
+        assertThat(store.candidates("KEYWORD_FILTER").stream().anyMatch(row -> id.equals(row.get("id")))).isTrue();
+        store.jdbc().update("DELETE FROM discovery_keyword_rules WHERE keyword IN ('Karneval','Dance','Querbeet')");
+    }
+
     @Test void commaSeparatedBatchPersistsIndividualRulesAndSkipsDuplicates() {
         var result=keywords.saveBatch(List.of("Karneval","B2B","Ausverkauft","b2b"),null,true);
         assertThat(result.created()).isEqualTo(3);
