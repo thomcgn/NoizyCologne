@@ -101,11 +101,14 @@ public class FactoryResetService {
                         throw new ResponseStatusException(HttpStatus.CONFLICT,
                             "Die Datenbank wird gerade bearbeitet. Der Werksreset wurde nicht gestartet.");
                     validateSchema();
-                    Preview snapshot = counts(media.files());
-                    String truncate = ORDERED_TABLES.stream()
+                    String targets = ORDERED_TABLES.stream()
                         .map(name -> "public.\"" + name + "\"")
                         .collect(java.util.stream.Collectors.joining(","));
-                    jdbc.execute("TRUNCATE TABLE " + truncate + " RESTART IDENTITY CASCADE");
+                    // Serialize concurrent writes for an accurate final row count.
+                    jdbc.execute("SET LOCAL lock_timeout = '5s'");
+                    jdbc.execute("LOCK TABLE " + targets + " IN ACCESS EXCLUSIVE MODE");
+                    Preview snapshot = counts(media.files());
+                    jdbc.execute("TRUNCATE TABLE " + targets + " RESTART IDENTITY CASCADE");
                     return snapshot;
                 }), "Reset-Transaktion lieferte kein Ergebnis");
 
@@ -121,7 +124,7 @@ public class FactoryResetService {
                             Files.deleteIfExists(path);
                         }
                     } catch (IOException exception) {
-                        if (!Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) failed++;
+                        failed++; // A non-empty directory is also an incomplete cleanup.
                         log.error("Factory reset: media cleanup could not remove an entry", exception);
                     }
                 }
