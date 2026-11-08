@@ -64,11 +64,12 @@ public class EventCandidateProcessor {
         var result=old!=null && keywords.released(old) ? evaluator.evaluate(old,evaluator.rules()) : evaluator.evaluate(event,venueId,venueName,false,evaluator.rules());
         // Keyword exclusion takes precedence over an unresolved legacy manual
         // review. It never changes imported/rejected entries or explicit releases.
+        var filterHit=keywords.match(event);
         if(old!=null && venueId==null && old.get("calendar_entry_id")==null
             && "MANUAL".equals(old.get("decision_origin"))
             && List.of("NEEDS_REVIEW","NEEDS_INQUIRY","READY").contains(old.get("status"))
-            && keywords.match(event)!=null && !keywords.released(old)) {
-            String why=keywords.match(event).explanation();
+            && filterHit!=null && !keywords.released(old)) {
+            String why=filterHit.explanation();
             store.jdbc().update("""
                 UPDATE discovery_candidates SET status='IGNORED',decision_origin='AUTOMATIC',reason=?,
                 automatic_reason=?,raw_event=?,fingerprint=?,evidence=?,source_url=?,
