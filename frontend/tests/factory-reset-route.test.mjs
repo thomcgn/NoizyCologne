@@ -30,13 +30,13 @@ const source = readFileSync(new URL('../src/app/api/admin/factory-reset/route.ts
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
 }).outputText;
-const module = { exports: {} };
+const compiledModule = { exports: {} };
 new Function('require', 'module', 'exports', compiled)(
   name => name === 'next/server' ? { NextResponse: { json: (body, init) => Response.json(body, init) } }
     : name === '@/lib/auth' ? auth : require(name),
-  module, module.exports,
+  compiledModule, compiledModule.exports,
 );
-const { GET, POST } = module.exports;
+const { GET, POST } = compiledModule.exports;
 function request(method, data, origin = 'https://tsa.noizycologne.de') {
   return new Request('https://tsa.noizycologne.de/api/admin/factory-reset', {
     method,
