@@ -621,8 +621,8 @@ test('source registration failure keeps the saved location for retry instead of 
   await act(async()=>{button('Website automatisch prüfen').click();await new Promise(resolve=>setTimeout(resolve,20));});
   await act(async()=>{button('Übernehmen').click();});
   assert.match(document.querySelector('[role="alert"]').textContent,/Location ist gespeichert/);
-  await act(async()=>{button('Übernehmen').click();});
-  assert.equal(created,1);assert.equal(updated,1);assert.equal(document.querySelector('[role="dialog"]'),null);
+  await act(async()=>{button('Offene Schritte fortsetzen').click();});
+  assert.equal(created,1);assert.equal(updated,0);assert.equal(document.querySelector('[role="dialog"]'),null);
 });
 test('unreadable website reports an unknown count rather than a confirmed zero events',async()=>{
   await mountLocationOnboarding(async url=>new Response(JSON.stringify(url==='/api/v1/discovery/onboard'?websiteFixture({eventCount:0,partyCount:0,knownSeriesCount:0,problems:['BROWSER_TIMEOUT'],sources:[]}):[])),async data=>({...data,id:'new-venue'}));
@@ -1041,4 +1041,317 @@ test('genres UX: shared list bounds visible rows, searches aliases, and explains
   assert.equal(document.querySelectorAll('[data-record-id]').length, 1);
   assert.equal(genreRow('g-59').dataset.recordId, 'g-59');
   assert.match(document.body.textContent, /Aktiv für Genreerkennung und Discovery/);
+});
+
+async function mountPartySaveFlow({ aliases, reload, upload, save, update } = {}) {
+  const calls = { created: 0, updated: 0, aliasWrites: [], aliasReads: 0, reloaded: 0, uploaded: 0 };
+  catalogue = {
+    parties: [], venues: [venue], actors: [],
+    createParty: async data => {
+      calls.created++;
+      if (save) await save(data);
+      const persisted = { ...data, id: 'persisted-party' };
+      catalogue.parties = [persisted];
+      return persisted;
+    },
+    updateParty: async data => { calls.updated++; await update?.(calls.updated, data); catalogue.parties = [data]; return data; },
+    reloadEntries: async options => { calls.reloaded++; await reload?.(calls.reloaded, options); },
+    uploadPartyFlyer: async (id, file) => { calls.uploaded++; return await upload?.(calls.uploaded, id, file); },
+  };
+  globalThis.fetch = async (url, options = {}) => {
+    if (url.includes('/aliases')) {
+      if (options.method === 'PUT') {
+        const value = JSON.parse(options.body);
+        calls.aliasWrites.push(value);
+        return await aliases?.(calls.aliasWrites.length, value) ?? new Response(null, { status: 204 });
+      }
+      calls.aliasReads++; return jsonResponse(['Stale server alias']);
+    }
+    return jsonResponse([genre]);
+  };
+  const Page = loadSource(new URL('../src/app/dashboard/portfolio/page.tsx', import.meta.url)).default;
+  await act(async () => mount(h(Page)));
+  click(button('Neu anlegen'));
+  changeField(document.querySelector('[role="dialog"] input'), 'Persisted Party');
+  changeField(document.querySelector('[role="dialog"] input[type="time"]'), '23:00');
+  return calls;
+}
+async function submitPortfolioSave() {
+  await act(async () => document.querySelector('[role="dialog"] form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+}
+
+test('portfolio UX: failed primary persistence reports failure and does not run supplementary operations', async () => {
+  const calls = await mountPartySaveFlow({ save: async () => { throw new Error('Stammdaten nicht erreichbar'); } });
+  await submitPortfolioSave();
+  assert.equal(calls.created, 1);
+  assert.equal(calls.aliasWrites.length, 0);
+  assert.equal(calls.reloaded, 0);
+  assert.match(document.querySelector('[role="dialog"] [role="alert"]').textContent, /Speichern der Partyreihe wurde nicht bestätigt/);
+  assert.doesNotMatch(document.querySelector('[role="dialog"]').textContent, /ist gespeichert/);
+});
+
+test('portfolio UX: alias failure retains confirmed party ID and draft, retries aliases only, and never auto-imports', async () => {
+  const calls = await mountPartySaveFlow({ aliases: async count => new Response(null, { status: count === 1 ? 503 : 204 }) });
+  const aliases = document.querySelector('[role="dialog"] textarea');
+  changeField(aliases, 'My verified alias');
+  await submitPortfolioSave();
+  assert.match(document.querySelector('[role="dialog"] [role="alert"]').textContent, /Partyreihe ist gespeichert; Discovery-Aliase speichern ist noch offen/);
+  assert.equal(aliases.value, 'My verified alias');
+  assert.equal(calls.aliasReads, 0, 'Retaining a newly saved ID must not overwrite draft aliases through a new GET');
+  assert.equal(calls.reloaded, 0);
+  await submitPortfolioSave();
+  assert.equal(calls.created, 1); assert.equal(calls.updated, 0);
+  assert.equal(calls.aliasWrites.length, 2);
+  assert.deepEqual(calls.aliasWrites[1], { aliases: ['My verified alias'] });
+  assert.equal(calls.reloaded, 1);
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.match(document.body.textContent, /Partyreihe „Persisted Party“ gespeichert/);
+});
+
+test('portfolio UX: edits after partial success update retained ID while already saved aliases are not repeated', async () => {
+  const calls = await mountPartySaveFlow({ reload: async count => { if (count === 1) throw new Error('Kalenderansicht offline'); } });
+  changeField(document.querySelector('[role="dialog"] textarea'), 'Stable alias');
+  await submitPortfolioSave();
+  assert.match(document.querySelector('[role="dialog"] [role="alert"]').textContent, /Nur die Kalenderansicht/);
+  changeField(document.querySelector('[role="dialog"] input'), 'Changed persisted party');
+  await submitPortfolioSave();
+  assert.equal(calls.created, 1); assert.equal(calls.updated, 1);
+  assert.equal(catalogue.parties[0].id, 'persisted-party');
+  assert.equal(catalogue.parties[0].name, 'Changed persisted party');
+  assert.equal(calls.aliasWrites.length, 1);
+  assert.equal(calls.reloaded, 2);
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+});
+
+test('portfolio UX: flyer failure retries the outstanding upload without rewriting successful party or aliases', async () => {
+  const calls = await mountPartySaveFlow({ upload: async count => { if (count === 1) throw new Error('Flyer nicht erreichbar'); return { id: 'flyer' }; } });
+  const input = document.querySelector('[role="dialog"] input[type="file"]');
+  const file = new dom.window.File(['synthetic'], 'fixture.png', { type: 'image/png' });
+  Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+  act(() => input.dispatchEvent(new Event('change', { bubbles: true })));
+  await submitPortfolioSave();
+  assert.match(document.querySelector('[role="dialog"] [role="alert"]').textContent, /Partyreihe ist gespeichert; Standardflyer hochladen ist noch offen/);
+  assert.equal(calls.reloaded, 0);
+  await submitPortfolioSave();
+  assert.equal(calls.created, 1); assert.equal(calls.updated, 0);
+  assert.equal(calls.aliasWrites.length, 1); assert.equal(calls.uploaded, 2);
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+});
+
+test('portfolio UX: refresh-only retry never repeats already persisted CRUD, aliases or flyer', async () => {
+  const calls = await mountPartySaveFlow({ reload: async count => { if (count === 1) throw new Error('Refresh offline'); } });
+  await submitPortfolioSave();
+  assert.match(document.querySelector('[role="dialog"] [role="alert"]').textContent, /Partyreihe und ihre Zusatzdaten sind gespeichert/);
+  await submitPortfolioSave();
+  assert.equal(calls.created, 1); assert.equal(calls.updated, 0);
+  assert.equal(calls.aliasWrites.length, 1); assert.equal(calls.reloaded, 2);
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+});
+
+test('portfolio UX: location partial save preserves ID, persists changed fields, then retries source registration', async () => {
+  let creates = 0, updates = 0, registrations = 0;
+  let updated;
+  await mountLocationOnboarding(async url => {
+    if (url === '/api/v1/discovery/onboard') return jsonResponse(websiteFixture());
+    if (url.endsWith('/sources')) return new Response(null, { status: ++registrations === 1 ? 503 : 204 });
+    return jsonResponse([]);
+  }, async value => { creates++; return { ...value, id: 'stable-venue' }; }, async value => { updates++; updated = value; return value; });
+  await act(async () => { button('Website automatisch prüfen').click(); await new Promise(resolve => setTimeout(resolve, 20)); });
+  await submitPortfolioSave();
+  assert.match(document.querySelector('[role="dialog"] [role="alert"]').textContent, /^Location ist gespeichert; Quellen übernehmen/);
+  changeField(document.querySelector('[role="dialog"] input'), 'Updated club name');
+  await submitPortfolioSave();
+  assert.equal(creates, 1); assert.equal(updates, 1); assert.equal(registrations, 2);
+  assert.equal(updated.id, 'stable-venue'); assert.equal(updated.name, 'Updated club name');
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+});
+
+test('catalog UX: 413 upload messages honor party10MB versus event8MB and explicit refresh errors propagate', async () => {
+  const actual = loadSource(new URL('../src/app/dashboard/CatalogProvider.tsx', import.meta.url));
+  let context;
+  function Probe() { context = actual.useCatalog(); return null; }
+  let failCalendar = false;
+  globalThis.fetch = async (url, options = {}) => options.method === 'POST'
+    ? new Response('Request body too large', { status: 413 })
+    : failCalendar && url === '/api/v1/calendar-entries'
+      ? new Response('Unavailable', { status: 503 })
+      : jsonResponse([]);
+  await act(async () => { mount(h(actual.CatalogProvider, null, h(Probe))); await new Promise(resolve => setTimeout(resolve, 20)); });
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+  const file = new File(['synthetic'], 'fixture.png', { type: 'image/png' });
+  await act(async () => {
+    await assert.rejects(() => context.uploadPartyFlyer('party', file), /höchstens 10 MB/);
+    await assert.rejects(() => context.uploadEventFlyer('event', file), /höchstens 8 MB/);
+  });
+  failCalendar = true;
+  await act(async () => {
+    await assert.rejects(() => context.reloadEntries({ throwOnError: true }), /Kalendereinträge konnten nicht geladen werden/);
+  });
+  assert.match(context.entriesError, /Kalendereinträge konnten nicht geladen werden/);
+  // Background callers retain the established state-based contract.
+  await act(async () => { await context.reloadEntries(); });
+});
+
+test('DashboardModal busy prevents Escape, X and dismiss capture before any discard prompt and retains dirty protection', () => {
+  function BusyForm() {
+    const [open, setOpen] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const [value, setValue] = useState('');
+    return h(React.Fragment, null,
+      h('button', { id: 'busy-modal-trigger', onClick: () => setOpen(true) }, 'Open protected form'),
+      h(DashboardModal, { open, title: 'Pending save', protectChanges: true, busy, onClose: () => setOpen(false) },
+        h('input', { 'aria-label': 'Protected draft', value, onChange: event => setValue(event.target.value) }),
+        h('button', { id: 'busy-start', type: 'button', onClick: () => setBusy(true) }, 'Start save'),
+        h('button', { id: 'busy-finish', type: 'button', onClick: () => setBusy(false) }, 'Report failure'),
+        h('button', { id: 'busy-cancel', type: 'button', 'data-modal-dismiss': true, onClick: () => setOpen(false) }, 'Cancel')));
+  }
+  mount(h(BusyForm));
+  const trigger = document.querySelector('#busy-modal-trigger');
+  trigger.focus(); click(trigger);
+  const input = document.querySelector('[aria-label="Protected draft"]');
+  changeField(input, 'Keep this unsaved draft');
+  let prompts = 0;
+  window.confirm = () => { prompts++; return false; };
+  try {
+    click(document.querySelector('#busy-start'));
+    assert.equal(document.querySelector('[data-modal-close]').disabled, true);
+    key('Escape'); click(document.querySelector('[data-modal-close]')); click(document.querySelector('#busy-cancel'));
+    assert.equal(prompts, 0);
+    assert.ok(document.querySelector('[role="dialog"]'));
+    assert.equal(input.value, 'Keep this unsaved draft');
+    click(document.querySelector('#busy-finish'));
+    assert.equal(document.querySelector('[data-modal-close]').disabled, false);
+    key('Escape');
+    assert.equal(prompts, 1, 'Ignoring a pending dismissal must not clear the existing dirty state');
+    assert.ok(document.querySelector('[role="dialog"]'));
+    assert.equal(input.value, 'Keep this unsaved draft');
+    window.confirm = () => true; key('Escape');
+    assert.equal(document.querySelector('[role="dialog"]'), null);
+    assert.equal(document.activeElement, trigger);
+  } finally { window.confirm = () => true; }
+});
+
+test('portfolio UX: pending supplementary request ignores all dismissal paths without a prompt; failure retains values and retry', async () => {
+  let finish;
+  const calls = await mountPartySaveFlow({ aliases: count => count === 1 ? new Promise(resolve => { finish = resolve; }) : new Response(null, { status: 204 }) });
+  const dialog = document.querySelector('[role="dialog"]');
+  changeField(dialog.querySelector('textarea'), 'Verified alias draft');
+  await submitPortfolioSave();
+  let prompts = 0;
+  window.confirm = () => { prompts++; return false; };
+  try {
+    assert.equal(dialog.querySelector('form').getAttribute('aria-busy'), 'true');
+    assert.equal(dialog.querySelector('[data-modal-close]').disabled, true);
+    assert.equal(dialog.querySelector('[data-modal-dismiss]').matches(':disabled'), true);
+    key('Escape'); click(dialog.querySelector('[data-modal-close]')); click(dialog.querySelector('[data-modal-dismiss]'));
+    assert.equal(prompts, 0);
+    assert.equal(document.querySelector('[role="dialog"]'), dialog);
+    await act(async () => { finish(new Response(null, { status: 503 })); });
+    assert.match(dialog.querySelector('[role="alert"]').textContent, /Partyreihe ist gespeichert; Discovery-Aliase/);
+    assert.equal(dialog.querySelector('input').value, 'Persisted Party');
+    assert.equal(dialog.querySelector('textarea').value, 'Verified alias draft');
+    key('Escape');
+    assert.equal(prompts, 1);
+    assert.equal(document.querySelector('[role="dialog"]'), dialog);
+    await submitPortfolioSave();
+    assert.equal(calls.created, 1); assert.equal(calls.updated, 0);
+    assert.deepEqual(calls.aliasWrites, [{ aliases: ['Verified alias draft'] }, { aliases: ['Verified alias draft'] }]);
+    assert.equal(document.querySelector('[role="dialog"]'), null);
+    assert.equal(prompts, 1, 'Successful retry must close without a discard prompt');
+  } finally { window.confirm = () => true; }
+});
+
+test('portfolio UX: failed PUT after partial create identifies the previously confirmed party and leaves the changed draft open', async () => {
+  const calls = await mountPartySaveFlow({
+    aliases: count => new Response(null, { status: count === 1 ? 503 : 204 }),
+    update: async count => { if (count === 1) throw new Error('Changed values were not confirmed'); },
+  });
+  await submitPortfolioSave();
+  changeField(document.querySelector('[role="dialog"] input'), 'Unconfirmed new party name');
+  await submitPortfolioSave();
+  const dialog = document.querySelector('[role="dialog"]');
+  const status = dialog.querySelector('[role="status"]').textContent;
+  assert.match(status, /Zuletzt bestätigter Stand: Partyreihe „Persisted Party“/);
+  assert.match(status, /geänderten Stammdaten sind noch nicht bestätigt/);
+  assert.doesNotMatch(status, /Unconfirmed new party name/);
+  assert.match(dialog.querySelector('[role="alert"]').textContent, /geänderten Stammdaten wurde nicht bestätigt/);
+  assert.equal(dialog.querySelector('input').value, 'Unconfirmed new party name');
+  assert.equal(catalogue.parties[0].name, 'Persisted Party');
+  assert.equal(calls.created, 1); assert.equal(calls.updated, 1); assert.equal(calls.aliasWrites.length, 1);
+  await submitPortfolioSave();
+  assert.equal(calls.created, 1); assert.equal(calls.updated, 2); assert.equal(calls.aliasWrites.length, 2);
+  assert.equal(catalogue.parties[0].id, 'persisted-party');
+  assert.equal(catalogue.parties[0].name, 'Unconfirmed new party name');
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.match(document.body.textContent, /Partyreihe „Unconfirmed new party name“ gespeichert/);
+});
+
+test('portfolio UX: failed location PUT never labels changed values as saved and retries against the retained ID', async () => {
+  let creates = 0, updates = 0, registrations = 0;
+  let persisted;
+  await mountLocationOnboarding(async url => {
+    if (url === '/api/v1/discovery/onboard') return jsonResponse(websiteFixture());
+    if (url.endsWith('/sources')) return new Response(null, { status: ++registrations === 1 ? 503 : 204 });
+    return jsonResponse([]);
+  }, async value => { creates++; persisted = { ...value, id: 'retained-location' }; return persisted; }, async value => {
+    updates++;
+    if (updates === 1) throw new Error('Location changes were not confirmed');
+    persisted = value; return value;
+  });
+  await act(async () => { button('Website automatisch prüfen').click(); await new Promise(resolve => setTimeout(resolve, 20)); });
+  await submitPortfolioSave();
+  changeField(document.querySelector('[role="dialog"] input'), 'Unconfirmed new location name');
+  await submitPortfolioSave();
+  const dialog = document.querySelector('[role="dialog"]');
+  const savedStatus = [...dialog.querySelectorAll('[role="status"]')].find(element => element.textContent.startsWith('Zuletzt bestätigter Stand:'));
+  assert.ok(savedStatus);
+  const status = savedStatus.textContent;
+  assert.match(status, /Zuletzt bestätigter Stand: Location „New Club“/);
+  assert.match(status, /geänderten Stammdaten sind noch nicht bestätigt/);
+  assert.doesNotMatch(status, /Unconfirmed new location name/);
+  assert.match(dialog.querySelector('[role="alert"]').textContent, /geänderten Stammdaten wurde nicht bestätigt/);
+  assert.equal(dialog.querySelector('input').value, 'Unconfirmed new location name');
+  assert.equal(persisted.name, 'New Club');
+  assert.equal(creates, 1); assert.equal(updates, 1); assert.equal(registrations, 1);
+  await submitPortfolioSave();
+  assert.equal(creates, 1); assert.equal(updates, 2); assert.equal(registrations, 2);
+  assert.equal(persisted.id, 'retained-location');
+  assert.equal(persisted.name, 'Unconfirmed new location name');
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+});
+
+test('portfolio UX: category transitions clear partial save progress instead of reusing a party ID for a location', async () => {
+  const calls = await mountPartySaveFlow({ aliases: count => new Response(null, { status: count === 1 ? 503 : 204 }) });
+  await submitPortfolioSave();
+  let createdLocation;
+  catalogue.createVenue = async value => { createdLocation = { ...value, id: 'independent-location' }; catalogue.venues = [createdLocation]; return createdLocation; };
+  click(button('Locations'));
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  click(button('Neu anlegen'));
+  changeField(document.querySelector('[role="dialog"] input'), 'Independent location');
+  await submitPortfolioSave();
+  assert.equal(createdLocation.id, 'independent-location');
+  assert.equal(createdLocation.name, 'Independent location');
+  assert.equal(calls.created, 1); assert.equal(calls.updated, 0);
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  click(button('Partyreihen'));
+  await act(async () => button('Bearbeiten').click());
+  assert.equal(calls.aliasReads, 1, 'Returning to an existing record must load its server aliases afresh');
+  await submitPortfolioSave();
+  assert.equal(calls.created, 1); assert.equal(calls.updated, 1);
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+});
+
+test('portfolio UX: cancelling a partial flow resets its persisted ID before creating an independent party', async () => {
+  const calls = await mountPartySaveFlow({ aliases: count => new Response(null, { status: count === 1 ? 503 : 204 }) });
+  await submitPortfolioSave();
+  click(button('Abbrechen'));
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  click(button('Neu anlegen'));
+  changeField(document.querySelector('[role="dialog"] input'), 'Another independent party');
+  changeField(document.querySelector('[role="dialog"] input[type="time"]'), '22:30');
+  await submitPortfolioSave();
+  assert.equal(calls.created, 2); assert.equal(calls.updated, 0);
+  assert.equal(calls.aliasWrites.length, 2);
+  assert.equal(document.querySelector('[role="dialog"]'), null);
 });

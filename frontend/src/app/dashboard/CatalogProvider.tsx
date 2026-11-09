@@ -53,12 +53,12 @@ export type GenreSuggestion = {
   uncertain: boolean;
 };
 
-function fallbackApiError(status: number, resource: string): string {
+function fallbackApiError(status: number, resource: string, maxFileSizeMb = 8): string {
   if (status === 401) return "Die Anmeldung ist abgelaufen. Bitte erneut anmelden.";
   if (status === 403) return "Diese Aktion ist für dein Team-Konto nicht freigegeben.";
   if (status === 404) return `${resource} wurde nicht gefunden. Bitte aktualisieren und erneut versuchen.`;
   if (status === 409) return `${resource} konnte nicht gespeichert werden, weil sich die Daten inzwischen geändert haben.`;
-  if (status === 413) return "Die Datei ist zu groß. Bitte wähle ein Bild bis höchstens 8 MB.";
+  if (status === 413) return `Die Datei ist zu groß. Bitte wähle ein Bild bis höchstens ${maxFileSizeMb} MB.`;
   if (status === 422) return `Die Daten für ${resource.toLowerCase()} konnten nicht verarbeitet werden. Bitte prüfe die Eingaben.`;
   if (status === 502 || status === 503) return `${resource} ist momentan nicht erreichbar. Bitte prüfe, ob das Backend läuft, und versuche es erneut.`;
   if (status === 504) return `${resource} hat zu lange gebraucht. Bitte versuche es erneut.`;
@@ -214,7 +214,7 @@ type CatalogContextValue = {
   entries: CalendarEntry[];
   entriesLoading: boolean;
   entriesError: string | null;
-  reloadEntries: () => Promise<void>;
+  reloadEntries: (options?: { throwOnError?: boolean }) => Promise<void>;
   createEntry: (entry: CalendarEntryPayload) => Promise<CalendarEntry>;
   updateEntry: (entry: CalendarEntryPayload & { id: string }) => Promise<CalendarEntry>;
   deleteEntry: (id: string) => Promise<void>;
@@ -242,7 +242,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       // Die Statusmeldung darunter bleibt verständlich, auch wenn kein JSON vorliegt.
     }
 
-    return fallbackApiError(response.status, "Die Partyreihenverwaltung");
+    return fallbackApiError(response.status, "Die Partyreihenverwaltung", 10);
   }
 
   const parsePartyFlyer = useCallback((body: unknown): PartyFlyer => {
@@ -1021,7 +1021,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     throw new Error("Die Kalender-API lieferte einen ungültigen Eintragstyp.");
   }, [parsePartyFlyer]);
 
-  const reloadEntries = useCallback(async () => {
+  const reloadEntries = useCallback(async (options?: { throwOnError?: boolean }) => {
     setEntriesLoading(true);
     setEntriesError(null);
 
@@ -1042,11 +1042,13 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       setEntries(body.map(parseCalendarEntry));
     } catch (cause) {
       setEntries([]);
-      setEntriesError(
-        cause instanceof Error
-          ? `Kalendereinträge konnten nicht geladen werden: ${cause.message}`
-          : "Kalendereinträge konnten wegen eines unbekannten Netzwerkfehlers nicht geladen werden."
-      );
+      const message = cause instanceof Error
+        ? `Kalendereinträge konnten nicht geladen werden: ${cause.message}`
+        : "Kalendereinträge konnten wegen eines unbekannten Netzwerkfehlers nicht geladen werden.";
+      setEntriesError(message);
+      // Existing background refreshes keep their state-based error reporting.
+      // Multi-step save flows need an explicit failure to report persisted success honestly.
+      if (options?.throwOnError) throw new Error(message);
     } finally {
       setEntriesLoading(false);
     }
