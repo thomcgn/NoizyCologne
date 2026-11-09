@@ -1170,10 +1170,10 @@ test('catalog UX: 413 upload messages honor party10MB versus event8MB and explic
   const actual = loadSource(new URL('../src/app/dashboard/CatalogProvider.tsx', import.meta.url));
   let context;
   function Probe() { context = actual.useCatalog(); return null; }
-  let failCalendar = false;
+  const failing = new Set();
   globalThis.fetch = async (url, options = {}) => options.method === 'POST'
     ? new Response('Request body too large', { status: 413 })
-    : failCalendar && url === '/api/v1/calendar-entries'
+    : failing.has(url)
       ? new Response('Unavailable', { status: 503 })
       : jsonResponse([]);
   await act(async () => { mount(h(actual.CatalogProvider, null, h(Probe))); await new Promise(resolve => setTimeout(resolve, 20)); });
@@ -1183,13 +1183,17 @@ test('catalog UX: 413 upload messages honor party10MB versus event8MB and explic
     await assert.rejects(() => context.uploadPartyFlyer('party', file), /höchstens 10 MB/);
     await assert.rejects(() => context.uploadEventFlyer('event', file), /höchstens 8 MB/);
   });
-  failCalendar = true;
-  await act(async () => {
-    await assert.rejects(() => context.reloadEntries({ throwOnError: true }), /Kalendereinträge konnten nicht geladen werden/);
-  });
-  assert.match(context.entriesError, /Kalendereinträge konnten nicht geladen werden/);
-  // Background callers retain the established state-based contract.
-  await act(async () => { await context.reloadEntries(); });
+  for (const [path, reload, error, message] of [
+    ['/api/v1/calendar-entries', 'reloadEntries', 'entriesError', /Kalendereinträge konnten nicht geladen werden/],
+    ['/api/v1/parties', 'reloadParties', 'partiesError', /Partyreihen konnten nicht geladen werden/],
+    ['/api/v1/editorial-drafts', 'reloadDrafts', 'draftsError', /Redaktionsentwürfe konnten nicht geladen werden/],
+  ]) {
+    failing.add(path);
+    await act(async () => { await assert.rejects(() => context[reload]({throwOnError:true}), message); });
+    assert.match(context[error], message);
+    // Background callers retain the established state-based contract.
+    await act(async () => { await context[reload](); });
+  }
 });
 
 test('DashboardModal busy prevents Escape, X and dismiss capture before any discard prompt and retains dirty protection', () => {

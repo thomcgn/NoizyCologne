@@ -3,6 +3,7 @@ import {visualSession} from './fixtures/authSession.mjs';
 import {mkdir, writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {controlCenterFixture, mockControlCenterApi} from './fixtures/controlCenter.mjs';
+import {candidate as discoveryCandidate} from './fixtures/discovery.mjs';
 
 const {chromium} = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright');
 const origin = process.env.DISCOVERY_VISUAL_URL ?? 'http://127.0.0.1:3107';
@@ -14,7 +15,7 @@ const {token, contextOptions} = await visualSession(origin);
 const browser = await chromium.launch({executablePath: process.env.CHROME_PATH ?? '/usr/bin/google-chrome-stable', headless: true});
 const results = [];
 try {
-  const scenarios = [6, 7].includes(phase)
+  const scenarios = [6, 7, 8].includes(phase)
     ? ['graphite', 'midnight', 'light'].flatMap(theme => ['compact', 'comfortable'].flatMap(density => [1440, 390].map(width => [theme, density, width, 'populated'])))
     : [
     ['graphite', 'compact', 1440, 'populated'], ['midnight', 'comfortable', 1440, 'populated'], ['light', 'compact', 1440, 'populated'],
@@ -30,9 +31,10 @@ try {
     const data = controlCenterFixture(state);
     await mockControlCenterApi(context, data, {state, onRequest: request => calls.push(request)});
     const saveFixture = phase === 7 ? await mockSaveResults(context, data, calls) : null;
+    const importFixture = phase === 8 ? await mockImportRefresh(context, data, calls) : null;
     const nativeDialogs = [];
     const page = await context.newPage();
-    if (phase === 7) page.on('dialog', dialog => {nativeDialogs.push(dialog.type()); void dialog.dismiss().catch(error => errors.push(error.message));});
+    if ([7, 8].includes(phase)) page.on('dialog', dialog => {nativeDialogs.push(dialog.type()); void dialog.dismiss().catch(error => errors.push(error.message));});
     page.setDefaultTimeout(15000);
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(`${origin}/dashboard`);
@@ -82,6 +84,7 @@ try {
     }
     for (const route of ['/dashboard/vorschlaege', '/dashboard/partys', '/dashboard/djs', '/dashboard/locations', '/dashboard/kalender', '/dashboard/redaktion', '/dashboard/settings', '/dashboard/automatisierung', '/dashboard/settings/genres']) {
       if (phase === 4) continue;
+      if (phase === 8 && route !== '/dashboard/vorschlaege') continue;
       if (phase === 7 && !['/dashboard/partys', '/dashboard/locations'].includes(route)) continue;
       if (phase === 6 && route !== '/dashboard/settings/genres') continue;
       if (phase !== 6 && route === '/dashboard/settings/genres') continue;
@@ -101,6 +104,7 @@ try {
           throw error;
         }
       }
+      if (phase === 8) await checkImportRefresh(page, importFixture, calls, name);
       if (phase === 6) {
         await page.locator('[data-record-id]').first().waitFor();
         const aliasInput = page.getByRole('textbox', {name: 'Neuer Alias für Emo', exact: true});
@@ -221,6 +225,9 @@ try {
       const allowed = new Set(['POST /api/v1/parties', 'PUT /api/v1/discovery/parties/save-party/aliases', 'POST /api/v1/venues', 'POST /api/v1/discovery/onboard', 'POST /api/v1/discovery/onboard/save-venue/sources']);
       assert.ok(calls.every(call => call.method === 'GET' || allowed.has(`${call.method} ${call.path}`)), `${name}: unexpected write, calendar import or duplicate CRUD`);
       assert.deepEqual(nativeDialogs, [], `${name}: pending/save flow opened a native confirmation dialog`);
+    } else if (phase === 8) {
+      assert.deepEqual(nativeDialogs, [], `${name}: pending import opened a native confirmation dialog`);
+      assert.ok(calls.every(call => call.method === 'GET' || (call.method === 'POST' && call.path === importFixture.confirmPath)), `${name}: unexpected discovery mutation`);
     } else assert.ok(calls.every(call => call.method === 'GET'), `${name}: screenshot scenario attempted an API write`);
     results.push({theme, density, width, state, passed: true});
     await context.close();
@@ -365,4 +372,97 @@ async function captureSaveFailure(page, editor, name) {
   assert.ok((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) >= 4.5, `${name}: error contrast must meet 4.5:1`);
   await alert.scrollIntoViewIfNeeded();
   await page.screenshot({path: `${out}/${name}.png`});
+}
+
+async function mockImportRefresh(context, data, calls) {
+  const id = 'import-fixture', entryId = 'visual/imported-entry';
+  const known = data.parties[0];
+  const item = discoveryCandidate(id, 'Fixture Calendar Import', {venue_id: data.venues[0].id, party_id: known.id, matching_class: 'MATCH',
+    assessment: {recognition: {status: 'SINGLE', parties: [{id: known.id, name: known.name, matchedName: known.name}]}, verification: {status: 'VERIFIED', reasons: [], date: '2026-11-14'}, lifecycle: 'ACTIVE', automaticImportEligible: false, importBlockers: []}});
+  data.discovery.candidates = [item];
+  let releaseRefresh;
+  const gate = new Promise(resolve => { releaseRefresh = resolve; });
+  const stats = {confirmations: 0, refreshReads: 0};
+  const confirmPath = `/api/v1/discovery/candidates/${id}/confirm`;
+  const json = (route, body, status = 200) => route.fulfill({status, contentType: 'application/json', body: JSON.stringify(body)});
+  await context.route('**/api/v1/**', async route => {
+    const request = route.request(), url = new URL(request.url()), method = request.method();
+    assert.equal(url.origin, new URL(origin).origin, 'Import fixture must stay on the loopback preview');
+    const refresh = method === 'GET' && url.pathname === '/api/v1/calendar-entries' && stats.confirmations > 0;
+    if (method === 'GET' && !refresh) return route.fallback();
+    calls.push({path: url.pathname, method, body: request.postData()});
+    if (url.pathname === confirmPath && method === 'POST') {
+      stats.confirmations++;
+      if (stats.confirmations > 1) return json(route, {message: 'Unexpected second fixture import'}, 409);
+      const body = request.postDataJSON();
+      data.entries.push({id: entryId, type: 'event', date: body.date, partyId: body.partyId, locationId: item.venue_id, startTime: '23:00', entryPrice: '', notes: '', mentionDjIds: [], eventFlyer: null, eventStatus: 'ACTIVE'});
+      return json(route, {calendarEntryId: entryId});
+    }
+    if (refresh) {
+      stats.refreshReads++;
+      if (stats.refreshReads === 1) {
+        await gate;
+        // Keep the overview stale until the held read ends: only local confirmed-ID state can expose the link beforehand.
+        data.discovery.candidates = [{...item, status: 'IMPORTED', calendar_entry_id: entryId}];
+        return json(route, {message: 'Synthetic post-import calendar refresh outage'}, 503);
+      }
+      return json(route, data.entries);
+    }
+    return json(route, {message: 'Unexpected write in local import fixture'}, 500);
+  });
+  return {id, entryId, confirmPath, stats, releaseRefresh};
+}
+
+async function checkImportRefresh(page, fixture, calls, name) {
+  const review = page.getByRole('region', {name: 'Prüfbedarf', exact: true});
+  await review.locator('summary').first().click();
+  await review.locator(`[data-record-id="${fixture.id}"]`).getByRole('button', {name: 'Veranstaltung prüfen', exact: true}).click();
+  const editor = page.getByRole('dialog');
+  const confirm = editor.getByRole('button', {name: 'Bestätigen & übernehmen', exact: true});
+  assert.equal(await confirm.isEnabled(), true);
+  const pendingRead = page.waitForRequest(request => new URL(request.url()).pathname === '/api/v1/calendar-entries' && request.method() === 'GET');
+  await confirm.click();
+  await pendingRead;
+  const saved = editor.getByRole('region', {name: 'Gespeicherter Kalendereintrag', exact: true});
+  const link = saved.getByRole('link', {name: 'Im Kalender anzeigen', exact: true});
+  const expectedHref = `/dashboard/kalender?entry=${encodeURIComponent(fixture.entryId)}`;
+  try {
+    await saved.getByRole('status').filter({hasText: 'Ansichten werden aktualisiert'}).waitFor();
+    assert.equal(await link.getAttribute('href'), expectedHref, `${name}: confirmed ID must precede refresh completion`);
+    assert.equal(await confirm.isDisabled(), true);
+    const close = editor.getByRole('button', {name: 'Dialog schließen', exact: true});
+    assert.equal(await close.isDisabled(), true);
+    await page.keyboard.press('Escape');
+    await close.evaluate(element => element.click());
+    assert.equal(await editor.isVisible(), true);
+    assert.equal(fixture.stats.confirmations, 1);
+    await saved.scrollIntoViewIfNeeded();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name}: pending import overflow`);
+    await page.screenshot({path: `${out}/${name}-import-confirmed-pending.png`});
+  } finally {fixture.releaseRefresh();}
+  await saved.getByRole('alert').filter({hasText: 'Kalenderimport ist bestätigt. Noch nicht aktualisiert: Kalender'}).waitFor();
+  const retry = saved.getByRole('button', {name: 'Ansichten erneut laden', exact: true});
+  await page.waitForFunction(() => !!document.querySelector('[role="dialog"] button[data-modal-close]:not(:disabled)'));
+  assert.equal(await retry.isEnabled(), true);
+  assert.equal(await confirm.isDisabled(), true);
+  assert.equal(await link.getAttribute('href'), expectedHref);
+  await saved.scrollIntoViewIfNeeded();
+  await captureSaveFailure(page, editor, `${name}-import-refresh-failed`);
+  const retryBounds = await retry.boundingBox();
+  assert.ok(retryBounds && retryBounds.y >= 0 && retryBounds.y + retryBounds.height <= page.viewportSize().height, `${name}: refresh retry must be visible in the failure screenshot`);
+  assert.equal(await editor.evaluate(element => element.scrollWidth > element.clientWidth), false, `${name}: import drawer overflow`);
+  const beforeRetry = calls.length;
+  await retry.click();
+  await page.getByRole('status').filter({hasText: 'Termin bestätigt und in den Kalender übernommen. Ansichten aktualisiert.'}).waitFor();
+  await page.waitForFunction(() => !!document.querySelector('[role="dialog"] button[data-modal-close]:not(:disabled)'));
+  assert.equal(fixture.stats.refreshReads, 2);
+  assert.equal(fixture.stats.confirmations, 1);
+  assert.ok(calls.slice(beforeRetry).length > 0 && calls.slice(beforeRetry).every(call => call.method === 'GET'), `${name}: retry must only refresh views`);
+  assert.equal(await saved.getByRole('alert').count(), 0);
+  assert.equal(await link.getAttribute('href'), expectedHref);
+  assert.equal(await confirm.isDisabled(), true);
+  const writes = calls.filter(call => call.method !== 'GET');
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].path, fixture.confirmPath);
+  assert.deepEqual(JSON.parse(writes[0].body), {partyId: 'party-0', date: '2026-11-14', inquiryStatus: 'NONE', dmText: '', seriesAlias: null});
 }

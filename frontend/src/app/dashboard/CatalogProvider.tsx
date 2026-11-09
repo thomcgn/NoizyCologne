@@ -176,7 +176,7 @@ type CatalogContextValue = {
   parties: PartySeries[];
   partiesLoading: boolean;
   partiesError: string | null;
-  reloadParties: () => Promise<void>;
+  reloadParties: (options?: { throwOnError?: boolean }) => Promise<void>;
   createParty: (party: Omit<PartySeries, "id">) => Promise<PartySeries>;
   updateParty: (party: PartySeries) => Promise<PartySeries>;
   deleteParty: (id: string) => Promise<void>;
@@ -188,7 +188,7 @@ type CatalogContextValue = {
   drafts: EditorialPostDraft[];
   draftsLoading: boolean;
   draftsError: string | null;
-  reloadDrafts: () => Promise<void>;
+  reloadDrafts: (options?: { throwOnError?: boolean }) => Promise<void>;
   createDraft: (calendarEntryId: string, draft: Omit<EditorialPostDraft, "id" | "calendarEntryId">) => Promise<EditorialPostDraft>;
   updateDraft: (draft: EditorialPostDraft) => Promise<EditorialPostDraft>;
   musicTracks: MusicTrack[];
@@ -359,7 +359,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     };
   }, [parsePartyFlyer]);
 
-  const reloadParties = useCallback(async () => {
+  const reloadParties = useCallback(async (options?: { throwOnError?: boolean }) => {
     setPartiesLoading(true);
     setPartiesError(null);
 
@@ -380,11 +380,11 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       setParties(body.map(parsePartyResponse));
     } catch (cause) {
       setParties([]);
-      setPartiesError(
-        cause instanceof Error
-          ? `Partyreihen konnten nicht geladen werden: ${cause.message}`
-          : "Partyreihen konnten wegen eines unbekannten Netzwerkfehlers nicht geladen werden."
-      );
+      const message = cause instanceof Error
+        ? `Partyreihen konnten nicht geladen werden: ${cause.message}`
+        : "Partyreihen konnten wegen eines unbekannten Netzwerkfehlers nicht geladen werden.";
+      setPartiesError(message);
+      if (options?.throwOnError) throw new Error(message);
     } finally {
       setPartiesLoading(false);
     }
@@ -440,7 +440,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const reloadDrafts = useCallback(async () => {
+  const reloadDrafts = useCallback(async (options?: { throwOnError?: boolean }) => {
     setDraftsLoading(true);
     setDraftsError(null);
     try {
@@ -454,7 +454,9 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       setDrafts(body.map(parseDraftResponse));
     } catch (cause) {
       setDrafts([]);
-      setDraftsError(cause instanceof Error ? `Redaktionsentwürfe konnten nicht geladen werden: ${cause.message}` : "Redaktionsentwürfe konnten nicht geladen werden.");
+      const message = cause instanceof Error ? `Redaktionsentwürfe konnten nicht geladen werden: ${cause.message}` : "Redaktionsentwürfe konnten nicht geladen werden.";
+      setDraftsError(message);
+      if (options?.throwOnError) throw new Error(message);
     } finally {
       setDraftsLoading(false);
     }
