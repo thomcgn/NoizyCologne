@@ -216,6 +216,7 @@ if [[ "$browser" == true ]]; then
 fi
 if [[ "$mode" == --full ]]; then
   run api-boundary-fixture python3 scripts/test-api-boundary.py
+  run backup-restore-fixture python3 scripts/test-backup-integration.py
 fi
 run final-diff-worktree git diff --check
 run final-diff-index git diff --cached --check

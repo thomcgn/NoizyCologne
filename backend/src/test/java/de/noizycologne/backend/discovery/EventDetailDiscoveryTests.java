@@ -25,7 +25,7 @@ class EventDetailDiscoveryTests {
     private @NonNull String overview(String description, String href) {
         return "<article><h2>Neue Party</h2><p>" + description + "</p><a href='" + href + "'>Details</a></article>";
     }
-    @Test void filtersBeforeFetchingArbitraryDetailLinkAndEnrichesIncompleteListing() throws Exception {
+    @Test void enrichesScopedIncompleteListingBeforeFinalFiltering() throws Exception {
         var service = service();
         page(root, overview("Indie und DJs", "/nacht/123"));
         page(detail, "<h1>Neue Party</h1><time datetime='2027-01-09T23:00'>Samstag</time><p>Party im Club</p>");
@@ -37,19 +37,23 @@ class EventDetailDiscoveryTests {
         assertThat(event.url()).isEqualTo(detail.toString());
         assertThat(requireNonNull(result.get(1)).extraction().events()).containsExactly(event);
     }
-    @Test void negativeGenreCheckCannotBeBypassedByEventPath() throws Exception {
+    @Test void concertDetailIsReadButRemainsExcluded() throws Exception {
         var service = service();
         URI unrelated = URI.create("https://club.example/events/klassik");
         page(root, overview("Klassisches Konzert", unrelated.toString()));
+        page(unrelated,"<h1>Neue Party</h1><p>Klassisches Konzert</p>");
         var result = service.discover(root.toString(), EventExtractor.Profile.defaults());
-        verify(fetcher, never()).fetch(unrelated);
-        assertThat(result).hasSize(1);
+        verify(fetcher).fetch(unrelated);
+        assertThat(PartyOnlyPolicy.concert(requireNonNull(requireNonNull(result.getFirst()).extraction().events().getFirst()))).isTrue();
+        assertThat(result).hasSize(2);
     }
-    @Test void wordBoundariesPreventGenreSubstringMatches() throws Exception {
+    @Test void missingGenreMatchDoesNotPreventScopedDetailCheck() throws Exception {
         var service = service();
         page(root, overview("Indien Reisevortrag", "/nacht/123"));
-        service.discover(root.toString(), EventExtractor.Profile.defaults());
-        verify(fetcher, never()).fetch(detail);
+        page(detail,"<h1>Neue Party</h1><p>Indien Reisevortrag</p>");
+        var result=service.discover(root.toString(), EventExtractor.Profile.defaults());
+        verify(fetcher).fetch(detail);
+        assertThat(DiscoveryGenreFilter.matches(requireNonNull(requireNonNull(result.getFirst()).extraction().events().getFirst()),Set.of("Indie"))).isFalse();
     }
     @Test void structuredEventWithRelativeUrlIsFollowedAndCancellationPreserved() throws Exception {
         var service = service();
@@ -64,7 +68,7 @@ class EventDetailDiscoveryTests {
         page(root, overview("Indie Party", "/nacht/123") + overview("Indie Party", "https://other.example/event"));
         when(fetcher.robotsAllowed(eq(detail), any())).thenReturn(false);
         var result = service.discover(root.toString(), EventExtractor.Profile.defaults());
-        verify(fetcher, never()).fetch(detail);
+        verify(fetcher,never()).fetch(detail);
         verify(fetcher, never()).fetch(URI.create("https://other.example/event"));
         assertThat(requireNonNull(requireNonNull(result.get(0)).extraction().events().get(0)).state()).contains("UNCONFIRMED");
         assertThat(requireNonNull(result.get(1)).extraction().status()).isEqualTo("ROBOTS_BLOCKED");

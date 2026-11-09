@@ -61,6 +61,29 @@ final class GermanProgramText {
         return dates.isEmpty() ? List.of(text) : dates.stream().distinct().toList();
     }
 
+    /** Labelled door time is evidence, not the event start. Keep genuine disagreements. */
+    static List<@NonNull String> eventStarts(List<@NonNull String> starts,String text) {
+        var doors=Pattern.compile("(?i)\\b(?:einlass|doors)\\s*:?\\s*(\\d{1,2}:\\d{2})").matcher(text);
+        var begins=Pattern.compile("(?i)\\b(?:beginn|beginnt|start|starts)\\s*:?\\s*(\\d{1,2}:\\d{2})").matcher(text);
+        if(!doors.find() || !begins.find()) return starts;
+        try {
+            var door=LocalTime.parse(doors.group(1),java.time.format.DateTimeFormatter.ofPattern("H:mm"));
+            var begin=LocalTime.parse(begins.group(1),java.time.format.DateTimeFormatter.ofPattern("H:mm"));
+            if(begins.find()) return starts; // More than one labelled performance needs editorial resolution.
+            List<@NonNull String> result=new ArrayList<>();
+            for(var start:starts) {
+                var day=EventNormalizer.date(start);var time=EventNormalizer.time(start);
+                if(day==null) {result.add(start);continue;}
+                if((time==null || time.equals(door)) && !begin.isBefore(door)) result.add(Objects.requireNonNull(day.atTime(begin).toString()));
+                else {
+                    result.add(start);
+                    if(time!=null && !time.equals(begin)) result.add(Objects.requireNonNull(day.atTime(begin).toString()));
+                }
+            }
+            return result.stream().distinct().toList();
+        }catch(DateTimeException ignored) {return starts;}
+    }
+
 
     private static final Pattern MONTH_DAY=Pattern.compile("(?<!\\d)(\\d{1,2})\\.\\s*(\\d{1,2}|\\p{L}+)\\.?",Pattern.CASE_INSENSITIVE);
     private static final Pattern WEEKDAY=Pattern.compile("^(montag|mo|dienstag|di|mittwoch|mi|donnerstag|do|freitag|fr|samstag|sa|sonntag|so)\\.?\\s*,?\\s*(?=\\d|$)",Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);

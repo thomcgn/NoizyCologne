@@ -253,6 +253,8 @@ jobs:
             browser-worker/seccomp_profile.json \
             deploy/server/deploy.sh \
             deploy/server/backup.sh \
+            deploy/server/backup.py \
+            deploy/server/restore-test.sh \
             deploy@tsa.noizycologne.de:/opt/noizycologne/deploy/server/releases/${{ needs.authorize.outputs.sha }}/
 
           printf '%s\n' "$GHCR_TOKEN" | ssh \

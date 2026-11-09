@@ -4,7 +4,7 @@ import { BOT, publicUrl } from './security.mjs';
 const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 export async function render(url, { proxy, permit, timeout = 20000, launch = {}, prepare = async () => {} } = {}) {
   publicUrl(url);
-  const warnings = new Set(), snapshots = [], seen = new Set();
+  const warnings = new Set(), diagnostics = [], snapshots = [], seen = new Set();
   let browser, requests = 0, bytes = 0, active = 0;
   const waiting = [];
   const acquire = async () => {if(active<8) {active++;return;} await new Promise(resolve=>waiting.push(resolve));};
@@ -64,7 +64,13 @@ export async function render(url, { proxy, permit, timeout = 20000, launch = {},
         if (frame.url() === 'about:blank') continue;
         try {
           publicUrl(frame.url());
-          const body = await frame.content(), key = frame.url() + body;
+          // Store event DOM, not repeated executable bundles/CSS. JSON-LD and hidden
+          // panels remain intact; the live page and its security policy are unchanged.
+          const body = await frame.evaluate(() => {
+            const copy=document.documentElement.cloneNode(true);
+            copy.querySelectorAll('script:not([type="application/ld+json"]),style,svg').forEach(node=>node.remove());
+            return '<!doctype html>'+copy.outerHTML;
+          }), key = frame.url() + body;
           if (seen.has(key)) continue;
           if (Buffer.byteLength(snapshots.map(item => item.body).join('') + body) > 1500000) { warnings.add('DOM_LIMIT'); continue; }
           seen.add(key); snapshots.push({ url: frame.url(), body, contentType: 'text/html' });
@@ -72,25 +78,75 @@ export async function render(url, { proxy, permit, timeout = 20000, launch = {},
       }
       if (page.frames().length > 5) warnings.add('FRAME_LIMIT');
     };
+    let collapsiblesFound=0, collapsiblesOpened=0, paginationSteps=0;
+    const inspected=new Set();
+    const expand=async () => {
+      // Read server-rendered/hidden DOM before interacting. Never expand navigation menus,
+      // consent dialogs, forms or arbitrary links. Missing panels may be loaded on demand.
+      const controls=page.locator('button[aria-expanded="false"], [role="button"][aria-expanded="false"], details:not([open]) > summary');
+      const handles=await controls.elementHandles();
+      for(const control of handles.slice(0,40)) {
+        if(Date.now()>=deadline-1500) { warnings.add('ACCORDION_LIMIT'); break; }
+        const info=await control.evaluate(element=>{
+          if(element.closest('nav,header,footer,form,[role="dialog"]'))return null;
+          let card=element.closest('article,li,[role="listitem"],details');
+          if(!card) for(let node=element.parentElement,depth=0;node && depth<5;node=node.parentElement,depth++) {
+            if(node.querySelector('time,[itemprop="startDate"]') || /\d{1,2}\.\s*(?:\d{1,2}\.|[A-Za-z]+)|\d{4}-\d{2}-\d{2}/.test(node.textContent)) {card=node;break;}
+          }
+          if(!card)return null;
+          const href=element.getAttribute('href');
+          if(href && !href.startsWith('#'))return null;
+          const target=element.tagName==='SUMMARY'?element.parentElement:document.getElementById(element.getAttribute('aria-controls')) || card.querySelector('[role="region"],[hidden]');
+          const available=target && (element.tagName==='SUMMARY'?[...target.children].filter(child=>child!==element).map(child=>child.textContent).join(' '):target.textContent).trim();
+          return {key:element.id || element.getAttribute('aria-controls') || card.textContent.slice(0,160),available:Boolean(available)};
+        }).catch(()=>null);
+        if(!info || inspected.has(info.key))continue;
+        inspected.add(info.key);collapsiblesFound++;
+        if(info.available)continue;
+        if(collapsiblesOpened>=8) {warnings.add('ACCORDION_LIMIT');continue;}
+        if(!await control.isVisible() || !await control.isEnabled()) {warnings.add('ACCORDION_UNAVAILABLE');continue;}
+        const before=page.url();
+        await control.click({timeout:1200}).then(()=>collapsiblesOpened++).catch(()=>warnings.add('ACCORDION_INTERACTION_FAILED'));
+        await settle();await snapshot();
+        if(page.url()!==before) {warnings.add('ACCORDION_NAVIGATION');break;}
+      }
+      if(handles.length>40)warnings.add('ACCORDION_LIMIT');
+      await Promise.all(handles.map(handle=>handle.dispose()));
+    };
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: Math.min(12000, timeout) });
     await settle(); await snapshot();
     const title = (await page.title()).toLowerCase();
     if (/captcha|just a moment|access denied|verify.*human/.test(title)) throw new Error('BLOCKED');
+    await expand();
+    let previousHeight=0;
     for (let step = 0; step < 2 && Date.now() < deadline - 1000; step++) {
-      await page.evaluate(() => window.scrollBy(0, Math.min(document.body.scrollHeight, 1200)));
-      await settle(); await snapshot();
+      const height=await page.evaluate(() => {window.scrollBy(0, Math.min(document.body.scrollHeight,1200));return document.body.scrollHeight;});
+      await settle(); await snapshot();await expand();
+      if(step===1 && height>previousHeight && height>2000)warnings.add('LAZY_LOADING_LIMIT');
+      previousHeight=height;
     }
-    const navigation = page.locator('button, a[rel="next"], [role="button"]').filter({ hasText: /^(mehr (veranstaltungen|events|laden)|load more(?: events)?|next(?: month| page)?|nächste[rns]? (monat|seite)|weiter)$/i });
+    if(await page.evaluate(() => window.scrollY+window.innerHeight<document.body.scrollHeight-32))warnings.add('LAZY_LOADING_LIMIT');
+    const navigationName=/^(mehr (veranstaltungen|events|laden)|load more(?: events)?|next(?: month| page)?|nächste[rns]? (monat|seite)|weiter)$/i;
+    const navigation = page.getByRole('button',{name:navigationName}).or(page.getByRole('link',{name:navigationName})).or(page.locator('a[rel="next"]'));
     for (let step = 0; step < 2 && Date.now() < deadline - 2500; step++) {
-      const next = navigation.first();
-      if (!await next.count() || !await next.isVisible() || !await next.isEnabled()) break;
-      await next.click({ timeout: 1500 }); await settle(); await snapshot();
-      if (step === 1 && await next.isVisible().catch(() => false) && await next.isEnabled().catch(() => false)) warnings.add('PAGINATION_LIMIT');
+      let next;
+      for(const candidate of await navigation.elementHandles()) {
+        if(await candidate.isVisible() && await candidate.isEnabled() && await candidate.evaluate(element=>!element.closest('form,[role="dialog"]'))) {next=candidate;break;}
+      }
+      if(!next)break;
+      const before=await page.content();
+      await next.click({ timeout: 1500 });paginationSteps++;await settle();await snapshot();await expand();
+      if(await page.content()===before) {warnings.add('PAGINATION_NO_PROGRESS');break;}
     }
+    let further=false;
+    for(const candidate of await navigation.elementHandles()) if(await candidate.isVisible() && await candidate.isEnabled() && await candidate.evaluate(element=>!element.closest('form,[role="dialog"]'))) {further=true;break;}
+    if(further)warnings.add('PAGINATION_LIMIT');
+    diagnostics.push(`COLLAPSIBLE_ELEMENTS_FOUND: ${collapsiblesFound}`,`COLLAPSIBLE_ELEMENTS_OPENED: ${collapsiblesOpened}`,
+      `PAGINATION_STEPS: ${paginationSteps}`,`FURTHER_PAGES_UNPROCESSED: ${further}`);
     if (Date.now() >= deadline) warnings.add('BROWSER_TIMEOUT');
-    return { status: warnings.size ? 'BROWSER_PARTIAL' : 'RENDERED', pages: snapshots, warnings: [...warnings], complete: false };
+    return { status: warnings.size ? 'BROWSER_PARTIAL' : 'RENDERED', pages: snapshots, warnings: [...diagnostics,...warnings], complete: false };
   } catch (error) {
     const status = ['BLOCKED', 'BROWSER_TIMEOUT'].includes(error.message) ? error.message : error.name === 'TimeoutError' ? 'BROWSER_TIMEOUT' : 'BROWSER_FAILED';
-    return { status, pages: snapshots, warnings: [...warnings, status], complete: false };
+    return { status, pages: snapshots, warnings: [...diagnostics,...warnings, status], complete: false };
   } finally { if (browser) await browser.close(); }
 }

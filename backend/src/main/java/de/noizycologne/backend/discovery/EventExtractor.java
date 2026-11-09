@@ -50,12 +50,16 @@ public class EventExtractor {
             catch (RuntimeException e) { malformed = true; }
         }
         List<@NonNull HtmlEvent> htmlEvents=new ArrayList<>();
-        if (events.isEmpty()) {
+        {
             @NonNull String selector = profile.itemSelector().isBlank()
-                    ? "[data-hook=event-list-item], [itemscope][itemtype*=Event], article:has(time), article:has(a[href]), .event:has(time), .event:has(a[href]), .event-item, .event-list-item"
+                    ? "[data-hook=event-list-item], [itemscope][itemtype*=Event], article:has(time), article:has(a[href]), .event:has(time), .event:has(a[href]), .event-item, .event-list-item, details:has(summary), li:has([aria-expanded]), [role=listitem]:has([aria-expanded])"
                     : profile.itemSelector();
+            var containers=new HashSet<>(doc.select(selector));
             for (Element item : doc.select(selector).stream().limit(200).toList()) {
-                var title = item.selectFirst(profile.titleSelector().isBlank() ? "[data-hook=ev-list-item-title], [itemprop=name], h1, h2, h3, .title" : profile.titleSelector());
+                if(item.parents().stream().anyMatch(parent -> parent.is("nav,header,footer,form,[role=dialog]"))) continue;
+                if(item.parents().stream().anyMatch(parent -> containers.contains(parent) && parent.select("h1,h2,h3,h4,[itemprop=name],.title").size()<=1)) continue;
+                if(item.select("article, [itemscope][itemtype*=Event]").stream().anyMatch(child -> child!=item && child.selectFirst("h1,h2,h3,h4,[itemprop=name]")!=null)) continue;
+                var title = item.selectFirst(profile.titleSelector().isBlank() ? "[data-hook=ev-list-item-title], [itemprop=name], h1, h2, h3, .title, summary, [aria-expanded]" : profile.titleSelector());
                 if (title == null) title = item.selectFirst("a[href]");
                 if (title == null || title.text().isBlank()) { malformed = true; continue; }
                 @NonNull String dateSelector = profile.dateSelector().isBlank() ? "time:not([itemprop=endDate]), [itemprop=startDate], [data-hook=ev-full-date-location] [data-hook=date]" : profile.dateSelector();
@@ -64,15 +68,13 @@ public class EventExtractor {
                     if (e.hasAttr("content")) return java.util.stream.Stream.of(e.attr("content"));
                     return GermanProgramText.starts(e.text()).stream();
                 }).distinct().toList();
-                var anchor = item.selectFirst("a[data-anchor=event-details][href], a[data-hook=ev-rsvp-button][href]");
-                if (anchor == null) anchor = item.selectFirst("a[href]");
-                String url = anchor == null ? page.url().toString() : anchor.absUrl("href");
+                String url = detailUrl(item,page.url().toString());
                 String state = riskyState(item.text());
                 var label=item.selectFirst(profile.dateSelector().isBlank() ? ".date, "+dateSelector : dateSelector);
                 String dateLabel=label==null ? "" : label.text();
                 if(dates.isEmpty() && !dateLabel.isBlank()) dates=GermanProgramText.starts(dateLabel);
                 htmlEvents.add(new HtmlEvent(item,new Event(!item.attr("data-event-id").isBlank() ? item.attr("data-event-id") : url.equals(page.url().toString()) ? "" : url, clip(title.text(), 500), url,
-                        dates, clip(item.text(), 8000), state, "",htmlPlace(item)),dateLabel));
+                        GermanProgramText.eventStarts(dates,item.text()), htmlEvidence(item), state, locationName(item),htmlPlace(item)),dateLabel));
             }
             // Generic detail pages with a semantic start date.
             var heading = doc.selectFirst("h1");
@@ -85,8 +87,8 @@ public class EventExtractor {
                     if(resolved.getHost().equalsIgnoreCase(page.url().getHost())) detailUrl=resolved.toString();
                 } catch(IllegalArgumentException ignored) { /* Untrusted canonical links cannot change event identity. */ }
                 htmlEvents.add(new HtmlEvent(doc.body(),new Event(detailUrl, clip(heading.text(), 500), detailUrl,
-                        List.of(date.hasAttr("datetime") ? date.attr("datetime") : date.attr("content")),
-                        clip(doc.body().text(), 8000), riskyState(doc.body().text()), "",htmlPlace(doc)),date.text()));
+                        GermanProgramText.eventStarts(List.of(date.hasAttr("datetime") ? date.attr("datetime") : date.attr("content")),doc.body().text()),
+                        htmlEvidence(doc.body()), riskyState(doc.body().text()), "",htmlPlace(doc)),date.text()));
             }
         }
         if (events.isEmpty() && htmlEvents.isEmpty() && profile.itemSelector().isBlank()) genericCards(doc,page.url().toString(),htmlEvents);
@@ -110,6 +112,8 @@ public class EventExtractor {
                 events.add(event);
             }
         }
+        events = DiscoveryBatchMerger.merge(events.stream().map(event -> new DiscoveryBatchMerger.Input(page.url().toString(),event,true,true)).toList(), "").stream().limit(200).map(item -> item.origins().size()==1?item.primary().event():item.event()).toList();
+        events = new ArrayList<>(events);
         boolean concerts = events.stream().anyMatch(PartyOnlyPolicy::concert);
         boolean concertContext=concertPage && events.stream().noneMatch(event -> EventNormalizer.text(event.title()).matches(".*\\b(aftershow ?party|after ?party)\\b.*") && !PartyOnlyPolicy.concert(event));
         if (concertContext) events.replaceAll(event -> new Event(event.identity(),event.title(),event.url(),event.starts(),event.evidence()+"\nKonzert",event.state(),event.location(),event.place()));
@@ -118,15 +122,70 @@ public class EventExtractor {
                 : doc.body().text().matches("(?is).*(keine (veranstaltungen|events|termine)|no (upcoming )?events).*") ? "NO_EVENTS" : "UNINTERPRETABLE";
         return new Extraction(events, status);
     }
+    Extraction extractDetail(EventPageFetcher.Page page,Profile profile) {
+        var result=extract(page,profile);
+        if(!result.events().isEmpty() || page.body().contains("BEGIN:VCALENDAR")) return result;
+        var doc=Jsoup.parse(page.body(),Objects.requireNonNull(page.url().toString()));
+        doc.select("nav,header,footer,script,style").remove();
+        var heading=doc.selectFirst("h1");
+        if(heading==null || heading.text().isBlank()) return result;
+        var scope=doc.selectFirst("main");if(scope==null)scope=doc.body();
+        return new Extraction(List.of(new Event(page.url().toString(),clip(heading.text(),500),page.url().toString(),
+            GermanProgramText.starts(scope.text()).stream().filter(start -> EventNormalizer.date(start)!=null).toList(),
+            htmlEvidence(scope),riskyState(scope.text()),locationName(scope),htmlPlace(scope))),"EVENTS_FOUND",false);
+    }
     boolean needsRendering(EventPageFetcher.Page page,Extraction extraction) {
-        return !List.of("EXCLUDED_CONCERTS","NO_EVENTS").contains(extraction.status())
+        var doc=Jsoup.parse(page.body());
+        return interactiveList(doc) || (!List.of("EXCLUDED_CONCERTS","NO_EVENTS").contains(extraction.status())
             && extraction.events().stream().noneMatch(event -> !event.title().isBlank()
-            && event.starts().stream().anyMatch(start -> EventNormalizer.date(start)!=null))
-            && requiresRendering(Jsoup.parse(page.body()));
+            && event.starts().stream().anyMatch(start -> EventNormalizer.date(start)!=null)) && requiresRendering(doc));
+    }
+    static boolean interactiveList(org.jsoup.nodes.Document doc) {
+        for(var node:doc.select("button, [role=button]")) {
+            if(node.parents().stream().anyMatch(parent -> parent.is("nav,header,footer,form,[role=dialog]"))) continue;
+            if(EventNormalizer.text(node.text().isBlank()?node.attr("aria-label"):node.text())
+                .matches("mehr (laden|veranstaltungen|events)|load more(?: events)?|next(?: page| month)?|nächste[rns]? (seite|monat)|weiter")) return true;
+            if(!node.attr("aria-expanded").equals("false")) continue;
+            var card=node.closest("article,li,[role=listitem]");
+            if(card==null) continue;
+            var panel=doc.getElementById(node.attr("aria-controls"));
+            if(panel==null || panel.text().isBlank()) return true;
+        }
+        return false;
+    }
+    /** Event-scoped links take precedence over images, share buttons and unrelated navigation. */
+    private static String detailUrl(Element card,String page) {
+        var links=card.select("a[href]");
+        var ordered=new ArrayList<Element>();
+        for(var link:links) if(link.hasAttr("data-anchor") && link.attr("data-anchor").equals("event-details")
+            || EventNormalizer.text(link.text().isBlank()?link.attr("aria-label"):link.text())
+                .matches(".*(?:erfahre hier mehr|mehr erfahren|details|tickets und infos|tickets infos|tickets & infos|event details).*")) ordered.add(link);
+        for(var link:links) if(!ordered.contains(link)) ordered.add(link);
+        for(var link:ordered) try {
+            var target=SafeUrls.parse(link.absUrl("href"));
+            if(target.getHost().equalsIgnoreCase(java.net.URI.create(page).getHost())
+                && !target.getPath().matches("(?i).*\\.(?:jpg|jpeg|png|webp|pdf)$")
+                && !link.hasAttr("download")) return target.toString();
+        }catch(IllegalArgumentException ignored) { /* Keep the card identity within this website. */ }
+        return page;
+    }
+    private static String htmlEvidence(Element card) {
+        StringBuilder text=new StringBuilder(card.text());
+        for(var paragraph:card.select("p,dd,[itemprop=genre]")) {
+            if(paragraph.attr("itemprop").equals("genre")) text.append("\nGenres: ").append(paragraph.text());
+            else if(paragraph.text().matches("(?is)^(genres?|musikrichtung|styles?)\\s*:.*")) text.append('\n').append(paragraph.text());
+        }
+        return clip(text.toString(),8000);
+    }
+    private static String locationName(Element scope) {
+        var location=scope.selectFirst("[itemprop=location]");
+        if(location==null) return "";
+        var name=location.selectFirst("[itemprop=name]");
+        return name==null?location.ownText():name.text();
     }
     private void genericCards(org.jsoup.nodes.Document doc,String page,List<@NonNull HtmlEvent> events) {
         doc=doc.clone();
-        doc.select("footer, nav, script, style, [hidden], [aria-hidden=true]").remove();
+        doc.select("footer, nav, script, style").remove();
         for (var heading:doc.select("h1, h2, h3, h4").stream().limit(200).toList()) {
             Element container=heading.parent();
             for (int depth=0;container!=null && depth<3;depth++,container=container.parent()) {
@@ -149,17 +208,10 @@ public class EventExtractor {
                 var dateLabel=container.selectFirst(".date, time, [itemprop=startDate]");
                 String label=dateLabel==null ? container.text() : dateLabel.text();
                 if(starts.isEmpty() && GermanProgramText.monthDay(label)!=null) starts.addAll(GermanProgramText.starts(label));
-                if (starts.isEmpty() || heading.text().isBlank()) continue;
-                String url=page;
-                for (var link:container.select("a[href]")) {
-                    try {
-                        var target=SafeUrls.parse(link.absUrl("href"));
-                        if (!target.getHost().equalsIgnoreCase(java.net.URI.create(page).getHost())) continue;
-                        url=target.toString(); break;
-                    } catch(IllegalArgumentException ignored) { /* No external social links as event identities. */ }
-                }
+                if (starts.isEmpty() && detailUrl(container,page).equals(page) || heading.text().isBlank()) continue;
+                String url=detailUrl(container,page);
                 events.add(new HtmlEvent(container,new Event(url.equals(page) ? "" : url,clip(heading.text(),500),url,
-                    starts.stream().distinct().toList(),clip(container.text(),8000),riskyState(container.text()),"",htmlPlace(container)),label));
+                    GermanProgramText.eventStarts(starts.stream().distinct().toList(),container.text()),htmlEvidence(container),riskyState(container.text()),locationName(container),htmlPlace(container)),label));
                 break;
             }
         }
@@ -198,7 +250,7 @@ public class EventExtractor {
                 String url = java.net.URI.create(page).resolve(node.path("url").asString(page)).toString();
                 String state = node.path("eventStatus").asString("") + " " + riskyState(title + ". " + node.path("description").asString(""));
                 if (node.has("previousStartDate")) state += " RESCHEDULED " + node.path("previousStartDate").asString();
-                events.add(new Event(node.path("@id").asString(url.equals(page) ? "" : url), clip(title, 500), url, starts,
+                events.add(new Event(node.path("@id").asString(url.equals(page) ? "" : url), clip(title, 500), url, GermanProgramText.eventStarts(starts,node.path("description").asString("")),
                         clip(node.toString(), 8000), state, node.path("location").path("name").asString(""),jsonPlace(node.path("location"),page)));
             }
         }
