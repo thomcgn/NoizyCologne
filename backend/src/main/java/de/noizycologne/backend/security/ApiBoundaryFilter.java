@@ -46,9 +46,12 @@ public final class ApiBoundaryFilter extends OncePerRequestFilter {
     protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
                                     @NonNull FilterChain chain) throws ServletException, IOException {
         String path = request.getRequestURI();
-        // Caddy never exposes these endpoints. Factory reset keeps its separate key and reauthentication.
+        // Caddy never exposes these endpoints. Each controller requires its own dedicated service key.
         boolean health = "GET".equals(request.getMethod()) && Set.of("/actuator/health", "/actuator/health/readiness", "/actuator/health/liveness").contains(path);
-        if (health || path.equals("/internal/maintenance/factory-reset")) {
+        if (health || path.equals("/internal/maintenance/factory-reset")
+                || Set.of("/internal/auth/register", "/internal/auth/validate", "/internal/auth/revoke",
+                    "/internal/auth/attempt", "/internal/auth/clear").contains(path)) {
+            if (path.startsWith("/internal/auth/")) response.setHeader("Cache-Control", "no-store");
             chain.doFilter(request, response); return;
         }
         @Nullable String provided = request.getHeader(HEADER);

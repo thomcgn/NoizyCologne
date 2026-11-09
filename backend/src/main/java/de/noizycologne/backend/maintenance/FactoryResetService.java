@@ -158,7 +158,7 @@ public class FactoryResetService {
         List<String> actual = jdbc.queryForList(
             "SELECT tablename FROM pg_tables WHERE schemaname='public'", String.class);
         Set<String> expected = new HashSet<>(APP_TABLES);
-        expected.add("flyway_schema_history");
+        expected.addAll(Set.of("flyway_schema_history", "auth_sessions", "auth_login_buckets"));
         if (!new HashSet<>(actual).equals(expected))
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Das Datenbankschema weicht vom freigegebenen Reset-Umfang ab. Es wurden keine Daten gelöscht.");

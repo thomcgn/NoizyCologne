@@ -161,6 +161,9 @@ class FactoryResetIntegrationTests {
         Path nested = MEDIA.resolve("flyers");
         Files.createDirectories(nested);
         Files.writeString(nested.resolve("event.png"), "event");
+        String nonce = "a".repeat(64), generation = "b".repeat(64), bucket = "c".repeat(64);
+        jdbc.update("INSERT INTO auth_sessions(nonce_hash,generation,expires_at,revoked) VALUES (?,?,CURRENT_TIMESTAMP+INTERVAL '1 hour',true)", nonce, generation);
+        jdbc.update("INSERT INTO auth_login_buckets(bucket_hash,attempts,expires_at) VALUES (?,5,CURRENT_TIMESTAMP+INTERVAL '15 minutes')", bucket);
         long migrations = java.util.Objects.requireNonNull(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history",Long.class));
         mvc.perform(java.util.Objects.requireNonNull(post("/internal/maintenance/factory-reset")
                 .header("X-Noizy-Reset-Key", SECRET)
@@ -171,6 +174,8 @@ class FactoryResetIntegrationTests {
             .andExpect(jsonPath("$.partial").value(false));
         assertThat(jdbc.queryForObject("SELECT count(*) FROM venues",Long.class)).isZero();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history",Long.class)).isEqualTo(migrations);
+        assertThat(jdbc.queryForObject("SELECT revoked FROM auth_sessions WHERE nonce_hash=?", Boolean.class, nonce)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT attempts FROM auth_login_buckets WHERE bucket_hash=?", Integer.class, bucket)).isEqualTo(5);
         assertThat(Files.isDirectory(MEDIA)).isTrue();
         try (var files = Files.list(MEDIA)) { assertThat(files.count()).isZero(); }
     }
