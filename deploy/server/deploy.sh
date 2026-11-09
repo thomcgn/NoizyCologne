@@ -102,6 +102,20 @@ setting() {
   printf '%s' "$value"
 }
 
+ensure_api_trust_secret() {
+  local value
+  value="$(setting API_TRUST_SECRET)"
+  if [[ -z "$value" ]]; then
+    if grep -q '^API_TRUST_SECRET=' .env; then echo 'API_TRUST_CONFIG_FAILED: existing key is empty' >&2; return 1; fi
+    value="$(od -An -N32 -tx1 /dev/urandom | tr -d '[:space:]')"
+    (( ${#value} == 64 )) || { echo 'API_TRUST_CONFIG_FAILED: key generation failed' >&2; return 1; }
+    printf '\nAPI_TRUST_SECRET=%s\n' "$value" >> .env
+    chmod 600 .env
+  fi
+  (( ${#value} >= 32 )) || { echo 'API_TRUST_CONFIG_FAILED: key too short (value withheld)' >&2; return 1; }
+  export API_TRUST_SECRET="$value"
+}
+
 browser_preflight() {
   local release="$1" token profile available
   token="$(setting BROWSER_WORKER_TOKEN)"
@@ -164,7 +178,7 @@ browser_smoke() {
   compose_for "$release" true
   export BROWSER_SECCOMP_PROFILE="$release/seccomp_profile.json"
   "${compose[@]}" exec -T api sh -ec 'wget -q -O /dev/null http://browser-gateway:3128/ready'
-  "${compose[@]}" exec -T browser-gateway node smoke.mjs
+  "${compose[@]}" exec -T api sh -ec 'printf "%s\n" "$API_TRUST_SECRET"' | "${compose[@]}" exec -T browser-gateway node smoke.mjs --key-stdin
 }
 
 main() {
@@ -184,6 +198,7 @@ main() {
   export DISCOVERY_BROWSER_ENABLED="$browser"
   local -a compose images=(api frontend landing) services=(db api frontend)
   ensure_factory_reset_secret
+  ensure_api_trust_secret
   if [[ "$browser" == true ]]; then
     browser_preflight "$release_dir"
     images+=(browser-worker browser-gateway); services+=(browser-worker browser-gateway)
