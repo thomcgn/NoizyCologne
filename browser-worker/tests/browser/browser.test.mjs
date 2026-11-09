@@ -43,3 +43,13 @@ test('denied requests and timeouts remain explicit failures',async () => {
   }});
   assert.equal(timeout.status,'BROWSER_TIMEOUT');assert.equal(timeout.complete,false);
 });
+
+test('request diagnostics preserve blocked method and source without leaking query values',async()=>{
+  const result=await render('https://fixture.example/diagnostic',{permit:async()=>true,prepare:async context=>{
+    await context.route('https://fixture.example/diagnostic',route=>route.fulfill({status:200,contentType:'text/html',body:'<title>Fixture</title><script>fetch("https://fixture.example/api?token=private-fixture-value",{method:"POST"}).catch(()=>{});</script>'}));
+  }});
+  assert.equal(result.status,'BROWSER_PARTIAL');
+  assert.ok(result.warnings.includes('REQUEST_METHOD_BLOCKED'));
+  assert.ok(result.warnings.some(warning=>warning.includes('POST fetch https://fixture.example/api')));
+  assert.ok(result.warnings.every(warning=>!warning.includes('private-fixture-value')));
+});

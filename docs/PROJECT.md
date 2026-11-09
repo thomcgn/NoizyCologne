@@ -3817,8 +3817,11 @@ Quellenspeichern sind ohne doppelte Location erneut versuchbar.
 Discovery-Controller/Scheduler sind nicht mehr nur auf local/staging beschränkt;
 vor anderen Profilen Authentifizierung und Schedulerflags ausdrücklich prüfen.
 Dienstag 09:00 Vollsuche und täglich 09:00 Änderungscheck, Europe/Berlin, bleiben
-unverändert. Das optionale Compose-Overlay wird vom regulären Deployment noch
-nicht aktiviert; neue Worker-/Gateway-Images benötigen separate Releasearbeit.
+unverändert. Seit 09.11.2026 veröffentlicht der qualifizierte Releaseweg auch
+Worker-/Gateway-Images derselben SHA und stellt das persistente Browser-Overlay
+samt Healthchecks, Sandbox-Preflight und Rollback bereit. Die Aktivierung bleibt
+bis zur ausdrücklichen Betriebsfreigabe deaktiviert; aktueller Ablauf und
+verbleibende MTC-Blocker stehen in [BROWSER-CRAWLER.md](BROWSER-CRAWLER.md).
 
 Reale lokale Chromium-Fixtures prüfen zwei unterschiedliche JS-Layouts, verspätete
 Karten, Lazy Loading/Pagination, iframe, JS-Fehler, verweigerte Abrufe und Timeout

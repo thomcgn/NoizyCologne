@@ -12,7 +12,17 @@ public final class DiscoveryWebsiteProbe {
         when(genres.terms()).thenReturn(Set.of("Indie","Emo","Metalcore","Hardcore","Pop Punk","Alternative Rock","Rock","Metal"));
         String endpoint=Objects.toString(System.getenv("DISCOVERY_PROBE_BROWSER_URL"),"");
         var browser=new BrowserPageRenderer(!endpoint.isBlank(),endpoint.isBlank() ? "http://browser-gateway:3128/render" : endpoint,
-            Objects.toString(System.getenv("BROWSER_WORKER_TOKEN"),""));
+            Objects.toString(System.getenv("BROWSER_WORKER_TOKEN"),"")) {
+            @Override public Result render(java.net.URI website) throws java.io.IOException {
+                var result=super.render(website);
+                String output=System.getenv("DISCOVERY_PROBE_OUTPUT");
+                if(output!=null && !output.isBlank()) {
+                    var directory=java.nio.file.Path.of(output);java.nio.file.Files.createDirectories(directory);
+                    java.nio.file.Files.writeString(directory.resolve(EventNormalizer.hash(website.toString())+".json"),tools.jackson.databind.json.JsonMapper.builder().build().writeValueAsString(result));
+                }
+                return result;
+            }
+        };
         var discovery=new VenueSourceDiscoveryService(new EventPageFetcher(),new EventExtractor(),genres,null,null,browser);
         Map<String,EventExtractor.Event> events=new LinkedHashMap<>();
         try {

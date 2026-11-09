@@ -159,6 +159,27 @@ jobs:
             ghcr.io/thomcgn/noizycologne-landing:latest
             ghcr.io/thomcgn/noizycologne-landing:${{ needs.authorize.outputs.sha }}
 
+      - name: Build and push browser worker
+        uses: docker/build-push-action@v6
+        with:
+          context: ./browser-worker
+          push: true
+          pull: true
+          cache-from: type=gha,scope=noizycologne-browser-worker
+          cache-to: type=gha,scope=noizycologne-browser-worker,mode=max
+          tags: ghcr.io/thomcgn/noizycologne-browser-worker:${{ needs.authorize.outputs.sha }}
+
+      - name: Build and push browser gateway
+        uses: docker/build-push-action@v6
+        with:
+          context: ./browser-worker
+          file: ./browser-worker/Dockerfile.gateway
+          push: true
+          pull: true
+          cache-from: type=gha,scope=noizycologne-browser-gateway
+          cache-to: type=gha,scope=noizycologne-browser-gateway,mode=max
+          tags: ghcr.io/thomcgn/noizycologne-browser-gateway:${{ needs.authorize.outputs.sha }}
+
 
   deploy:
     needs: [authorize, publish]
@@ -219,7 +240,7 @@ jobs:
             -o StrictHostKeyChecking=yes \
             -o BatchMode=yes \
             deploy@tsa.noizycologne.de \
-            'mkdir -p /opt/noizycologne/deploy/server'
+            'mkdir -p /opt/noizycologne/deploy/server/releases/${{ needs.authorize.outputs.sha }}'
 
           scp \
             -i ~/.ssh/deploy_key \
@@ -228,9 +249,11 @@ jobs:
             -o BatchMode=yes \
             deploy/server/Caddyfile \
             deploy/server/compose.yaml \
+            deploy/server/compose.browser.yaml \
+            browser-worker/seccomp_profile.json \
             deploy/server/deploy.sh \
             deploy/server/backup.sh \
-            deploy@tsa.noizycologne.de:/opt/noizycologne/deploy/server/
+            deploy@tsa.noizycologne.de:/opt/noizycologne/deploy/server/releases/${{ needs.authorize.outputs.sha }}/
 
           printf '%s\n' "$GHCR_TOKEN" | ssh \
             -i ~/.ssh/deploy_key \
@@ -244,12 +267,12 @@ jobs:
              cfg=$(mktemp -d)
              trap "rm -rf -- \"$cfg\"" EXIT
 
-             chmod 0755 deploy/server/deploy.sh deploy/server/backup.sh
+             chmod 0755 deploy/server/releases/${{ needs.authorize.outputs.sha }}/deploy.sh deploy/server/releases/${{ needs.authorize.outputs.sha }}/backup.sh
 
              docker --config "$cfg" login ghcr.io \
                -u thomcgn --password-stdin >/dev/null
 
-             DOCKER_CONFIG="$cfg" ./deploy/server/deploy.sh '${{ needs.authorize.outputs.sha }}'
+             NOIZY_SERVER_DIR="$PWD/deploy/server" DOCKER_CONFIG="$cfg" ./deploy/server/releases/${{ needs.authorize.outputs.sha }}/deploy.sh '${{ needs.authorize.outputs.sha }}'
             '
 
       - name: Verify live deployment
@@ -305,6 +328,13 @@ jobs:
             https://tsa.noizycologne.de/api/v1/venues)"
           test "$unauthenticated_status" = 401
 
+      - name: Verify production browser pipeline
+        id: browser_smoke
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes \
+            deploy@tsa.noizycologne.de \
+            'NOIZY_SERVER_DIR=/opt/noizycologne/deploy/server /opt/noizycologne/deploy/server/releases/${{ needs.authorize.outputs.sha }}/deploy.sh --browser-smoke'
+
       - name: Remove legacy smoke service after successful cutover
         id: cutover
         if: success()
@@ -317,8 +347,8 @@ jobs:
             deploy@tsa.noizycologne.de \
             'docker compose -p noizycologne -f /opt/noizycologne/compose.yaml rm -sf smoke'
 
-      - name: Restore legacy stack after failed deployment
-        if: failure() && (steps.rollout.outcome == 'failure' || steps.smoke.outcome == 'failure' || steps.cutover.outcome == 'failure')
+      - name: Restore previous qualified release after failed smoke
+        if: failure() && steps.rollout.outcome == 'success' && (steps.smoke.outcome == 'failure' || steps.browser_smoke.outcome == 'failure' || steps.cutover.outcome == 'failure')
         run: |
           ssh \
             -i ~/.ssh/deploy_key \
@@ -326,7 +356,4 @@ jobs:
             -o StrictHostKeyChecking=yes \
             -o BatchMode=yes \
             deploy@tsa.noizycologne.de \
-            'set -eu
-             docker compose -p noizycologne -f /opt/noizycologne/compose.yaml up -d caddy landing smoke
-             rm -f /opt/noizycologne/deploy/server/.previous-image-tag
-            '
+            'NOIZY_SERVER_DIR=/opt/noizycologne/deploy/server /opt/noizycologne/deploy/server/releases/${{ needs.authorize.outputs.sha }}/deploy.sh --rollback'

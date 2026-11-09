@@ -13,6 +13,8 @@ public final class PartySeriesRecognition {
 
     /** An editable proposal only: mixed-case series followed by an explicitly separated uppercase line-up. */
     public static String suggestedName(String title) {
+        var byDj=java.util.regex.Pattern.compile("(?iu)^(.+?)\\s+by\\s+DJ\\s+([\\p{L}\\p{N}][\\p{L}\\p{N} &,.+'’()!/-]+)$").matcher(title.trim());
+        if(byDj.matches()) return Objects.requireNonNull(byDj.group(1)).trim();
         var separator=java.util.regex.Pattern.compile("(?iu)^(.+?)\\s+(?:mit|with|feat\\.?|featuring)\\s+(.+)$").matcher(title.trim());
         if (!separator.matches()) return title.trim();
         String stem=Objects.requireNonNull(separator.group(1)).trim();

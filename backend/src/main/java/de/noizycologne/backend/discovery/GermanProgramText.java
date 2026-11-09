@@ -26,7 +26,10 @@ final class GermanProgramText {
             Map.entry("june",6), Map.entry("july",7), Map.entry("oct",10), Map.entry("october",10), Map.entry("dec",12), Map.entry("december",12));
 
     private static final Pattern ISO_DATE=Pattern.compile("(?<!\\d)(\\d{4}-\\d{2}-\\d{2}(?:[T ]\\d{2}:\\d{2}(?::\\d{2})?(?:Z|[+-]\\d{2}:\\d{2})?)?)(?!\\d)");
-    private static final Pattern ENGLISH_DATE=Pattern.compile("(?i)(?:([a-z]+)\\s+(\\d{1,2}),?\\s+(\\d{4})|(\\d{1,2})\\s+([a-z]+)\\s+(\\d{4}))(?:\\s+(?:at\\s+)?(\\d{1,2}):(\\d{2}))?");
+    private static final Pattern ENGLISH_DATE=Pattern.compile("(?i)(?:([a-z]+)\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s+(\\d{4})|(\\d{1,2})(?:st|nd|rd|th)?\\s+([a-z]+),?\\s+(\\d{4}))(?:\\s*[|,]?\\s*(?:at\\s+)?(\\d{1,2}):(\\d{2}))?");
+    private static final Pattern ENGLISH_MONTH_DAY=Pattern.compile("(?i)(?<![\\p{L}\\d])(?:(\\d{1,2})(?:st|nd|rd|th)?\\s+([a-z]+)|([a-z]+)\\s+(\\d{1,2})(?:st|nd|rd|th)?)(?![\\p{L}\\d])");
+    private static final Pattern CALENDAR_MONTH=Pattern.compile("(?i)^([a-zä]+)\\s+((?:19|20|21)\\d{2})$");
+    private static final Pattern CLOCK=Pattern.compile("(?<!\\d)(\\d{1,2}):(\\d{2})(?!\\d)");
     static List<@NonNull String> starts(@NonNull String text) {
         // An explicitly separated range supplies one start; the later date/time is the end.
         String start = clean(text).split("\\s+[–—-]\\s+", 2)[0];
@@ -72,7 +75,32 @@ final class GermanProgramText {
             String month=matches.group(2).toLowerCase(Locale.ROOT);
             days.add(MonthDay.of(month.matches("\\d+") ? Integer.parseInt(month) : MONTHS.getOrDefault(month,0),Integer.parseInt(matches.group(1))));
         } catch(DateTimeException | NumberFormatException ignored) { return null; }
+        var english=ENGLISH_MONTH_DAY.matcher(clean(text));
+        while(english.find()) {
+            String month=english.group(2)==null ? english.group(3) : english.group(2);
+            String day=english.group(1)==null ? english.group(4) : english.group(1);
+            Integer number=MONTHS.get(month.toLowerCase(Locale.ROOT));
+            if(number==null) continue;
+            try {days.add(MonthDay.of(number,Integer.parseInt(day)));}
+            catch(DateTimeException | NumberFormatException ignored) {return null;}
+        }
         return days.size()==1 ? days.iterator().next() : null;
+    }
+    /** Only a nearby, explicit month/year heading establishes a calendar year. */
+    static @Nullable YearMonth calendarContext(@Nullable Element list) {
+        for(int depth=0;list!=null && depth<4;depth++,list=list.parent()) {
+            Set<YearMonth> contexts=new HashSet<>();
+            for(var heading:list.children()) if(heading.tagName().matches("h[1-4]") && !heading.hasAttr("hidden")) {
+                var match=CALENDAR_MONTH.matcher(clean(heading.text()));
+                if(match.matches()) {
+                    Integer month=MONTHS.get(match.group(1).toLowerCase(Locale.ROOT));
+                    if(month!=null) contexts.add(YearMonth.of(Integer.parseInt(match.group(2)),month));
+                }
+            }
+            if(contexts.size()>1) return null;
+            if(contexts.size()==1) return contexts.iterator().next();
+        }
+        return null;
     }
     private static @Nullable DayOfWeek weekday(String label) {
         var match=WEEKDAY.matcher(clean(label));
@@ -95,7 +123,8 @@ final class GermanProgramText {
         var relative=relative(evidence.label(),fetchedOn);
         var monthDay=monthDay(evidence.label());
         var weekday=weekday(evidence.label());
-        boolean invalid=full.size()>1 || (relative!=null && anchor!=null && !relative.equals(anchor));
+        boolean invalid=full.size()>1 || (relative!=null && anchor!=null && !relative.equals(anchor))
+            || anchor==null && monthDay!=null && YEAR.matcher(evidence.label()).find();
         if (relative!=null) anchor=relative;
         if (anchor!=null) {
             invalid |= monthDay!=null && !monthDay.equals(MonthDay.from(anchor));
@@ -106,6 +135,9 @@ final class GermanProgramText {
     }
     /** One chronological sibling list only; a month wrap advances the anchored year. */
     static List<@NonNull ResolvedDate> resolve(List<@NonNull DateEvidence> evidence,LocalDate fetchedOn) {
+        return resolve(evidence,fetchedOn,null);
+    }
+    static List<@NonNull ResolvedDate> resolve(List<@NonNull DateEvidence> evidence,LocalDate fetchedOn,@Nullable YearMonth calendar) {
         var days=evidence.stream().map(item -> day(item,fetchedOn)).toList();
         int[] offsets=new int[days.size()];int offset=0;
         Integer base=null;MonthDay previous=null;boolean consistent=true;
@@ -126,6 +158,17 @@ final class GermanProgramText {
                 base=candidate;
             }
         }
+        if(base==null && consistent && calendar!=null) {
+            MonthDay first=null;
+            for(var item:days) {
+                var candidate=Objects.requireNonNull(item).monthDay();
+                if(candidate!=null) {first=candidate;break;}
+            }
+            if(first!=null) {
+                int month=first.getMonthValue();
+                base=calendar.getYear()+(calendar.getMonthValue()==12 && month==1 ? 1 : calendar.getMonthValue()==1 && month==12 ? -1 : 0);
+            }
+        }
         List<@NonNull ResolvedDate> result=new ArrayList<>();
         for(int i=0;i<days.size();i++) {
             var item=Objects.requireNonNull(days.get(i));var original=Objects.requireNonNull(evidence.get(i));
@@ -139,7 +182,14 @@ final class GermanProgramText {
             } catch(DateTimeException ignored) { conflict=true; }
             if(item.anchor()==null && base!=null && !consistent) conflict=true;
             boolean alreadyDated=original.starts().stream().anyMatch(start -> EventNormalizer.date(start)!=null);
-            List<@NonNull String> starts=resolved==null || conflict || alreadyDated ? original.starts() : List.of(Objects.requireNonNull(resolved.toString()));
+            List<@NonNull String> starts=original.starts();
+            if(resolved!=null && !conflict && !alreadyDated) {
+                String start=resolved.toString();
+                var time=CLOCK.matcher(clean(original.label()).split("\\s+[–—-]\\s+",2)[0]);
+                if(time.find()) try {start=resolved.atTime(Integer.parseInt(time.group(1)),Integer.parseInt(time.group(2))).toString();}
+                catch(DateTimeException invalid) {conflict=true;}
+                if(!conflict) starts=List.of(Objects.requireNonNull(start));
+            }
             result.add(new ResolvedDate(starts,conflict));
         }
         return result;

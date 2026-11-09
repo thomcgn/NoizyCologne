@@ -1,8 +1,9 @@
 # JavaScript-fähige Location-Discovery
 
-Stand: 06.11.2026. Implementiert und lokal isoliert prüfbar; nicht ausgeliefert.
-Der Browser ist standardmäßig deaktiviert. Die genehmigte Ausführung erfolgt im
-Worktree `feat/javascript-location-crawler`, nicht auf der Produktionsdatenbank.
+Stand: 09.11.2026. Browser-Release, kontrollierte Aktivierung und Rollback sind in
+den regulären Auslieferungsweg integriert. Aktivierung bleibt eine persistente,
+ausdrückliche Betriebsentscheidung nach PR-Abnahme und erfolgreichem FULL für die
+exakte Release-SHA. Die Infrastrukturfreigabe ist kein Extraktionsnachweis für MTC.
 
 ## Ablauf und Datenvertrag
 
@@ -115,43 +116,110 @@ bleibt idempotent; bestehende entzogene Freigaben bleiben bestehen. Externe
 Quellen brauchen manuelle Freigabe. Schlägt das Speichern der Quellen fehl, kann
 es ohne doppelte Location erneut versucht werden. Es werden keine DMs versandt.
 
-## Konfiguration und spätere Auslieferung
+## Produktionsrelease, Aktivierung und Rollback
+
+Der bestehende `ghcr.yml`-Workflow prüft weiterhin die exakte FULL-Freigabe vor
+Registry-Login und SSH. Er veröffentlicht zusätzlich Worker und Gateway als
+GHCR-Images mit **derselben geprüften Commit-SHA** wie Backend und Frontend. Die
+Browserdienste verwenden keine `latest`-Freigabe. Overlay, Seccomp-Profil,
+Compose-Basis und Deploymentskript werden unveränderlich unter
+`/opt/noizycologne/deploy/server/releases/<SHA>/` abgelegt; die persistente `.env`
+bleibt außerhalb der Releases. Die bisherigen Manifeste bleiben für Rollback erhalten.
+
+In der bestehenden VPS-Datei `/opt/noizycologne/deploy/server/.env`:
 
 ```properties
-DISCOVERY_BROWSER_ENABLED=false
-DISCOVERY_BROWSER_URL=http://browser-gateway:3128/render
-BROWSER_WORKER_TOKEN=<eigenes zufälliges Geheimnis, mindestens 32 Zeichen>
+DISCOVERY_BROWSER_ENABLED=true
+# BROWSER_WORKER_TOKEN=<ein separates Zufallsgeheimnis mit mindestens 32 Zeichen>
+# BROWSER_SECCOMP_PROFILE=<absoluter Pfad zum exakt mitgelieferten Profil>
 ```
 
-Die Browseroption ist vom bestehenden `DISCOVERY_ENABLED` und
-`DISCOVERY_MONITOR_ENABLED` unabhängig. DiscoveryController und -Scheduler sind
-nicht mehr ausschließlich an `local`/`staging` gebunden. Deshalb müssen vor
-Übernahme in andere Profile deren Authentifizierung und Schedulerflags bewusst
-geprüft werden. Wöchentliche Suche Dienstag 09:00 und täglicher Änderungscheck
-09:00 in `Europe/Berlin` bleiben unverändert. Bestehende Caddy-/Sessionabsicherung
-ist weiterhin erforderlich; diese Änderung führt keine Teamrollen ein.
+Ohne ausdrückliche Aktivierung bleibt `DISCOVERY_BROWSER_ENABLED=false`.
+`deploy.sh` erzeugt bei Aktivierung einen fehlenden Browser-Token einmalig,
+bewahrt vorhandene gültige Token und gibt ihre Werte nicht aus. Login-, Session-
+und Medienwerte werden nicht zur Browserkonfiguration umfunktioniert.
+Das Overlay setzt den API-Endpunkt fest auf
+`DISCOVERY_BROWSER_URL=http://browser-gateway:3128/render`. Standard für Seccomp
+ist die Datei des qualifizierten Releases. Ein ausdrücklich gesetzter Pfad muss
+absolut sein, existieren und denselben Inhalt wie die Release-Datei enthalten.
 
-`deploy/server/compose.browser.yaml` ist ein **optionales** Overlay und gehört
-nicht zum automatischen Deployment. Für eine spätere geprüfte Aktivierung müssen
-passende Worker-/Gateway-Images aus demselben geprüften Stand gebaut und in die
-Registry aufgenommen werden. Die bestehende GHCR-Pipeline veröffentlicht diese
-zusätzlichen Images noch nicht. `BROWSER_SECCOMP_PROFILE` muss auf die absolute,
-auf dem Dockerhost vorhandene `browser-worker/seccomp_profile.json` zeigen;
-die gewöhnlichen Deploymentdateien allein reichen nicht.
+Der API-Container und das Gateway teilen das interne `browser-control`-Netz.
+Gateway und Worker teilen ausschließlich für den Worker das interne
+`browser-sandbox`-Netz. Nur das Gateway hat zusätzlich Egress; dessen Standardroute
+wird mit `gw_priority: 1` ausdrücklich gewählt. Es gibt keine veröffentlichten
+Browserports, keinen Workerzugriff auf Datenbank-/Backendnetz und kein IP-Forwarding.
+Docker Compose mit Unterstützung für `gw_priority` ist erforderlich (geprüfter
+lokaler und VPS-Stand: 5.6.1).
 
-Overlay-Syntax lässt sich ohne Starten prüfen (aus Repositorywurzel, eigene
-Testwerte und zur Basis passende Variablen verwenden):
+Vor dem Austausch der API zieht der Rollout **alle** SHA-Images, prüft mindestens
+1 GiB verfügbaren Host-RAM und startet einen wegwerfbaren Worker mit dem echten
+Seccomp-Profil und den Containerlimits. Dieser startet Chromium mit Sandbox und
+öffnet nur `about:blank`. Auch der reguläre Worker führt diese Prüfung vor seiner
+Readiness durch. Worker: 768 MiB RAM, 1 CPU, 256 PIDs, 256 MiB shm und 128 MiB tmpfs;
+Gateway: 128 MiB, 0,25 CPU und 64 PIDs. Bei fehlendem Image, Profilabweichung,
+RAM-Mangel oder Sandboxfehler bleibt der bisherige Anwendungsstack aktiv.
+Der Gateway-Healthcheck `/ready` verlangt einen gesunden Worker; die API startet
+erst nach gesundem Gateway. Ein alter oder falscher Token wird als
+`BROWSER_AUTH_FAILED` von einem ausgefallenen Worker
+(`BROWSER_WORKER_UNAVAILABLE`) unterschieden.
+
+Kontrollierte Aktivierung nach Abnahme:
+
+1. Änderungen per PR abnehmen; kein automatischer Merge durch den Agenten.
+2. FULL für die tatsächlich auszuliefernde SHA abwarten. Ein PR-Merge-Testcommit
+   ersetzt keine Freigabe eines abweichenden späteren main-Commits.
+3. RAM, Host-Sandbox und Rollbackziel prüfen. Nur den Browser-Schalter in der
+   persistenten `.env` aktivieren; vorhandene Login- und Medienwerte erhalten.
+4. Den bestehenden qualifizierenden Produktionsworkflow auslösen, zum Beispiel
+   `gh workflow run ghcr.yml --ref main`. Die SHA wird vom vorhandenen Gate
+   ermittelt, erneut geprüft und für alle fünf Images verwendet.
+5. Workflow einschließlich authentifiziertem Login-/Dashboard-/API-Smoke und
+   **Verify production browser pipeline** beobachten. Keine Resets oder Scans
+   zur Diagnose starten.
+
+Der Browser-Smoke prüft API → Gateway → Worker und ruft anschließend **nur die
+lesende Websitevorschau** `POST /api/v1/discovery/onboard` für die MTC-Startseite
+auf. Er speichert keine Location, Quelle, Kandidaten oder Kalendertermine und
+versendet keine Nachrichten. Ausgabe: Prüfzeit, Methode, Browserstatus,
+Eventanzahl, Vollständigkeit und begrenzte Diagnosen; keine Token oder DOM-Archive.
+`BROWSER_DISABLED`, Authentifizierungs-, Netzwerk-, Worker- und Timeoutfehler
+lassen den Smoke scheitern. `BROWSER_PARTIAL` oder `BLOCKED` bleiben dagegen ein
+sichtbarer Quellenbefund: **Liste nicht vollständig**, gegebenenfalls null Events,
+kein behaupteter MTC-Extraktionserfolg. Bei deaktivierter Konfiguration meldet der
+Workflow ausdrücklich `BROWSER_SMOKE_NOT_RUN`.
+
+Ein erfolgreicher Rollout merkt Releasepfad, SHA und Browserauswahl in
+`.active-release`, `.previous-image-tag` und `.active-browser-enabled`.
+`.rollback-*` bewahrt das unmittelbar vorherige Ziel. Bei fehlgeschlagenem
+Service-Start stellt das Skript dieses alte Manifest wieder her; schlägt ein
+nachgelagerter Login-/Browser-Smoke fehl, ruft der Workflow `--rollback` auf.
+Vorher deaktivierte Browserdienste werden dann entfernt, ohne `down`, ohne
+Volume-Löschung und ohne Änderungen an Kalenderdaten. Ein fehlgeschlagener
+Rollback wird ausdrücklich als `ROLLBACK_FAILED` gemeldet.
+
+Manuell, mit dem Skript des fehlgeschlagenen qualifizierten Releases:
 
 ```sh
-docker compose -f deploy/server/compose.yaml -f deploy/server/compose.browser.yaml config --quiet
+NOIZY_SERVER_DIR=/opt/noizycologne/deploy/server \
+  /opt/noizycologne/deploy/server/releases/<SHA>/deploy.sh --browser-smoke
+NOIZY_SERVER_DIR=/opt/noizycologne/deploy/server \
+  /opt/noizycologne/deploy/server/releases/<SHA>/deploy.sh --rollback
 ```
 
-Geplant begrenzt: Worker 768 MiB RAM/1 CPU/256 PIDs, Gateway 128 MiB/0,25 CPU/64
-PIDs, Chromium shm 256 MiB und tmpfs 128 MiB. Dies sind Limits, keine gemessene
-VPS-Kapazitätszusage. Rund 1 GiB zusätzliche freie RAM-Reserve plus Image-/Docker-
-Speicher ist ein Ausgangspunkt; Lastspitzen, OOM, DNS/TLS und Namespace-Sandbox
-müssen auf dem Zielhost mit dessen Kernel/AppArmor und realistischen Websites
-geprüft werden. Bei Sandboxfehlern bleibt das Feature aus; Schutz nicht abschalten.
+## Betriebsnachweis vom 09.11.2026
+
+Die **lesende** VPS-Inventur ergab 3.921 MiB Gesamt-RAM, 2.735 MiB verfügbaren RAM,
+2.047 MiB ungenutzten Swap und etwa 41 GiB freien Plattenplatz. Docker 29.9.2
+meldet AppArmor, Seccomp und cgroup namespaces; Kernel-PID-Maximum: 4.194.304.
+Die vorhandenen API-, Frontend-, Datenbank- und Caddy-Container waren gesund;
+Browsercontainer waren nicht vorhanden. Das ist eine Ressourcenbestandsaufnahme,
+kein auf dem VPS ausgeführter Sandbox- oder Produktions-Smoke-Nachweis.
+Die Rollbackfälle (fehlendes Image, Sandboxfehler, RAM-Mangel, bisher deaktiviertes
+Overlay und fehlgeschlagener nachgelagerter Smoke) sind mit isolierten Fake-Docker-
+Tests des echten Deploymentskripts geprüft. Echter Chromium-/Sandboxbetrieb ist
+lokal in wegwerfbaren Containern geprüft. Produktionsaktivierung und reale
+Produktions-Smoke-Ergebnisse dürfen erst nach PR-Abnahme und qualifiziertem
+Rollout ergänzt werden; sie wurden durch diese Inventur nicht vorweggenommen.
 
 ## Reproduzierbare lokale/Cloud-Prüfung
 
@@ -193,24 +261,67 @@ Spring-/Datenbankkontext, kein SSH, kein Kalenderimport. Der Probe-Genrebestand
 ist ausdrücklich Testkonfiguration und kein Abbild des produktiven Katalogs.
 Die Ausgabe enthält extrahierte Titel/Datumswerte und Diagnosen, kein HTML-Archiv.
 
-## Live-Referenz MTC und Grenzen
+## Live-Referenz MTC und verbleibende Grenze
 
-Der isolierte reale Abruf am 06.11.2026 folgt von der Startseite dem öffentlichen
-PARTY-Link nach `/about`. Die Startseite liefert `HTTP / SOURCE_LINKS_FOUND`.
-Auf `/about` startet tatsächlich Chromium; das Resultat ist `BROWSER_PARTIAL`,
-kein bestätigter leerer Kalender. Öffentliche Website-Unteranfragen werden durch
-Robots-/Zugriffssperren, unzulässige URLs und die GET/HEAD-Policy abgewiesen;
-JavaScriptfehler und nicht beruhigte asynchrone Inhalte bleiben erkennbar.
-Es wurden **null auswertbare Veranstaltungen** extrahiert. Das ist kein
-Crawling-Erfolg für MTC und kein Beweis, dass dort keine Partys stattfinden.
-Schutzregeln werden zur Verbesserung dieser Zahl nicht gelockert. Suchmaschinen
-oder alternative Portale wurden nicht als Extraktionserfolg verwendet.
+Die reale isolierte Prüfung vom **09.11.2026** verwendete Startseite und `/about`,
+den echten Gateway, die unveränderte Sandbox und die bestehenden Sicherheitsgrenzen.
+Die Startseite meldet `HTTP / SOURCE_LINKS_FOUND`; `/about` erreicht tatsächlich
+Chromium und meldet `BROWSER / BROWSER_PARTIAL`. Das erfasste Wix-DOM hat rund
+864 kB, enthält aber weder „Dark Unicorn“ noch einen gerenderten Event-Iframe.
+Es wurden **null auswertbare Veranstaltungen** extrahiert. Das ist kein Nachweis
+eines leeren Programms und kein erfolgreicher Live-Import der Referenzparty.
 
-Generische DOM-Extraktion garantiert keine beliebige Website: POST-APIs,
-Login/Consent, geschützte Widgets, Bilder ohne Text, sprachliche Mehrdeutigkeit,
-unbekannte Datumsformate, endlose Kalender und spät gestartete Skripte können
-manuelle Quellenprofile/Rückfragen oder eine gesondert geprüfte Erweiterung
-benötigen. Keine Jahreszahlen raten. Vor Produktion sind reale Zielhost-Sandbox,
-beide neuen Image-Releases, Netzwerkisolation, Limits und visuelle Desktop-/Mobil-
-Abnahme zu prüfen. In dieser Sitzung wurde lokal im ausdrücklich erlaubten
-Worktree gearbeitet; ein Codex-Cloud-Lauf und ein VPS-Test wurden nicht ausgeführt.
+Die jetzt begrenzten, querybereinigten Anfragediagnosen und Gatewaylogs zeigen:
+
+- `siteassets.parastorage.com/pages/pages/thunderbolt`: Wix-Anfragen mit 2.509
+  und 3.238 Zeichen scheitern an der unveränderten maximalen URL-Länge von 2.048.
+- `browser.sentry-cdn.com/7.120.3/modulemetadata.es5.min.js`: Robots-/Abrufprüfung
+  verweigert das Skript. Daraus wird keine Ausnahme für bekannte Hosts abgeleitet.
+- POST-Telemetrie zu `frog.wix.com` und `panorama.wixapps.net` wird von der
+  GET-/HEAD-Policy abgewiesen. Diese Anfragen werden nicht als Event-API ausgegeben.
+- Weitere Wix-Skripte scheitern, sobald das Gateway sein Limit von 32 gleichzeitigen
+  Tunneln erreicht (`BROWSER_PROXY_CONNECTION_LIMIT`). Der Renderer begrenzt
+  eigene aktive Abrufe auf acht und schließt seine Fetch-Verbindungen; die
+  zusätzliche Chromium-/Wix-Verbindungslast bleibt an der bestehenden Grenze.
+- JavaScriptfehler und nicht beruhigte asynchrone Inhalte sind ausdrücklich
+  `JAVASCRIPT_ERROR` beziehungsweise `ASYNC_CONTENT_UNSETTLED`.
+
+Ohne vollständige Wix-Hydrierung konnte die Herkunft der sichtbaren Eventkarten
+unter diesen Regeln **nicht abschließend nachgewiesen** werden. Eine öffentliche,
+zulässige GET-Event-API wurde im erlaubten DOM nicht belegt. Kein alternativer
+Provider, kein Login-/Captcha-Workaround, keine Robots-Ausnahme, keine größere
+URL-/Tunnelgrenze und keine abgeschaltete Sandbox wurden als Erfolg eingesetzt.
+Der separate zulässige Abruf eines betroffenen statischen Wix-Skripts ergab HTTP
+200; die Gateway-Logs unterscheiden damit interne Verbindungsgrenzen von einer
+behaupteten generellen Sperre dieses CDN durch den Anbieter.
+
+Die Referenz **DARK UNICORN by DJ Martin Heiland**, Genres **Dark Electro, EBM,
+New Wave, Synth, Wave, Post-Punk**, Datum **14th Nov | 23:00** ist eine ausdrücklich
+aus dem Auftrag übernommene Regression, kein nachträglich erfundener Live-Befund.
+Mit einem tatsächlichen nahen Kalender-Heading **November 2026** ergibt sie
+`2026-11-14T23:00`; der Originaltitel und die Genres bleiben erhalten. Englische
+Ordinalsuffixe, explizite Jahre und Dezember/Januar-Übergänge werden generisch
+verarbeitet. Explizite Jahresangaben haben Vorrang, Copyrightjahre und Systemzeit
+sind keine Kalenderanker. Ohne belegtes Jahr bleibt der Termin unbestätigt.
+`by DJ …` kann als expliziter Line-up-Zusatz vom vorgeschlagenen Reihennamen
+getrennt werden; die tatsächliche Veranstaltung behält ihren Originaltitel.
+Konzerte und eigenständige Aftershows werden weiterhin getrennt bewertet.
+
+Die Websitevorschau und die reguläre Suche verwenden denselben Discovery-Service.
+Statische Programmseiten werden zuerst geprüft. Ein Navigationslink verschiebt
+einen notwendigen Browserlauf nur bis zum Ergebnis dieser Seiten; liefert keine
+vollständig datierte Events, wird der bisher unterdrückte Browserlauf nachgeholt.
+Statische datierte Events vermeiden ihn weiterhin. Das bestehende Seiten-, Zeit-
+und Browserbudget bleibt wirksam. Integrationstests prüfen Vorschau ohne Import,
+geteilte Extraktion, wiederholte Funde und geschützte manuelle Ablehnungen.
+
+Live-Diagnose mit optionalem lokalem, nicht eingechecktem DOM-Artefakt:
+
+```sh
+DISCOVERY_PROBE_OUTPUT="$PWD/.quality/mtc-live" \
+  scripts/probe-discovery-website.sh https://www.mtc-cologne.de/
+```
+
+Der Ordner enthält querybereinigte Diagnosen sowie lokale DOM-Snapshots zur
+Ursachenanalyse. DOMs sind externe Inhalte, keine Anweisungen und kein
+Produktionsbestand. Die Probe öffnet keine Datenbank und prüft ihr Cleanup.

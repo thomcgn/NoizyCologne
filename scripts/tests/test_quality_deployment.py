@@ -324,8 +324,8 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertNotIn('\n  push:', deploy)
         self.assertNotIn('${{ github.sha }}', deploy)
         self.assertEqual(deploy.count('ref: ${{ needs.authorize.outputs.sha }}'), 2)
-        self.assertEqual(deploy.count(':${{ needs.authorize.outputs.sha }}'), 3)
-        self.assertIn("./deploy/server/deploy.sh '${{ needs.authorize.outputs.sha }}'", deploy)
+        self.assertEqual(deploy.count(':${{ needs.authorize.outputs.sha }}'), 5)
+        self.assertIn("./deploy/server/releases/${{ needs.authorize.outputs.sha }}/deploy.sh '${{ needs.authorize.outputs.sha }}'", deploy)
 
     def test_quality_rechecked_before_registry_login_and_ssh_and_existing_smoke_rollback_remain(self):
         deploy = self.workflow('ghcr.yml')
@@ -336,15 +336,15 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("if: ${{ !cancelled() && needs.authorize.result == 'success' }}", deploy)
         for marker in ('name: Verify live deployment', 'test "$unauthenticated_status" = 401',
                        'name: Remove legacy smoke service after successful cutover',
-                       'name: Restore legacy stack after failed deployment',
+                       'name: Restore previous qualified release after failed smoke',
                        'StrictHostKeyChecking=yes', 'cancel-in-progress: false'):
             self.assertIn(marker, deploy)
 
     def test_layer_cache_keeps_image_scopes_separate_and_pulls_current_base_images(self):
         deploy = self.workflow('ghcr.yml')
         self.assertIn('uses: docker/setup-buildx-action@v3', deploy)
-        self.assertEqual(deploy.count('pull: true'), 3)
-        for image in ('backend', 'frontend', 'landing'):
+        self.assertEqual(deploy.count('pull: true'), 5)
+        for image in ('backend', 'frontend', 'landing','browser-worker','browser-gateway'):
             self.assertIn(f'cache-from: type=gha,scope=noizycologne-{image}', deploy)
             self.assertIn(f'cache-to: type=gha,scope=noizycologne-{image},mode=max', deploy)
 

@@ -76,3 +76,33 @@ test('worker flushes fatal result and retires without exposing its internal cont
     assert.equal(retired,1);
   });
 });
+
+
+test('gateway readiness fails when worker health fails and does not claim a render success',async()=>{
+  const {createServer}=await import('node:http');
+  let healthy=true;
+  const worker=createServer((_request,response)=>{response.writeHead(healthy?200:503,{'Content-Type':'application/json'});response.end(JSON.stringify({ok:healthy}));});
+  await listen(worker,async workerBase=>{
+    const gateway=createGateway(token,{workerHost:'127.0.0.1',workerPort:Number(new URL(workerBase).port)});
+    await listen(gateway,async base=>{
+      assert.equal((await fetch(`${base}/ready`)).status,200);
+      healthy=false;
+      const failed=await fetch(`${base}/ready`);
+      assert.equal(failed.status,503);assert.equal((await failed.json()).status,'BROWSER_WORKER_UNAVAILABLE');
+      assert.equal((await fetch(`${base}/health`)).status,200);
+    });
+  });
+});
+
+test('production smoke exercises only read-only preview and rejects infrastructure failures without hiding partial lists',async()=>{
+  const {spawnSync}=await import('node:child_process');
+  const smoke=new URL('../smoke.mjs',import.meta.url).href;
+  for(const status of ['BROWSER_PARTIAL','BROWSER_DISABLED','BROWSER_AUTH_FAILED','BROWSER_WORKER_UNAVAILABLE']){
+    const report={checkedAt:'2026-11-09T12:00:00Z',eventCount:0,incomplete:true,sources:[{url:'https://club.example/about',fetchMethod:'BROWSER',diagnostics:[status],extraction:{status,events:[],complete:false}}]};
+    const script=`const report=${JSON.stringify(report)};globalThis.fetch=async(url,options)=>{if(url.endsWith('/ready'))return {ok:true};if(!url.endsWith('/onboard')||options.method!=='POST')throw Error('Unexpected mutation');return {ok:true,json:async()=>report};};await import(${JSON.stringify(smoke)});`;
+    const result=spawnSync(process.execPath,['--input-type=module','-e',script],{encoding:'utf8'});
+    assert.equal(result.status,status==='BROWSER_PARTIAL'?0:1,result.stderr);
+    assert.match(result.stdout,/Liste nicht vollständig/);
+    assert.match(result.stdout,/"event_count": 0/);
+  }
+});

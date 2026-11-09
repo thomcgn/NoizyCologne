@@ -52,8 +52,11 @@ public class BrowserPageRenderer {
                 request.setEntity(new StringEntity(json.writeValueAsString(Map.of("url",website.toString())),ContentType.APPLICATION_JSON));
                 return client.execute(request,response -> {
                     if (response.getCode()==429) return new Result("BROWSER_BUSY",List.of(),List.of("BROWSER_BUSY"),false);
-                    if (response.getCode()!=200 || response.getEntity()==null)
-                        return new Result("BROWSER_UNAVAILABLE",List.of(),List.of("BROWSER_UNAVAILABLE"),false);
+                    if (response.getCode()!=200 || response.getEntity()==null) {
+                        String failure=response.getCode()==401 || response.getCode()==403 ? "BROWSER_AUTH_FAILED"
+                            : response.getCode()==502 || response.getCode()==503 ? "BROWSER_WORKER_UNAVAILABLE" : "BROWSER_UNAVAILABLE";
+                        return new Result(failure,List.of(),List.of(failure,"Browser control HTTP "+response.getCode()),false);
+                    }
                     byte[] bytes;
                     try (var stream=response.getEntity().getContent()) {
                         bytes=new EventPageFetcher(EventPageFetcher.HARD_MAX_BYTES).readBody(stream,System.nanoTime()+45_000_000_000L);

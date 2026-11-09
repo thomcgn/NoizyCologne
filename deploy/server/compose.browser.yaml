@@ -1,11 +1,14 @@
-# Optional overlay, deliberately excluded from the ordinary production deployment.
-# Run from the repository root; see docs/BROWSER-CRAWLER.md.
+# Controlled production overlay, selected persistently through BROWSER_ENABLED.
+# All browser images use the same qualified IMAGE_TAG as the application.
 services:
   api:
     environment:
       DISCOVERY_BROWSER_ENABLED: "true"
       DISCOVERY_BROWSER_URL: http://browser-gateway:3128/render
       BROWSER_WORKER_TOKEN: ${BROWSER_WORKER_TOKEN:?A random browser token of at least 32 characters is required}
+    depends_on:
+      browser-gateway:
+        condition: service_healthy
     networks: [internal, browser-control]
 
   browser-gateway:
@@ -23,11 +26,23 @@ services:
       net.ipv4.ip_forward: "0"
     environment:
       BROWSER_WORKER_TOKEN: ${BROWSER_WORKER_TOKEN:?Browser token required}
+    depends_on:
+      browser-worker:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3128/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 4s
+      retries: 6
     expose: ["3128"]
     mem_limit: 128m
     cpus: 0.25
     pids_limit: 64
-    networks: [browser-control, browser-sandbox, browser-egress]
+    networks:
+      browser-control: {}
+      browser-sandbox: {}
+      browser-egress:
+        gw_priority: 1
 
   browser-worker:
     image: ghcr.io/thomcgn/noizycologne-browser-worker:${IMAGE_TAG:-latest}
@@ -44,6 +59,12 @@ services:
     environment:
       BROWSER_WORKER_TOKEN: ${BROWSER_WORKER_TOKEN:?Browser token required}
       BROWSER_TIMEOUT_MS: ${BROWSER_TIMEOUT_MS:-20000}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 4s
+      start_period: 15s
+      retries: 6
     expose: ["3000"]
     tmpfs: [/tmp:rw,size=134217728,mode=1777]
     shm_size: 256m

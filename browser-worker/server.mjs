@@ -27,7 +27,7 @@ export function runChild(job, { timeout = 40000, forkProcess = fork } = {}) {
 export function createWorker(token, runner = runChild, retire = () => process.exit(1)) {
   let busy = false, retiring = false;
   return http.createServer({ requestTimeout: 5000, headersTimeout: 5000, maxHeaderSize: 8192 }, async (request, response) => {
-    if (request.method === 'GET' && request.url === '/health') { send(response, 200, { ok: true }); return; }
+    if (request.method === 'GET' && request.url === '/health') { send(response, retiring ? 503 : 200, { ok: !retiring }); return; }
     if (request.method !== 'POST' || request.url !== '/render' || !authorized(request.headers.authorization, `Bearer ${token}`)) { send(response, 403, { status: 'BLOCKED' }); return; }
     if (busy || retiring) { send(response, 429, { status: 'BROWSER_BUSY' }); return; }
     busy = true;
@@ -58,5 +58,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     for (const child of children) if (child.pid) try { process.kill(-child.pid, 'SIGKILL'); } catch { /* Already reaped. */ }
     process.exit(0);
   });
-  createWorker(secret(process.env.BROWSER_WORKER_TOKEN)).listen(3000, '0.0.0.0');
+  const token = secret(process.env.BROWSER_WORKER_TOKEN);
+  try { const {verifySandbox}=await import('./sandbox-check.mjs'); await verifySandbox(); }
+  catch { console.error('BROWSER_SANDBOX_FAILED: Chromium startup failed with sandbox enabled; inspect container limits, seccomp, user namespaces and host AppArmor'); process.exit(1); }
+  createWorker(token).listen(3000, '0.0.0.0');
 }

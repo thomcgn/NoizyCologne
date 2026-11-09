@@ -5,7 +5,10 @@ const delay = milliseconds => new Promise(resolve => setTimeout(resolve, millise
 export async function render(url, { proxy, permit, timeout = 20000, launch = {}, prepare = async () => {} } = {}) {
   publicUrl(url);
   const warnings = new Set(), snapshots = [], seen = new Set();
-  let browser, requests = 0, bytes = 0;
+  let browser, requests = 0, bytes = 0, active = 0;
+  const waiting = [];
+  const acquire = async () => {if(active<8) {active++;return;} await new Promise(resolve=>waiting.push(resolve));};
+  const release = () => {const next=waiting.shift();if(next)next();else active--;};
   try {
     browser = await chromium.launch({ headless: true, chromiumSandbox: true, timeout: 10000,
       proxy, args: ['--disable-quic', '--proxy-bypass-list=<-loopback>', '--force-webrtc-ip-handling-policy=disable_non_proxied_udp'],
@@ -16,13 +19,15 @@ export async function render(url, { proxy, permit, timeout = 20000, launch = {},
     await context.route('**/*', async route => {
       const request = route.request();
       if (['image', 'media', 'font'].includes(request.resourceType())) { await route.abort(); return; }
+      let acquired=false;
       try {
         publicUrl(request.url());
         if (!['GET', 'HEAD'].includes(request.method())) throw new Error('REQUEST_METHOD_BLOCKED');
         if (++requests > 160) throw new Error('REQUEST_LIMIT');
+        await acquire(); acquired=true;
         if (!await permit(request.url())) throw new Error('ROBOTS_BLOCKED');
         // Inspect redirects before Chromium can follow them without a second route callback.
-        const response = await route.fetch({ maxRedirects: 0, timeout: 6000 });
+        const response = await route.fetch({ maxRedirects: 0, timeout: 6000, headers:{...request.headers(),connection:'close'} });
         if (response.status() >= 300 && response.status() < 400) { await response.dispose(); throw new Error('REDIRECT_REQUIRES_REVIEW'); }
         if ([401, 403, 429].includes(response.status())) { await response.dispose(); throw new Error('BLOCKED'); }
         const body = await response.body(); bytes += body.length;
@@ -31,9 +36,15 @@ export async function render(url, { proxy, permit, timeout = 20000, launch = {},
         delete headers['content-encoding']; delete headers['content-length'];
         await route.fulfill({ status: response.status(), headers, body }); await response.dispose();
       } catch (error) {
-        warnings.add(['UNSAFE_URL','REQUEST_METHOD_BLOCKED','REQUEST_LIMIT','ROBOTS_BLOCKED','REDIRECT_REQUIRES_REVIEW','BLOCKED','RESPONSE_TOO_LARGE'].includes(error.message) ? error.message : 'BROWSER_NETWORK_ERROR');
+        const code = ['UNSAFE_URL','REQUEST_METHOD_BLOCKED','REQUEST_LIMIT','ROBOTS_BLOCKED','REDIRECT_REQUIRES_REVIEW','BLOCKED','RESPONSE_TOO_LARGE'].includes(error.message) ? error.message : 'BROWSER_NETWORK_ERROR';
+        warnings.add(code);
+        // Keep bounded, actionable evidence without query credentials or arbitrary error bodies.
+        if (warnings.size < 24) {
+          try { const target = new URL(request.url()); warnings.add(`${code}: ${request.method()} ${request.resourceType()} ${target.origin}${target.pathname.slice(0,200)}${code==='UNSAFE_URL' ? ` (URL length ${request.url().length})` : ''}`); }
+          catch { /* Malformed targets are already represented by UNSAFE_URL. */ }
+        }
         await route.abort().catch(() => {});
-      }
+      } finally { if(acquired)release(); }
     });
     await prepare(context);
     const page = await context.newPage();
