@@ -18,11 +18,14 @@ const token = `${payload}.${createHmac('sha256', secret).update(payload).digest(
 const browser = await chromium.launch({executablePath: process.env.CHROME_PATH ?? '/usr/bin/google-chrome-stable', headless: true});
 const results = [];
 try {
-  for (const [theme, density, width, state] of [
+  const scenarios = phase === 6
+    ? ['graphite', 'midnight', 'light'].flatMap(theme => ['compact', 'comfortable'].flatMap(density => [1440, 390].map(width => [theme, density, width, 'populated'])))
+    : [
     ['graphite', 'compact', 1440, 'populated'], ['midnight', 'comfortable', 1440, 'populated'], ['light', 'compact', 1440, 'populated'],
     ['graphite', 'comfortable', 768, 'populated'], ['midnight', 'compact', 390, 'populated'], ['light', 'comfortable', 390, 'populated'],
     ['graphite', 'compact', 1440, 'empty'], ['light', 'compact', 1440, 'error'], ['midnight', 'compact', 320, 'populated'],
-  ]) {
+  ];
+  for (const [theme, density, width, state] of scenarios) {
     const context = await browser.newContext({viewport: {width, height: 1000}, hasTouch: width < 1024, isMobile: width < 768});
     await context.addCookies([{name: 'noizy_team_session', value: token, url: origin}]);
     await context.addInitScript(({theme, density}) => {localStorage.setItem('noizy-theme', theme); localStorage.setItem('noizy-density', density);}, {theme, density});
@@ -78,8 +81,10 @@ try {
       await page.keyboard.press('Escape');
       await page.getByRole('dialog').waitFor({state: 'detached'});
     }
-    for (const route of ['/dashboard/vorschlaege', '/dashboard/partys', '/dashboard/djs', '/dashboard/locations', '/dashboard/kalender', '/dashboard/redaktion', '/dashboard/settings', '/dashboard/automatisierung']) {
+    for (const route of ['/dashboard/vorschlaege', '/dashboard/partys', '/dashboard/djs', '/dashboard/locations', '/dashboard/kalender', '/dashboard/redaktion', '/dashboard/settings', '/dashboard/automatisierung', '/dashboard/settings/genres']) {
       if (phase === 4) continue;
+      if (phase === 6 && route !== '/dashboard/settings/genres') continue;
+      if (phase !== 6 && route === '/dashboard/settings/genres') continue;
       if (phase === 5 && route !== '/dashboard/redaktion') continue;
       if (phase === 1 && !['/dashboard/settings', '/dashboard/automatisierung'].includes(route)) continue;
       if (phase === 2 && route !== '/dashboard/vorschlaege') continue;
@@ -88,6 +93,32 @@ try {
       await page.locator('main h1').waitFor();
       await page.waitForTimeout(180);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} ${route}: horizontal overflow`);
+      if (phase === 6) {
+        await page.locator('[data-record-id]').first().waitFor();
+        const aliasInput = page.getByRole('textbox', {name: 'Neuer Alias für Emo', exact: true});
+        const aliasBounds = await aliasInput.boundingBox();
+        assert.ok(aliasBounds && aliasBounds.width >= 120 && aliasBounds.height >= 40, `${name}: alias field must remain usable`);
+        await aliasInput.fill('Fixture Alias');
+        assert.equal(await aliasInput.inputValue(), 'Fixture Alias');
+        await page.screenshot({path: `${out}/${name}-genres.png`, fullPage: true});
+        const opener = page.getByRole('button', {name: '+ Genre anlegen', exact: true});
+        await opener.click();
+        const editor = page.getByRole('dialog');
+        await editor.waitFor();
+        assert.equal(await editor.evaluate(element => element.contains(document.activeElement)), true);
+        await editor.getByLabel('Kanonischer Name', {exact: true}).fill('fixture-wave');
+        await editor.getByLabel('Anzeigename', {exact: true}).fill('Fixture Wave');
+        await editor.getByRole('button', {name: 'Speichern und schließen', exact: true}).waitFor();
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name}: genre editor overflow`);
+        await page.screenshot({path: `${out}/${name}-genre-editor.png`, fullPage: true});
+        page.once('dialog', dialog => dialog.dismiss());
+        await page.keyboard.press('Escape');
+        assert.equal(await editor.isVisible(), true);
+        page.once('dialog', dialog => dialog.accept());
+        await editor.getByRole('button', {name: 'Abbrechen', exact: true}).click();
+        await editor.waitFor({state: 'detached'});
+        assert.equal(await opener.evaluate(element => element === document.activeElement), true);
+      }
       if (phase === 5 && route === '/dashboard/redaktion') {
         if (state === 'populated') {
           await page.goto(`${origin}/dashboard/redaktion#record=entry-0`);

@@ -872,3 +872,173 @@ test('editorial planned occurrences show a confirmation warning and disable appr
   assert.match(document.body.textContent,/Geplant – nicht bestätigt\. Keine Veröffentlichungsfreigabe möglich/);
   assert.equal(document.querySelector('option[value="APPROVED"]').disabled,true);
 });
+
+// UX-01–09: exercise the actual genre page and real shared modal/list components.
+async function mountGenreEditor(fetcher) {
+  globalThis.fetch = fetcher;
+  const Page = loadSource(new URL('../src/app/dashboard/settings/genres/page.tsx', import.meta.url)).default;
+  await act(async () => { mount(h(Page)); await new Promise(resolve => setTimeout(resolve, 20)); });
+  // Initial loading is scheduled by the real page, not fabricated by this fixture.
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+}
+function genreEditorField(name) {
+  const label = [...document.querySelectorAll('[role="dialog"] label')].find(item => item.textContent.trim() === name);
+  assert.ok(label, `Genre field ${name} exists`);
+  return label.querySelector('input');
+}
+async function submitGenreForm(form = document.querySelector('[role="dialog"] form')) {
+  assert.ok(form);
+  await act(async () => { form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+}
+function genreRow(id) {
+  const row = [...document.querySelectorAll('[data-record-id]')].find(element => element.dataset.recordId === id);
+  assert.ok(row, `Genre row ${id} exists`);
+  return row;
+}
+
+test('genres UX: create and update close after persisted success and restore focus without a discard prompt', async () => {
+  const calls = [];
+  await mountGenreEditor(async (url, options = {}) => {
+    calls.push({ url, method: options.method ?? 'GET', body: options.body && JSON.parse(options.body) });
+    if (!options.method) return jsonResponse([genre]);
+    return jsonResponse({ ...genre, id: options.method === 'POST' ? 'new-genre' : genre.id, ...JSON.parse(options.body) });
+  });
+  let prompts = 0;
+  window.confirm = () => { prompts++; return false; };
+  try {
+    const create = button('Genre anlegen'); create.focus(); click(create);
+    changeField(genreEditorField('Kanonischer Name'), 'ebm');
+    changeField(genreEditorField('Anzeigename'), 'EBM');
+    await submitGenreForm();
+    assert.equal(document.querySelector('[role="dialog"]'), null);
+    assert.equal(document.activeElement, create);
+    assert.match(document.body.textContent, /Genre „EBM“ gespeichert/);
+    assert.equal(calls.filter(call => call.method === 'POST').length, 1);
+    const edit = [...genreRow('genre').querySelectorAll('button')].find(element => element.textContent === 'Bearbeiten');
+    edit.focus(); click(edit);
+    changeField(genreEditorField('Anzeigename'), 'Rockmusik');
+    await submitGenreForm();
+    assert.equal(document.querySelector('[role="dialog"]'), null);
+    assert.equal(document.activeElement, edit);
+    assert.equal(calls.find(call => call.method === 'PUT').url, '/api/v1/genres/genre');
+    assert.match(genreRow('genre').textContent, /Rockmusik/);
+    assert.equal(prompts, 0);
+  } finally { window.confirm = () => true; }
+});
+
+test('genres UX: server validation stays inside the open editor with values and focused error', async () => {
+  await mountGenreEditor(async (_url, options = {}) => options.method ? jsonResponse({ message: 'Dieser Genre-Alias ist bereits vergeben.' }, 409) : jsonResponse([genre]));
+  click(button('Genre anlegen'));
+  changeField(genreEditorField('Kanonischer Name'), 'rock');
+  changeField(genreEditorField('Anzeigename'), 'Rock');
+  await submitGenreForm();
+  const alert = document.querySelector('[role="dialog"] [role="alert"]');
+  assert.ok(alert);
+  assert.match(alert.textContent, /bereits vergeben/);
+  assert.equal(document.activeElement, alert);
+  assert.equal(genreEditorField('Anzeigename').value, 'Rock');
+  assert.equal(document.querySelectorAll('[role="alert"]').length, 1);
+});
+
+test('genres UX: clean and reverted drafts close freely; changed drafts protect Cancel, X and Escape', async () => {
+  await mountGenreEditor(async () => jsonResponse([genre]));
+  let prompts = 0;
+  window.confirm = () => { prompts++; return false; };
+  try {
+    click(button('Genre anlegen')); key('Escape');
+    assert.equal(document.querySelector('[role="dialog"]'), null);
+    click(button('Genre anlegen'));
+    changeField(genreEditorField('Kanonischer Name'), 'draft');
+    changeField(genreEditorField('Kanonischer Name'), '');
+    click(button('Abbrechen'));
+    assert.equal(document.querySelector('[role="dialog"]'), null);
+    assert.equal(prompts, 0);
+    click(button('Genre anlegen'));
+    changeField(genreEditorField('Kanonischer Name'), 'changed');
+    for (const close of [() => click(button('Abbrechen')), () => click(document.querySelector('[data-modal-close]')), () => key('Escape')]) {
+      close(); assert.ok(document.querySelector('[role="dialog"]'));
+    }
+    assert.equal(prompts, 3);
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload); assert.equal(unload.defaultPrevented, true);
+    window.confirm = () => true; key('Escape');
+    assert.equal(document.querySelector('[role="dialog"]'), null);
+  } finally { window.confirm = () => true; }
+});
+
+test('genres UX: pending save ignores dismissal until the result is known', async () => {
+  let finish;
+  await mountGenreEditor(async (_url, options = {}) => options.method ? new Promise(resolve => { finish = resolve; }) : jsonResponse([genre]));
+  click(button('Genre anlegen'));
+  changeField(genreEditorField('Kanonischer Name'), 'ebm');
+  changeField(genreEditorField('Anzeigename'), 'EBM');
+  await submitGenreForm();
+  key('Escape'); click(document.querySelector('[data-modal-close]'));
+  assert.ok(document.querySelector('[role="dialog"]'));
+  assert.equal(document.querySelector('[role="dialog"] form').getAttribute('aria-busy'), 'true');
+  await act(async () => { finish(jsonResponse({ ...genre, id: 'new', canonicalName: 'ebm', displayName: 'EBM' })); });
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+});
+
+test('genres UX: alias drafts are isolated by genre and cross-row submit cannot move an alias', async () => {
+  const calls = [];
+  const other = { ...genre, id: 'other', displayName: 'EBM', canonicalName: 'ebm' };
+  await mountGenreEditor(async (url, options = {}) => {
+    if (!options.method) return jsonResponse([genre, other]);
+    calls.push({ url, body: JSON.parse(options.body) });
+    return jsonResponse({ id: `alias-${calls.length}`, value: JSON.parse(options.body).value });
+  });
+  changeField(genreRow('genre').querySelector('input'), 'Rock-Alias');
+  await submitGenreForm(genreRow('other').querySelector('form'));
+  assert.equal(calls.length, 0);
+  assert.match(genreRow('other').querySelector('[role="alert"]').textContent, /Alias eingeben/);
+  assert.equal(genreRow('genre').querySelector('input').value, 'Rock-Alias');
+  changeField(genreRow('other').querySelector('input'), 'Electronic Body Music');
+  await submitGenreForm(genreRow('other').querySelector('form'));
+  assert.deepEqual(calls, [{ url: '/api/v1/genres/other/aliases', body: { value: 'Electronic Body Music' } }]);
+  assert.equal(genreRow('genre').querySelector('input').value, 'Rock-Alias');
+  assert.ok(genreRow('genre').querySelector('[aria-label="Alias für Rock hinzufügen"]'));
+});
+
+test('genres UX: alias inline edit and confirmed delete use the correct event-independent IDs without native prompts', async () => {
+  const calls = [];
+  const item = { ...genre, aliases: [{ id: 'alias-a', value: 'Alternative' }, { id: 'alias-b', value: 'Rock and Roll' }] };
+  await mountGenreEditor(async (url, options = {}) => {
+    if (!options.method) return jsonResponse([item]);
+    calls.push({ url, method: options.method, body: options.body && JSON.parse(options.body) });
+    return options.method === 'DELETE' ? new Response(null, { status: 204 }) : jsonResponse({ id: 'alias-a', value: JSON.parse(options.body).value });
+  });
+  const originalPrompt = window.prompt;
+  window.prompt = () => { throw new Error('Alias edit must use the application form'); };
+  window.confirm = () => { throw new Error('Alias deletion must show its consequence in the application'); };
+  try {
+    click(document.querySelector('[aria-label="Alias Alternative für Rock bearbeiten"]'));
+    const editForm = genreRow('genre').querySelector('li form');
+    changeField(editForm.querySelector('input'), 'Alternative Rock');
+    await submitGenreForm(editForm);
+    assert.deepEqual(calls[0], { url: '/api/v1/genres/genre/aliases/alias-a', method: 'PUT', body: { value: 'Alternative Rock' } });
+    click(document.querySelector('[aria-label="Alias Rock and Roll für Rock entfernen"]'));
+    assert.match(genreRow('genre').textContent, /Das Genre bleibt erhalten/);
+    assert.equal(calls.length, 1);
+    click(genreRow('genre').querySelector('[role="group"] button:last-child'));
+    assert.equal(calls.length, 1);
+    click(document.querySelector('[aria-label="Alias Rock and Roll für Rock entfernen"]'));
+    await act(async () => button('Alias endgültig entfernen').click());
+    assert.equal(calls[1].url, '/api/v1/genres/genre/aliases/alias-b');
+    assert.equal(calls[1].method, 'DELETE');
+    assert.equal(document.querySelector('[aria-label="Alias Rock and Roll für Rock bearbeiten"]'), null);
+    assert.ok(document.querySelector('[aria-label="Alias Alternative Rock für Rock bearbeiten"]'));
+  } finally { window.prompt = originalPrompt; window.confirm = () => true; }
+});
+
+test('genres UX: shared list bounds visible rows, searches aliases, and explains Discovery usage', async () => {
+  const rows = Array.from({ length: 60 }, (_, index) => ({ ...genre, id: `g-${index}`, canonicalName: `genre-${index}`, displayName: `Genre ${String(index).padStart(2, '0')}`, aliases: index === 59 ? [{ id: 'last-alias', value: 'Hidden synonym' }] : [] }));
+  await mountGenreEditor(async () => jsonResponse(rows));
+  assert.equal(document.querySelectorAll('[data-record-id]').length, 25);
+  click(button('Weiter'));
+  assert.equal(document.querySelectorAll('[data-record-id]').length, 25);
+  changeField(document.querySelector('[aria-label="Genres und Aliase durchsuchen"]'), 'Hidden synonym');
+  assert.equal(document.querySelectorAll('[data-record-id]').length, 1);
+  assert.equal(genreRow('g-59').dataset.recordId, 'g-59');
+  assert.match(document.body.textContent, /Aktiv für Genreerkennung und Discovery/);
+});
