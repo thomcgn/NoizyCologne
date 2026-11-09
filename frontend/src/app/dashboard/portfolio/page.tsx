@@ -21,6 +21,17 @@ import SourceOverview, {type DiscoverySource} from "../SourceOverview";
 export type Category = "parties" | "locations";
 type DjAssignment = "none" | "resident" | "other";
 type RecurrenceChoice = "none" | "weekly" | "monthly_weekday" | "other";
+type SaveProgress = {
+  category: Category;
+  id: string;
+  dataKey: string;
+  savedName: string;
+  aliasesKey?: string;
+  flyerFile?: File;
+  flyerRemoved?: boolean;
+  sourceToken?: string;
+  needsEntryReload: boolean;
+};
 type WebsiteReport = { previewToken: string; websiteUrl: string; suggestedName: string; checkedAt: string; eventCount: number; partyCount: number; knownSeriesCount: number; incomplete: boolean; problems: string[]; sources: { url: string; fetchMethod: string; diagnostics: string[]; extraction: { status: string; events: unknown[]; complete: boolean } }[] };
 
 const weekdayNames = [
@@ -120,6 +131,9 @@ export default function PortfolioPage({
   const [color, setColor] = useState<string>(PARTY_COLORS[0]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const saveProgress = useRef<SaveProgress | null>(null);
+  const [partialSave, setPartialSave] = useState("");
+  const [saveNotice, setSaveNotice] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState("");
   const [flyerFile, setFlyerFile] = useState<File | null>(null);
@@ -147,6 +161,8 @@ export default function PortfolioPage({
 
   useEffect(() => {
     if (category !== "parties" || !editingId) return;
+    // A newly persisted ID must not trigger a GET that overwrites unsaved alias edits.
+    if (saveProgress.current?.id === editingId) return;
     let active = true;
     fetch(`/api/v1/discovery/parties/${encodeURIComponent(editingId)}/aliases`).then(async response => {
       if (!response.ok) throw new Error("Discovery-Aliase konnten nicht geladen werden.");
@@ -180,6 +196,8 @@ export default function PortfolioPage({
   }
 
   function resetForm() {
+    saveProgress.current = null;
+    setPartialSave("");
     setDefaultStartTime(""); setDefaultEntryPrice(null);
     setRecurrenceKind("none");
     setWeekday(5);
@@ -205,18 +223,24 @@ export default function PortfolioPage({
   }
 
   function switchCategory(next: Category) {
+    if (saving) return;
     setCategory(next);
+    setSaveNotice("");
     setSearch("");
     setEditorOpen(false);
     resetForm();
   }
 
   function createNew() {
+    if (saving) return;
+    setSaveNotice("");
     resetForm();
     setEditorOpen(true);
   }
 
   function editItem(item: CatalogItem) {
+    if (saving) return;
+    setSaveNotice("");
     resetForm();
 
     setEditingId(item.id);
@@ -302,7 +326,9 @@ export default function PortfolioPage({
 
   async function saveItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving) return;
     setError("");
+    setSaveNotice("");
 
     const cleanName = name.trim();
     const cleanInstagram = instagram.trim().replace(/^@/, "");
@@ -367,33 +393,65 @@ export default function PortfolioPage({
         defaultFlyer: parties.find((party) => party.id === editingId)?.defaultFlyer ?? null,
       };
 
+      const dataKey = JSON.stringify({ ...partyData, defaultFlyer: undefined });
+      const aliases = discoveryAliases.split("\n").map(alias => alias.trim()).filter(Boolean);
+      const aliasesKey = JSON.stringify(aliases);
+      let progress = saveProgress.current?.category === category ? saveProgress.current : null;
+      let step = "Stammdaten speichern";
       setSaving(true);
       try {
-        let savedParty: PartySeries;
-        if (editingId) {
-          savedParty = await updateParty({ id: editingId, ...partyData });
-        } else {
-          savedParty = await createParty(partyData);
-          // Bei einem nachgelagerten Flyer-Fehler muss ein erneuter Speicherversuch
-          // die gerade angelegte Partyreihe aktualisieren statt ein Duplikat anzulegen.
+        if (!progress || progress.dataKey !== dataKey) {
+          const savedParty = editingId
+            ? await updateParty({ id: editingId, ...partyData })
+            : await createParty(partyData);
+          progress = { ...progress, category: "parties", id: savedParty.id, dataKey, savedName: savedParty.name, needsEntryReload: true };
+          // Keep the confirmed ID before attempting any supplementary operation.
+          saveProgress.current = progress;
           setEditingId(savedParty.id);
         }
-        await reloadEntries();
-        const aliasesResponse = await fetch(`/api/v1/discovery/parties/${encodeURIComponent(savedParty.id)}/aliases`, {
-          method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify({aliases: discoveryAliases.split("\n").map(a => a.trim()).filter(Boolean)})
-        });
-        if (!aliasesResponse.ok) throw new Error("Discovery-Aliase konnten nicht gespeichert werden.");
-        if (flyerFile) {
-          await uploadPartyFlyer(savedParty.id, flyerFile);
-        } else if (removeFlyer && savedParty.defaultFlyer) {
-          await deletePartyFlyer(savedParty.id);
+        if (progress.aliasesKey !== aliasesKey) {
+          step = "Discovery-Aliase speichern";
+          const aliasesResponse = await fetch(`/api/v1/discovery/parties/${encodeURIComponent(progress.id)}/aliases`, {
+            method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ aliases }),
+          });
+          if (!aliasesResponse.ok) throw new Error("Discovery-Aliase konnten nicht gespeichert werden.");
+          progress = { ...progress, aliasesKey };
+          saveProgress.current = progress;
+        }
+        if (flyerFile && progress.flyerFile !== flyerFile) {
+          step = "Standardflyer hochladen";
+          await uploadPartyFlyer(progress.id, flyerFile);
+          progress = { ...progress, flyerFile, flyerRemoved: false };
+          saveProgress.current = progress;
+          setFlyerFile(null);
+        } else if (removeFlyer && partyData.defaultFlyer && !progress.flyerRemoved) {
+          step = "Standardflyer entfernen";
+          await deletePartyFlyer(progress.id);
+          progress = { ...progress, flyerRemoved: true, flyerFile: undefined };
+          saveProgress.current = progress;
+          setRemoveFlyer(false);
+        }
+        if (progress.needsEntryReload) {
+          step = "Kalenderansicht aktualisieren";
+          await reloadEntries({ throwOnError: true });
+          progress = { ...progress, needsEntryReload: false };
+          saveProgress.current = progress;
         }
       } catch (cause) {
-        setError(
-          cause instanceof Error
-            ? `Partyreihe konnte nicht gespeichert werden: ${cause.message}`
-            : "Partyreihe konnte wegen eines unbekannten Netzwerkfehlers nicht gespeichert werden."
-        );
+        const detail = cause instanceof Error ? cause.message : "Unbekannter Netzwerkfehler.";
+        if (saveProgress.current) {
+          if (step === "Stammdaten speichern") {
+            setPartialSave(`Zuletzt bestätigter Stand: Partyreihe „${saveProgress.current.savedName}“. Deine geänderten Stammdaten sind noch nicht bestätigt.`);
+            setError(`Der bisher bestätigte Stand der Partyreihe bleibt erhalten. Das Speichern deiner geänderten Stammdaten wurde nicht bestätigt: ${detail}`);
+          } else {
+            setPartialSave(`Partyreihe „${saveProgress.current.savedName}“ ist gespeichert. Offener Schritt: ${step}.`);
+            setError(step === "Kalenderansicht aktualisieren"
+              ? `Die Partyreihe und ihre Zusatzdaten sind gespeichert. Nur die Kalenderansicht konnte nicht aktualisiert werden: ${detail}`
+              : `Partyreihe ist gespeichert; ${step} ist noch offen: ${detail}`);
+          }
+        } else {
+          setError(`Speichern der Partyreihe wurde nicht bestätigt. ${editingId ? "Bitte erneut versuchen." : "Bitte die Liste vor einem erneuten Anlegen prüfen."} ${detail}`);
+        }
         setSaving(false);
         return;
       }
@@ -406,31 +464,43 @@ export default function PortfolioPage({
         websiteUrl, eventsUrl, discoveryEnabled,
       };
 
+      const venueData = { name: cleanName, instagram: cleanInstagram, websiteUrl, eventsUrl, discoveryEnabled };
+      const dataKey = JSON.stringify(venueData);
+      let progress = saveProgress.current?.category === category ? saveProgress.current : null;
+      let step = "Stammdaten speichern";
       setSaving(true);
       try {
-        let savedVenue: CatalogItem;
-        if (editingId) {
-          savedVenue = await updateVenue(updatedVenue);
-        } else {
-          savedVenue = await createVenue({
-            name: updatedVenue.name,
-            instagram: updatedVenue.instagram,
-            websiteUrl, eventsUrl, discoveryEnabled,
-          });
+        if (!progress || progress.dataKey !== dataKey) {
+          const savedVenue = editingId
+            ? await updateVenue(updatedVenue)
+            : await createVenue(venueData);
+          progress = { ...progress, category: "locations", id: savedVenue.id, dataKey, savedName: savedVenue.name, needsEntryReload: false };
+          saveProgress.current = progress;
           setEditingId(savedVenue.id);
         }
-        if (websiteReport && new URL(websiteReport.websiteUrl).href === new URL(websiteUrl).href) {
-          const result = await fetch(`/api/v1/discovery/onboard/${encodeURIComponent(savedVenue.id)}/sources`, {
+        step = "Quellen übernehmen";
+        if (websiteReport && new URL(websiteReport.websiteUrl).href === new URL(websiteUrl).href
+          && progress.sourceToken !== websiteReport.previewToken) {
+          const result = await fetch(`/api/v1/discovery/onboard/${encodeURIComponent(progress.id)}/sources`, {
             method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ previewToken: websiteReport.previewToken }),
           });
-          if (!result.ok) throw new Error("Location ist gespeichert, Quellenprüfung bitte erneut ausführen und speichern.");
+          if (!result.ok) throw new Error("Quellenprüfung bitte erneut ausführen und speichern.");
+          progress = { ...progress, sourceToken: websiteReport.previewToken };
+          saveProgress.current = progress;
         }
       } catch (cause) {
-        setError(
-          cause instanceof Error
-            ? `Location konnte nicht gespeichert werden: ${cause.message}`
-            : "Location konnte wegen eines unbekannten Netzwerkfehlers nicht gespeichert werden."
-        );
+        const detail = cause instanceof Error ? cause.message : "Unbekannter Netzwerkfehler.";
+        if (saveProgress.current) {
+          if (step === "Stammdaten speichern") {
+            setPartialSave(`Zuletzt bestätigter Stand: Location „${saveProgress.current.savedName}“. Deine geänderten Stammdaten sind noch nicht bestätigt.`);
+            setError(`Der bisher bestätigte Stand der Location bleibt erhalten. Das Speichern deiner geänderten Stammdaten wurde nicht bestätigt: ${detail}`);
+          } else {
+            setPartialSave(`Location „${saveProgress.current.savedName}“ ist gespeichert. Offener Schritt: ${step}.`);
+            setError(`Location ist gespeichert; ${step} ist noch offen: ${detail}`);
+          }
+        } else {
+          setError(`Speichern der Location wurde nicht bestätigt. ${editingId ? "Bitte erneut versuchen." : "Bitte die Liste vor einem erneuten Anlegen prüfen."} ${detail}`);
+        }
         setSaving(false);
         return;
       }
@@ -439,6 +509,7 @@ export default function PortfolioPage({
 
     setEditorOpen(false);
     resetForm();
+    setSaveNotice(`${category === "parties" ? "Partyreihe" : "Location"} „${cleanName}“ gespeichert.`);
   }
 
   useWorkspaceAction(category === "parties" ? "Partyreihe anlegen" : "Location anlegen", createNew, saving);
@@ -483,6 +554,7 @@ export default function PortfolioPage({
           <button
             type="button"
             onClick={createNew}
+            disabled={saving}
             className="cc-button cc-button-primary cc-page-primary"
           >
             + Neu anlegen
@@ -504,6 +576,7 @@ export default function PortfolioPage({
           <button
             type="button"
             onClick={() => switchCategory("parties")}
+            disabled={saving}
             className={`rounded-lg px-5 py-3 text-sm ${
               category === "parties"
                 ? "bg-white font-semibold text-black"
@@ -516,6 +589,7 @@ export default function PortfolioPage({
           <button
             type="button"
             onClick={() => switchCategory("locations")}
+            disabled={saving}
             className={`rounded-lg px-5 py-3 text-sm ${
               category === "locations"
                 ? "bg-white font-semibold text-black"
@@ -539,10 +613,13 @@ export default function PortfolioPage({
           : <DataCollection key={category} items={items} columns={columns} label={category === "parties" ? "Partyreihen" : "Locations"} storageKey={`noizy-view-${category}`} getName={item => item.name} onOpen={editItem} openDisabled={saving || deletingId !== null} query={search} onQueryChange={setSearch} searchText={searchableItem} selectedId={editorOpen ? editingId : null} actions={item => <div className="cc-inline-actions"><button type="button" className="cc-button" disabled={saving || deletingId !== null} onClick={() => editItem(item)}>Bearbeiten</button><button type="button" className="cc-button cc-button-danger" disabled={deletingId !== null} onClick={() => void deleteItem(item)}>{deletingId === item.id ? "Löschen ..." : "Löschen"}</button></div>} />}
         </section>
 
+        {saveNotice && <p role="status" className="mt-4 rounded-lg border border-white/15 p-3 text-sm">{saveNotice}</p>}
+
         {/* Editor */}
-        <DashboardModal variant="drawer" protectChanges
+        <DashboardModal variant="drawer" protectChanges busy={saving}
           open={editorOpen}
           onClose={() => {
+            if (saving) return;
             setEditorOpen(false);
             resetForm();
           }}
@@ -552,7 +629,9 @@ export default function PortfolioPage({
           <form
             onSubmit={saveItem}
             className="space-y-1"
+            aria-busy={saving}
           >
+            <fieldset disabled={saving} className="min-w-0">
             {/* Basisdaten */}
             <label className="mt-5 block">
               <span className="mb-2 block text-sm text-neutral-300">
@@ -948,8 +1027,9 @@ export default function PortfolioPage({
               </>
             )}
 
+            {partialSave && <p role="status" className="mt-5 rounded-lg border border-amber-400/40 p-3 text-sm">{partialSave} Bereits erfolgreiche Schritte werden beim Fortsetzen nicht wiederholt. Geänderte Stammdaten werden zusätzlich gespeichert.</p>}
             {error && (
-              <p role="alert" className="mt-5 text-sm text-red-400">
+              <p role="alert" className="mt-5 text-sm cc-status-danger">
                 {error}
               </p>
             )}
@@ -960,7 +1040,7 @@ export default function PortfolioPage({
                 disabled={saving || aliasesLoading || (category === "parties" && !aliasesReady)}
                 className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black"
               >
-                {saving ? "Speichern ..." : "Übernehmen"}
+                {saving ? "Speichern ..." : partialSave ? "Offene Schritte fortsetzen" : "Übernehmen"}
               </button>
 
               <button
@@ -971,6 +1051,7 @@ export default function PortfolioPage({
                 Abbrechen
               </button>
             </div>
+            </fieldset>
           </form>
         </DashboardModal>
 

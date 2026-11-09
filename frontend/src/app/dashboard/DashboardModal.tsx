@@ -10,6 +10,7 @@ type DashboardModalProps = {
   children: ReactNode;
   variant?: "dialog" | "drawer";
   protectChanges?: boolean;
+  busy?: boolean;
 };
 
 // Shared by standard modals and the calendar's custom dialog layouts.
@@ -77,7 +78,14 @@ export function useModalFocus(
     document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
-      if (trigger?.isConnected) trigger.focus();
+      if (trigger?.isConnected) {
+        trigger.focus();
+        // Pending state can enable the opener in the following parent update.
+        if (document.activeElement !== trigger) window.setTimeout(() => {
+          if (trigger.isConnected && document.activeElement === document.body &&
+              !document.querySelector('[role="dialog"]')) trigger.focus();
+        }, 0);
+      }
     };
   }, [open, dialogRef]);
 }
@@ -90,6 +98,7 @@ export default function DashboardModal({
   children,
   variant = "dialog",
   protectChanges = false,
+  busy = false,
 }: DashboardModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const dirty = useRef(false);
@@ -103,6 +112,7 @@ export default function DashboardModal({
     return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [open, protectChanges]);
   function requestClose() {
+    if (busy) return;
     if (protectChanges && dirty.current && !window.confirm("Ungespeicherte Änderungen verwerfen?")) return;
     dirty.current = false;
     onClose();
@@ -144,6 +154,7 @@ export default function DashboardModal({
           <button
             type="button"
             data-modal-close
+            disabled={busy}
             className="icon-button"
             onClick={requestClose}
             aria-label="Dialog schließen"
