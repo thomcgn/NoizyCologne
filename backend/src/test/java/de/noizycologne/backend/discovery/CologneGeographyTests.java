@@ -53,8 +53,12 @@ class CologneGeographyTests {
             <h1>Konzert</h1><script type='application/ld+json'>{"@type":"Event","name":"Konzert","location":{"name":"Gleis8","address":{"addressLocality":"Bonn"}},"subEvent":{"@type":"Event","name":"Aftershow Party","startDate":"2027-01-09","location":{"name":"Blue Shell","url":"https://blue.example/","address":{"addressLocality":"Köln","streetAddress":"Luxemburger Straße 32","addressCountry":"DE"}}}}</script>
             """;
         var extraction=new EventExtractor().extract(new EventPageFetcher.Page(URI.create("https://portal.example/event"),html,"text/html"),EventExtractor.Profile.defaults());
-        assertThat(extraction.events()).hasSize(1);
-        var party=Objects.requireNonNull(extraction.events().getFirst());assertThat(party.title()).isEqualTo("Aftershow Party");
+        assertThat(extraction.events()).hasSize(2);
+        var concert=Objects.requireNonNull(extraction.events().getFirst());
+        assertThat(PartyOnlyPolicy.concert(concert)).isTrue();
+        assertThat(filter.evaluate(concert,List.of()).status()).isEqualTo("OUTSIDE");
+        var party=Objects.requireNonNull(extraction.events().getLast());assertThat(party.title()).isEqualTo("Aftershow Party");
+        assertThat(PartyOnlyPolicy.concert(party)).isFalse();
         assertThat(filter.evaluate(party,List.of()).status()).isEqualTo("INSIDE");
         assertThat(EventPrivacy.safe(party).place().city()).isEqualTo("Köln");
     }

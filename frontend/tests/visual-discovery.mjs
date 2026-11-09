@@ -32,7 +32,7 @@ try {
       let response = [];
       if (url.pathname === '/api/v1/discovery') {
         const filter = url.searchParams.get('filter');
-        const candidates = ['NEEDS_REVIEW', 'READY', 'NEEDS_INQUIRY'].includes(filter) ? data.candidates.filter(item => item.status === filter) : data.history.filter(item => filter === 'IMPORTED' ? item.status === 'IMPORTED' : filter === 'AUTOMATIC_IGNORED' ? item.status === 'IGNORED' : true);
+        const candidates = ['RELEVANT', 'UNCLEAR', 'NEEDS_REVIEW', 'READY', 'NEEDS_INQUIRY'].includes(filter) ? data.candidates.filter(item => (filter === 'RELEVANT' ? item.matching_class !== 'UNCLASSIFIABLE' : filter === 'UNCLEAR' ? item.matching_class === 'UNCLASSIFIABLE' : item.status === filter)) : data.history.filter(item => filter === 'IMPORTED' ? item.status === 'IMPORTED' : filter === 'AUTOMATIC_IGNORED' ? item.status === 'IGNORED' : true);
         response = {...data, candidates};
       } else if (url.pathname === '/api/v1/venues') response = [{id: 'venue', name: 'Club Beispiel', instagram: ''}];
       return route.fulfill({status: 200, contentType: 'application/json', body: JSON.stringify(response)});

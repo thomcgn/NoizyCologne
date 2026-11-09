@@ -17,6 +17,8 @@ public class DiscoveryStore {
     public List<Map<String,Object>> candidates() { return candidates("ALL"); }
     public List<Map<String,Object>> candidates(String filter) {
         String where=switch(filter) {
+            case "RELEVANT" -> "c.status IN ('NEEDS_REVIEW','NEEDS_INQUIRY','READY') AND NOT (c.matching_class='UNCLASSIFIABLE' AND c.decision_origin='AUTOMATIC' AND c.party_id IS NULL AND c.inquiry_status NOT IN ('PREPARED','SENT'))";
+            case "UNCLEAR" -> "c.status IN ('NEEDS_REVIEW','NEEDS_INQUIRY','READY') AND c.matching_class='UNCLASSIFIABLE' AND c.decision_origin='AUTOMATIC' AND c.party_id IS NULL AND c.inquiry_status NOT IN ('PREPARED','SENT')";
             case "KEYWORD_FILTER" -> "c.status='IGNORED' AND c.filter_origin='KEYWORD_FILTER'";
             case "OTHER_IGNORED" -> "c.status='IGNORED' AND c.filter_origin IS DISTINCT FROM 'KEYWORD_FILTER'";
             case "DUPLICATE" -> "c.status='DUPLICATE'";

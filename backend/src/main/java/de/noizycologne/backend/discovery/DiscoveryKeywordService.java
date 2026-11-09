@@ -145,11 +145,18 @@ public class DiscoveryKeywordService {
     }
     public void remember(String id,EventExtractor.Event event) {
         var hit=match(event);
+        var row=store.candidate(id);
+        boolean excluded="IGNORED".equals(row.get("status")) && "AUTOMATIC".equals(row.get("decision_origin"));
+        String origin=hit!=null ? "KEYWORD_FILTER" : excluded ? "EVENT_FILTER" : null;
+        String rule=hit==null ? null : hit.id(),keyword=hit==null ? null : hit.keyword();
+        String reason=hit!=null ? hit.reason() : excluded ? (String)row.get("reason") : null;
+        // Snapshot every exclusion in the existing audit fields, including its source
+        // and occurrence. A later crawl may replace the candidate's latest evidence.
+        String evidence=hit!=null ? hit.evidence() : excluded ? event.url()+"\n"+event.title()+"\n"+event.starts()+"\n"+event.evidence() : null;
         store.jdbc().update("""
             UPDATE discovery_candidates SET filter_origin=?,filter_rule_id=?,filter_keyword=?,filter_reason=?,filter_evidence=?
             WHERE id=? AND (filter_origin,filter_rule_id,filter_keyword,filter_reason,filter_evidence) IS DISTINCT FROM (?,?,?,?,?)
-            """,hit==null?null:"KEYWORD_FILTER",hit==null?null:hit.id(),hit==null?null:hit.keyword(),hit==null?null:hit.reason(),hit==null?null:hit.evidence(),id,
-            hit==null?null:"KEYWORD_FILTER",hit==null?null:hit.id(),hit==null?null:hit.keyword(),hit==null?null:hit.reason(),hit==null?null:hit.evidence());
+            """,origin,rule,keyword,reason,evidence,id,origin,rule,keyword,reason,evidence);
     }
     @Transactional
     public void reopen(String id) {

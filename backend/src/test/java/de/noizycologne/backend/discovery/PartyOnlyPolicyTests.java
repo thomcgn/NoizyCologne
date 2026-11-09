@@ -20,13 +20,14 @@ class PartyOnlyPolicyTests {
     @Test void pureConcertPageIsExplicitlyExcludedAndMixedOverviewIsFilteredPerEvent() {
         var extractor=new EventExtractor();
         var concert=extractor.extract(new EventPageFetcher.Page(URI.create("https://club.example/veranstaltungen"),"<title>KONZERTE | Club</title><article><h2>Indie Party</h2><time datetime='2027-01-09'></time></article>","text/html"),EventExtractor.Profile.defaults());
-        assertThat(concert.status()).isEqualTo("EXCLUDED_CONCERTS");assertThat(concert.events()).isEmpty();
+        assertThat(concert.status()).isEqualTo("EXCLUDED_CONCERTS");assertThat(concert.events()).hasSize(1);
+        assertThat(PartyOnlyPolicy.concert(concert.events().getFirst())).isTrue();
         var mixed=extractor.extract(new EventPageFetcher.Page(URI.create("https://club.example/events"),"<title>Konzerte und Partys</title><article><h2>Indie Konzert</h2><time datetime='2027-01-09'></time></article><article><h2>Indie Party</h2><time datetime='2027-01-10'></time></article>","text/html"),EventExtractor.Profile.defaults());
-        assertThat(mixed.events()).extracting(EventExtractor.Event::title).containsExactly("Indie Party");
+        assertThat(mixed.events()).extracting(EventExtractor.Event::title).containsExactly("Indie Konzert","Indie Party");
     }
     @Test void concertFeedsAreAlsoExcluded() {
         var result=new EventExtractor().extract(new EventPageFetcher.Page(URI.create("https://club.example/feed.ics"),"BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:concert\nSUMMARY:Rockkonzert\nDTSTART:20270109\nEND:VEVENT\nEND:VCALENDAR","text/calendar"),EventExtractor.Profile.defaults());
-        assertThat(result.status()).isEqualTo("EXCLUDED_CONCERTS");assertThat(result.events()).isEmpty();
+        assertThat(result.status()).isEqualTo("EXCLUDED_CONCERTS");assertThat(result.events()).hasSize(1);
     }
     @Test void partyMusicEventIsNotAutomaticallyAConcert() {
         assertThat(PartyOnlyPolicy.concert(event("Indieparty","DJs und Dancefloor; MusicEvent"))).isFalse();

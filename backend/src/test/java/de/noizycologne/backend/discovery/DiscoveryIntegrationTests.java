@@ -311,7 +311,8 @@ class DiscoveryIntegrationTests {
         scheduler.scan(); assertThat(store.candidate(id).get("status")).isEqualTo("NEEDS_REVIEW");
         found(new EventExtractor.Event("new-concert",party.getName(),root+"events/two",List.of("2027-01-10"),"Indie Konzert mit DJs","",""));
         scheduler.scan();
-        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates WHERE venue_id=?",Integer.class,venue.getId())).isEqualTo(1);
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates WHERE venue_id=?",Integer.class,venue.getId())).isEqualTo(2);
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates WHERE venue_id=? AND status='IGNORED'",Integer.class,venue.getId())).isEqualTo(1);
         assertThat(store.jdbc().queryForObject("SELECT count(*) FROM calendar_entries WHERE location_id=?",Integer.class,venue.getId())).isZero();
     }
     @Test void postgresLockPreventsConcurrentScan() throws Exception {

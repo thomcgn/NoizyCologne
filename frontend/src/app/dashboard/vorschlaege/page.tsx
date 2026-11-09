@@ -15,7 +15,7 @@ import DiscoveryProgress from "./DiscoveryProgress";
 import DiscoveryGeography,{type GeographyData} from "./DiscoveryGeography";
 import { discoveryApi as api } from "./discoveryApi";
 import { useWorkspaceAction } from "../workspaceActions";
-import { isNewSeries, isOpen } from "./discoveryPresentation";
+import { isNewSeries, isOpen, isUnclear } from "./discoveryPresentation";
 import type { Candidate, Source, Overview } from "./discoveryTypes";
 
 export default function DiscoveryPage() {
@@ -38,7 +38,7 @@ export default function DiscoveryPage() {
   const reload = useCallback(async () => {
     const request = ++generation.current;
     try {
-      const [overviews, geography] = await Promise.all([Promise.all(["NEEDS_REVIEW", "NEEDS_INQUIRY", "READY"].map(filter => api<Overview>(`?filter=${filter}`))),api<GeographyData>("/geography")]);
+      const [overviews, geography] = await Promise.all([Promise.all(["RELEVANT", "UNCLEAR", "READY"].map(filter => api<Overview>(`?filter=${filter}`))),api<GeographyData>("/geography")]);
       const [review,inquiry,ready]=overviews;
       if (request !== generation.current) return;
       const candidates = [...new Map([...review.candidates, ...inquiry.candidates, ...ready.candidates].map(item => [item.id, item])).values()];
@@ -95,7 +95,8 @@ export default function DiscoveryPage() {
   const newSeries = visibleCandidates.filter(isNewSeries);
   const ready = visibleCandidates.filter(item => isOpen(item) && !isNewSeries(item) && item.assessment?.automaticImportEligible && !["PREPARED", "SENT"].includes(item.inquiry_status) && item.decision_origin !== "MANUAL");
   const readyIds = new Set(ready.map(item => item.id));
-  const review = visibleCandidates.filter(item => isOpen(item) && !isNewSeries(item) && !readyIds.has(item.id));
+  const unclear = visibleCandidates.filter(isUnclear);
+  const review = visibleCandidates.filter(item => isOpen(item) && !isUnclear(item) && !isNewSeries(item) && !readyIds.has(item.id));
   const specialSources = data?.sources.filter(item => item.special_source) ?? [];
   const sourceProblems = specialSources.filter(item => item.enabled !== false && (["PARTIAL", "BLOCKED", "FAILED"].includes(item.quality ?? "") || !["EVENTS_FOUND", "NO_EVENTS", "NOT_CHECKED", "SOURCE_LINKS_FOUND", "EXCLUDED_CONCERTS"].includes(item.status)));
   function requestScan() {void action(async () => {await api("/scan", "POST"); setNotice("Suchlauf angefordert. Ergebnisse werden automatisch aktualisiert.");});}
@@ -126,10 +127,11 @@ export default function DiscoveryPage() {
     {error && <div className="discovery-message" role="alert">{error}<button className="discovery-button" disabled={busy} onClick={() => void reload()}>Erneut laden</button></div>}
     {notice && <p className="discovery-message" role="status">{notice}</p>}
     <div className="discovery-metrics" aria-label="Discovery-Kennzahlen">{[["Automatisch übernommen", data?.automaticallyImported], ["Neue Partyreihen", data ? newSeries.length : undefined], ["Prüfbedarf", data ? review.length : undefined]].map(([label, value]) => <div key={label} className="discovery-metric"><span>{label}</span><strong>{value ?? "–"}</strong></div>)}</div>
-    {data?.counts.some(item => ["NEEDS_REVIEW", "NEEDS_INQUIRY", "READY"].includes(item.status) && item.count >= 500) && <p className="discovery-source-notice">Die API liefert bis zu 500 offene Kandidaten je Status. Die Kennzahlen für neue Reihen und Prüfbedarf beziehen sich auf die geladenen Ergebnisse.</p>}
+    {visibleCandidates.length >= 500 && <p className="discovery-source-notice">Die API liefert bis zu 500 Treffer je Bereich. Die Kennzahlen für neue Reihen und Prüfbedarf beziehen sich auf die geladenen Ergebnisse.</p>}
     {sourceProblems.length > 0 && <p className="discovery-source-notice">{sourceProblems.length} {sourceProblems.length === 1 ? "Quelle konnte" : "Quellen konnten"} nicht vollständig ausgewertet werden. Weitere Quellen werden unabhängig verarbeitet. <button onClick={() => {setToolsOpen(true); window.setTimeout(() => document.getElementById("discovery-tools")?.scrollIntoView({ behavior: "smooth" }), 0);}}>Quellen ansehen</button></p>}
-    <DiscoveryCandidates title="Neue Partyreihen" description="Neue passende Reihen mit belegtem Termin und mindestens 50 % Genre-Match." candidates={newSeries} kind="new" loading={!data && !error} unavailable={!data && !!error} busy={busy} onReview={edit} onReject={reject} />
+    <DiscoveryCandidates title="Relevant · Neue Partyreihen" description="Neue passende Reihen mit belegtem Termin und mindestens 50 % Genre-Match." candidates={newSeries} kind="new" loading={!data && !error} unavailable={!data && !!error} busy={busy} onReview={edit} onReject={reject} />
     <DiscoveryCandidates title="Prüfbedarf" description="Nur offene Fragen zu Terminen, Quellen oder der Zuordnung. Deine manuellen Entscheidungen bleiben geschützt." candidates={review} kind="review" loading={!data && !error} unavailable={!data && !!error} busy={busy} onReview={edit} onReject={reject} />
+    <DiscoveryCandidates title="Unklare Angaben" description="Nicht ausreichend klassifizierbar: Genrebelege fehlen oder der Genre-Match liegt unter 50 %. Diese Funde sind nicht abgelehnt." candidates={unclear} kind="review" loading={!data && !error} unavailable={!data && !!error} busy={busy} onReview={edit} onReject={reject} />
     <DiscoveryGeography data={data?.geography} busy={busy} error={error} action={action} onReevaluate={()=>setResetMode("ALL")} />
     <details id="discovery-history" className="discovery-section discovery-history" open={historyOpen} onToggle={event => setHistoryOpen(event.currentTarget.open)}><summary><span>Verlauf</span><span className="discovery-muted">Übernahmen, ignorierte Konzerte, Dubletten und Suchläufe</span></summary>
       {historyOpen && data && <>{ready.length > 0 && <DiscoveryCandidates title="Bereit zur Übernahme" description="Eindeutig erkannte bekannte Reihen. Keine erneute Portfoliofreigabe erforderlich." candidates={ready} kind="ready" loading={false} busy={busy} onReview={edit} onReject={reject} />}<DiscoveryHistory data={data} onChanged={()=>void reload()} onReview={edit} onReviewId={id => void action(async () => edit(await api<Candidate>(`/candidates/${id}`)))} /></>}

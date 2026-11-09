@@ -52,12 +52,14 @@ class StaticPartyFetchTests {
             assertThat(event.url()).isEqualTo(page.url().toString());
         }
     }
-    @Test void genericH1CardsKeepAftershowButExcludeActualConcertEvidence() {
+    @Test void genericH1CardsKeepAftershowAndConcertEvidenceForSeparateEvaluation() {
         var page=new EventPageFetcher.Page(root,"<div><strong class='date'>09. Januar 2027</strong><h1>Rocknacht</h1><p>Nach dem Konzert, Eintritt frei!</p></div>"
             +"<div><strong class='date'>10. Januar 2027</strong><h1>Rockband</h1><p>Konzert und Party nach dem Konzert</p></div>","text/html");
         var result=extractor.extract(page,EventExtractor.Profile.defaults());
-        assertThat(result.events()).hasSize(1);
+        assertThat(result.events()).hasSize(2);
         assertThat(requireNonNull(result.events().getFirst()).starts()).containsExactly("2027-01-09");
+        assertThat(PartyOnlyPolicy.concert(requireNonNull(result.events().getFirst()))).isFalse();
+        assertThat(PartyOnlyPolicy.concert(requireNonNull(result.events().getLast()))).isTrue();
     }
     @Test void redirectsCheckDestinationRobotsAndExposeFinalUrl() throws Exception {
         EventPageFetcher fetcher=spy(new EventPageFetcher());
