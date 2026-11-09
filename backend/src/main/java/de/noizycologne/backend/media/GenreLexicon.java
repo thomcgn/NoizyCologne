@@ -9,10 +9,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.jspecify.annotations.Nullable;
 
-import java.text.Normalizer;
+import de.noizycologne.backend.genre.GenreNormalizer;
+import de.noizycologne.backend.genre.GenreImportCatalog;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -168,12 +168,7 @@ public class GenreLexicon {
         return aliases.stream().mapToInt(alias -> normalize(alias).length()).max().orElse(0);
     }
 
-    String normalize(String value) {
-        return Normalizer.normalize(value.toLowerCase(Locale.ROOT), Normalizer.Form.NFKD)
-                .replaceAll("[‐‑‒–—−]", "-").replaceAll("[’'`´]", "'")
-                .replaceAll("[&]", " and ").replaceAll("[^\\p{L}\\p{N}']+", " ")
-                .replaceAll("\\s+", " ").trim();
-    }
+    String normalize(String value) { return GenreNormalizer.normalize(value); }
 
     private boolean contains(String text, String phrase) {
         return Pattern.compile("(?<![\\p{L}\\p{N}])" + Pattern.quote(phrase) + "(?![\\p{L}\\p{N}])").matcher(text).find();
@@ -192,28 +187,12 @@ public class GenreLexicon {
     }
 
     private List<@NonNull Entry> defaultEntries() {
-        Map<String, List<String>> values = new LinkedHashMap<>();
-        add(values, "Rock", "rock"); add(values, "Alternative", "alternative"); add(values, "Indie", "indie"); add(values, "Punk", "punk");
-        add(values, "Punkrock", "punkrock", "punk rock"); add(values, "Garage Rock", "garage rock", "garage-rock");
-        add(values, "Garage-Punk", "garage punk", "garage-punk", "garagepunk");
-        add(values, "Rock’n’Roll", "rock'n'roll", "rock n roll", "rock'n roll", "rock and roll", "rnr", "r&r");
-        add(values, "50s Rock’n’Roll", "50s rnr", "50's rnr", "50s rock n roll");
-        add(values, "Wild R&B", "wild rnb", "wild r&b", "wild rhythm and blues");
-        add(values, "Rockabilly", "rockabilly"); add(values, "Psychobilly", "psychobilly"); add(values, "Emo", "emo"); add(values, "Hardcore", "hardcore");
-        add(values, "Metal", "metal"); add(values, "Metalcore", "metalcore", "metal core"); add(values, "Electronicore", "electronicore"); add(values, "Heavy Metal", "heavy metal");
-        add(values, "Thrash Metal", "thrash metal", "thrash-metal"); add(values, "Death Metal", "death metal", "death-metal");
-        add(values, "Black Metal", "black metal", "black-metal"); add(values, "Doom", "doom"); add(values, "Hard Rock", "hard rock", "hard-rock");
-        add(values, "Psych", "psych", "psychedelic"); add(values, "Ska", "ska"); add(values, "Soul", "soul"); add(values, "Northern Soul", "northern soul");
-        add(values, "Popcorn", "popcorn"); add(values, "Rhythm & Blues", "rhythm and blues", "rhythm & blues", "rnb");
-        add(values, "Post-Punk", "post-punk", "post punk"); add(values, "New Wave", "new wave"); add(values, "Darkwave", "darkwave", "dark wave");
-        add(values, "Gothic Rock", "gothic rock"); add(values, "Britpop", "britpop");
-        add(values, "Singer-Songwriter", "singer-songwriter", "singer songwriter"); add(values, "Folk", "folk"); add(values, "Pop", "pop");
-        add(values, "Sonstiges", "sonstiges", "other");
-        return values.entrySet().stream().map(item -> new Entry(item.getKey(), item.getValue())).toList();
-    }
-
-    private void add(Map<String, List<String>> values, String canonical, String... aliases) {
-        values.put(canonical, List.of(aliases));
+        return GenreImportCatalog.base().stream().map(row -> {
+            List<String> values = new java.util.ArrayList<>();
+            values.add(row.canonicalName());
+            values.addAll(row.aliases());
+            return new Entry(row.canonicalName(), List.copyOf(values));
+        }).toList();
     }
 
     public record GenreMatch(String genre, double confidence, boolean uncertain) { }
