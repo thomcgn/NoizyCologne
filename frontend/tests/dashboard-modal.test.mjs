@@ -1040,7 +1040,8 @@ test('genres UX: shared list bounds visible rows, searches aliases, and explains
   changeField(document.querySelector('[aria-label="Genres und Aliase durchsuchen"]'), 'Hidden synonym');
   assert.equal(document.querySelectorAll('[data-record-id]').length, 1);
   assert.equal(genreRow('g-59').dataset.recordId, 'g-59');
-  assert.match(document.body.textContent, /Aktiv für Genreerkennung und Discovery/);
+  assert.doesNotMatch(document.body.textContent, /Aktiv für Genreerkennung und Discovery/);
+  assert.equal([...document.querySelectorAll('button')].some(item => /^(Aktivieren|Deaktivieren)$/.test(item.textContent)), false);
 });
 
 async function mountPartySaveFlow({ aliases, reload, upload, save, update } = {}) {
@@ -1433,4 +1434,210 @@ test('genre import: transport failure keeps confirmation uncertain and requires 
   await importClick('Vorschau prüfen'); await importClick('Import bestätigen');
   assert.match(document.querySelector('[role="dialog"]').textContent, /Der Server kann bereits gespeichert haben/);
   assert.equal(button('Import bestätigen').disabled, true); assert.equal(button('Vorschau prüfen').disabled, false);
+});
+
+
+test('genres consistency: inactive genre keeps its persisted active flag when renamed without activation controls', async () => {
+  const calls = [];
+  await mountGenreEditor(async (_url, options = {}) => {
+    if (!options.method) return jsonResponse([{ ...genre, active: false }]);
+    const body = JSON.parse(options.body); calls.push(body);
+    return jsonResponse({ ...genre, ...body });
+  });
+  click([...genreRow('genre').querySelectorAll('button')].find(item => item.textContent === 'Bearbeiten'));
+  assert.equal(document.querySelector('[role="dialog"] input[type="checkbox"]'), null);
+  changeField(genreEditorField('Anzeigename'), 'Rockmusik');
+  await submitGenreForm();
+  assert.deepEqual(calls, [{ canonicalName: 'rock', displayName: 'Rockmusik', active: false }]);
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+});
+
+test('genres consistency: synchronous repeated submit sends one mutation and busy dismissal never prompts', async () => {
+  let release; let writes = 0; let prompts = 0;
+  await mountGenreEditor(async (_url, options = {}) => {
+    if (!options.method) return jsonResponse([genre]);
+    writes++; return new Promise(resolve => { release = resolve; });
+  });
+  window.confirm = () => { prompts++; return true; };
+  try {
+    click(button('Genre anlegen'));
+    changeField(genreEditorField('Kanonischer Name'), 'ebm');
+    changeField(genreEditorField('Anzeigename'), 'EBM');
+    const form = document.querySelector('[role="dialog"] form');
+    await act(async () => {
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    key('Escape'); click(document.querySelector('[data-modal-close]')); click(button('Abbrechen'));
+    assert.equal(writes, 1); assert.equal(prompts, 0);
+    assert.equal(document.querySelector('[data-modal-close]').disabled, true);
+    await act(async () => { release(jsonResponse({ message: 'Bitte erneut prüfen.' }, 409)); });
+    assert.equal(genreEditorField('Anzeigename').value, 'EBM');
+    assert.match(document.querySelector('[role="dialog"] [role="alert"]').textContent, /erneut prüfen/);
+    assert.equal(button('Speichern und schließen').disabled, false);
+  } finally { window.confirm = () => true; }
+});
+
+test('genres consistency: catalogue empty state differs from failed load; import and restore actions stay separate', async () => {
+  await mountGenreEditor(async () => jsonResponse([]));
+  assert.match(document.querySelector('[aria-label="Genre-Katalog"]').textContent, /Noch keine Genres erfasst/);
+  const toolbar = document.querySelector('[aria-label="Genre-Aktionen"]');
+  assert.deepEqual([...toolbar.querySelectorAll('button')].map(item => item.textContent), ['Genres importieren', '+ Genre anlegen', 'Neu laden']);
+  assert.ok(toolbar.querySelector('.cc-button-primary').textContent === 'Genres importieren');
+  assert.equal(toolbar.contains(button('Basisgenres wiederherstellen')), false);
+  assert.ok(document.querySelector('[aria-labelledby="genre-restore-title"]').contains(button('Basisgenres wiederherstellen')));
+});
+
+test('genres consistency: a failed initial load never reports an empty catalogue', async () => {
+  await mountGenreEditor(async () => jsonResponse({ message: 'Katalog nicht erreichbar' }, 503));
+  assert.doesNotMatch(document.querySelector('[aria-label="Genre-Katalog"]').textContent, /Noch keine Genres erfasst/);
+  assert.match(document.querySelector('[aria-label="Genre-Katalog"]').textContent, /nicht geladen/);
+  assert.ok(button('Genre anlegen'));
+});
+
+test('genres consistency: conflict download contains the actual report without additional requests', async () => {
+  const conflict = { line: 9, genre: 'EBM', field: 'aliases', message: 'Alias bereits zugeordnet' };
+  const report = importReport({ valid: false, conflicts: [conflict] });
+  let posts = 0;
+  await mountGenreEditor(async (_url, options = {}) => {
+    if (!options.method) return jsonResponse([genre]);
+    posts++; return jsonResponse(report);
+  });
+  await importClick('Genres importieren'); await selectImportFile('catalog.json', '{}');
+  await importClick('Vorschau prüfen');
+  const link = document.querySelector('a[download="genre-import-konflikte.json"]');
+  assert.ok(link);
+  assert.deepEqual(JSON.parse(decodeURIComponent(link.getAttribute('href').split(',').slice(1).join(','))), report);
+  assert.equal(posts, 1);
+  assert.equal(button('Import bestätigen').disabled, true);
+  assert.doesNotMatch(document.querySelector('[role="dialog"]').textContent, /Werkseinstellungsreset/);
+});
+
+
+test('genres consistency: confirmed import holds its busy dialog through reload, then restores the opener after refresh failure', async () => {
+  let releaseReload; let reads = 0; let applies = 0;
+  await mountGenreEditor(async (url, options = {}) => {
+    if (!options.method) {
+      reads++;
+      if (reads === 2) return new Promise(resolve => { releaseReload = resolve; });
+      return jsonResponse([genre]);
+    }
+    if (url.endsWith('/preview')) return jsonResponse(importReport());
+    applies++; return jsonResponse(importReport({ applied: true }));
+  });
+  const opener = button('Genres importieren'); opener.focus();
+  await importClick('Genres importieren'); await selectImportFile('catalog.json', '{}');
+  await importClick('Vorschau prüfen'); await importClick('Import bestätigen');
+  assert.equal(applies, 1); assert.equal(reads, 2);
+  assert.match(document.querySelector('[role="dialog"]').textContent, /Import bestätigt.*Katalogliste wird aktualisiert/);
+  assert.equal(document.querySelector('[data-modal-close]').disabled, true);
+  assert.equal(button('Import bestätigen').disabled, true);
+  key('Escape'); assert.ok(document.querySelector('[role="dialog"]'));
+  await act(async () => { releaseReload(jsonResponse({ message: 'Katalog-Reload fehlgeschlagen' }, 503)); });
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.equal(document.activeElement, opener);
+  assert.match(document.body.textContent, /104 Genres geprüft · 104 neu angelegt/);
+  assert.match(document.querySelector('[role="alert"]').textContent, /Katalog-Reload fehlgeschlagen/);
+  assert.doesNotMatch(document.body.textContent, /Import nicht bestätigt/);
+  await importClick('Neu laden');
+  assert.equal(reads, 3); assert.equal(applies, 1);
+  assert.equal(document.querySelector('[role="alert"]'), null);
+});
+
+test('genres consistency: incomplete success response preserves the editor and does not invent a saved genre', async () => {
+  await mountGenreEditor(async (_url, options = {}) => options.method ? jsonResponse({}) : jsonResponse([genre]));
+  click(button('Genre anlegen'));
+  changeField(genreEditorField('Kanonischer Name'), 'new-wave');
+  changeField(genreEditorField('Anzeigename'), 'New Wave');
+  await submitGenreForm();
+  assert.ok(document.querySelector('[role="dialog"]'));
+  assert.equal(genreEditorField('Anzeigename').value, 'New Wave');
+  assert.match(document.querySelector('[role="dialog"] [role="alert"]').textContent, /nicht vollständig bestätigt/);
+  assert.doesNotMatch(document.body.textContent, /Genre „New Wave“ gespeichert/);
+  assert.equal(document.querySelectorAll('[data-record-id]').length, 1);
+});
+
+test('genres consistency: editing response for another ID cannot replace the selected genre or close its draft', async () => {
+  await mountGenreEditor(async (_url, options = {}) => options.method ? jsonResponse({ ...genre, id: 'other', displayName: 'Wrong identity' }) : jsonResponse([genre]));
+  click([...genreRow('genre').querySelectorAll('button')].find(item => item.textContent === 'Bearbeiten'));
+  changeField(genreEditorField('Anzeigename'), 'Rockmusik');
+  await submitGenreForm();
+  assert.ok(document.querySelector('[role="dialog"]'));
+  assert.equal(genreEditorField('Anzeigename').value, 'Rockmusik');
+  assert.doesNotMatch(genreRow('genre').textContent, /Wrong identity/);
+});
+
+test('genres consistency: malformed catalogue response stays a load error instead of an empty catalogue', async () => {
+  await mountGenreEditor(async () => jsonResponse({ genres: [] }));
+  assert.match(document.querySelector('[role="alert"]').textContent, /Katalogantwort ist unvollständig/);
+  assert.doesNotMatch(document.querySelector('[aria-label="Genre-Katalog"]').textContent, /Noch keine Genres erfasst/);
+});
+
+test('genres consistency: incomplete preview cannot crash the modal or authorize an import', async () => {
+  let posts = 0;
+  await mountGenreEditor(async (_url, options = {}) => {
+    if (!options.method) return jsonResponse([genre]);
+    posts++; return jsonResponse({ valid: true, conflicts: [] });
+  });
+  await importClick('Genres importieren'); await selectImportFile('catalog.json', '{}');
+  await importClick('Vorschau prüfen');
+  assert.match(document.querySelector('[role="dialog"] [role="alert"]').textContent, /Importantwort ist unvollständig/);
+  assert.equal(button('Import bestätigen').disabled, true);
+  assert.match(document.querySelector('[role="dialog"]').textContent, /catalog.json/);
+  assert.equal(posts, 1);
+});
+
+test('genres consistency: invalid apply report remains unconfirmed and needs a new preview', async () => {
+  let applies = 0;
+  await mountGenreEditor(async (url, options = {}) => {
+    if (!options.method) return jsonResponse([genre]);
+    if (url.endsWith('/preview')) return jsonResponse(importReport());
+    applies++; return jsonResponse(importReport({ applied: true, created: -1 }));
+  });
+  await importClick('Genres importieren'); await selectImportFile('catalog.json', '{}');
+  await importClick('Vorschau prüfen'); await importClick('Import bestätigen');
+  assert.ok(document.querySelector('[role="dialog"]'));
+  assert.match(document.querySelector('[role="dialog"] [role="alert"]').textContent, /Importantwort ist unvollständig/);
+  assert.equal(button('Import bestätigen').disabled, true);
+  assert.doesNotMatch(document.querySelector('[role="dialog"]').textContent, /Import bestätigt/);
+  assert.equal(applies, 1);
+});
+
+test('genres consistency: contradictory applied report with conflicts cannot claim a confirmed import', async () => {
+  await mountGenreEditor(async (url, options = {}) => {
+    if (!options.method) return jsonResponse([genre]);
+    return jsonResponse(url.endsWith('/preview') ? importReport() : importReport({ applied: true, valid: false, conflicts: [{line: 2, genre: 'EBM', field: 'aliases', message: 'Konflikt'}] }));
+  });
+  await importClick('Genres importieren'); await selectImportFile('catalog.json', '{}');
+  await importClick('Vorschau prüfen'); await importClick('Import bestätigen');
+  assert.match(document.querySelector('[role="dialog"] [role="alert"]').textContent, /Importantwort ist unvollständig/);
+  assert.equal(button('Import bestätigen').disabled, true);
+  assert.doesNotMatch(document.querySelector('[role="dialog"]').textContent, /Import bestätigt/);
+});
+
+test('genres consistency: HTTP error with an applied report never confirms or reloads the catalogue', async () => {
+  let reads = 0; let applies = 0;
+  await mountGenreEditor(async (url, options = {}) => {
+    if (!options.method) { reads++; return jsonResponse([genre]); }
+    if (url.endsWith('/preview')) return jsonResponse(importReport());
+    applies++; return jsonResponse(importReport({ applied: true }), 503);
+  });
+  await importClick('Genres importieren'); await selectImportFile('catalog.json', '{}');
+  await importClick('Vorschau prüfen'); await importClick('Import bestätigen');
+  const alert = document.querySelector('[role="dialog"] [role="alert"]');
+  assert.match(alert.textContent, /Import nicht bestätigt.*Server kann bereits gespeichert haben/);
+  assert.equal(document.activeElement, alert);
+  assert.equal(button('Import bestätigen').disabled, true);
+  assert.doesNotMatch(document.querySelector('[role="dialog"]').textContent, /Import bestätigt/);
+  assert.equal(reads, 1); assert.equal(applies, 1);
+});
+
+test('genres consistency: an HTTP preview error cannot enable confirmation even if its body claims valid', async () => {
+  await mountGenreEditor(async (_url, options = {}) => options.method ? jsonResponse(importReport(), 409) : jsonResponse([genre]));
+  await importClick('Genres importieren'); await selectImportFile('catalog.json', '{}');
+  await importClick('Vorschau prüfen');
+  assert.equal(button('Import bestätigen').disabled, true);
+  const alert = document.querySelector('[role="dialog"] [role="alert"]');
+  assert.equal(document.activeElement, alert);
+  assert.match(document.querySelector('[role="dialog"]').textContent, /catalog.json/);
 });
