@@ -15,7 +15,7 @@ const {token, contextOptions} = await visualSession(origin);
 const browser = await chromium.launch({executablePath: process.env.CHROME_PATH ?? '/usr/bin/google-chrome-stable', headless: true});
 const results = [];
 try {
-  const scenarios = [6, 7, 8, 9].includes(phase)
+  const scenarios = [6, 7, 8, 9, 10].includes(phase)
     ? ['graphite', 'midnight', 'light'].flatMap(theme => ['compact', 'comfortable'].flatMap(density => [1440, 390].map(width => [theme, density, width, 'populated'])))
     : [
     ['graphite', 'compact', 1440, 'populated'], ['midnight', 'comfortable', 1440, 'populated'], ['light', 'compact', 1440, 'populated'],
@@ -33,6 +33,7 @@ try {
     const saveFixture = phase === 7 ? await mockSaveResults(context, data, calls) : null;
     const importFixture = phase === 8 ? await mockImportRefresh(context, data, calls) : null;
     const genreImportFixture = phase === 9 ? await mockGenreImport(context, data) : null;
+    const resetFixture = phase === 10 ? await mockFactoryReset(context) : null;
     const nativeDialogs = [];
     const page = await context.newPage();
     if ([7, 8, 9].includes(phase)) page.on('dialog', dialog => {nativeDialogs.push(dialog.type()); void dialog.dismiss().catch(error => errors.push(error.message));});
@@ -85,6 +86,7 @@ try {
     }
     for (const route of ['/dashboard/vorschlaege', '/dashboard/partys', '/dashboard/djs', '/dashboard/locations', '/dashboard/kalender', '/dashboard/redaktion', '/dashboard/settings', '/dashboard/automatisierung', '/dashboard/settings/genres']) {
       if (phase === 4) continue;
+      if (phase === 10 && route !== '/dashboard/settings') continue;
       if (phase === 8 && route !== '/dashboard/vorschlaege') continue;
       if (phase === 7 && !['/dashboard/partys', '/dashboard/locations'].includes(route)) continue;
       if ([6, 9].includes(phase) && route !== '/dashboard/settings/genres') continue;
@@ -105,6 +107,7 @@ try {
           throw error;
         }
       }
+      if (phase === 10) await checkFactoryReset(page, resetFixture, name);
       if (phase === 8) await checkImportRefresh(page, importFixture, calls, name);
       if (phase === 9) await checkGenreImport(page, genreImportFixture, name);
       if (phase === 6) {
@@ -528,4 +531,80 @@ async function checkGenreImport(page, fixture, name) {
   await page.getByRole('searchbox', {name: 'Genres und Aliase durchsuchen'}).fill('Shoegaze');
   await page.getByText('Shoegaze', {exact: true}).waitFor();
   await page.screenshot({path: `${out}/${name}-genre-import-success.png`});
+}
+
+
+// Browser interception only: no reset reaches Next's gateway or any backend.
+async function mockFactoryReset(context) {
+  const fixture = {reads: 0, writes: 0, resolve: null};
+  await context.route('**/api/admin/factory-reset', async route => {
+    if (route.request().method() === 'GET') {
+      fixture.reads++;
+      return route.fulfill({contentType: 'application/json', body: JSON.stringify({recordCount: 152, mediaFileCount: 12, tables: [], challenge: 'a'.repeat(48)})});
+    }
+    fixture.writes++;
+    const outcome = await new Promise(resolve => {fixture.resolve = resolve;});
+    fixture.resolve = null;
+    return route.fulfill({status: outcome.status, contentType: 'application/json', body: JSON.stringify(outcome.body)});
+  });
+  return fixture;
+}
+
+async function checkFactoryReset(page, fixture, name) {
+  const opener = page.getByRole('button', {name: 'Werkseinstellungen öffnen', exact: true});
+  await opener.click();
+  const modal = page.getByRole('dialog');
+  const phrase = modal.locator('#factory-reset-phrase');
+  const password = modal.locator('#factory-reset-password');
+  const acknowledged = modal.getByRole('checkbox');
+  const submit = modal.getByRole('button', {name: 'Kompletten Reset ausführen', exact: true});
+  async function confirm() {
+    await phrase.fill('Kompletter Reset');
+    await password.fill('disposable-browser-reset-password');
+    await acknowledged.check();
+    page.once('dialog', dialog => dialog.accept());
+    await submit.click();
+    await modal.getByRole('button', {name: 'Werkseinstellungen werden zurückgesetzt …', exact: true}).waitFor();
+    assert.equal(await phrase.isDisabled(), true, name);
+    await page.keyboard.press('Escape');
+    assert.equal(await modal.isVisible(), true, name);
+    assert.equal(fixture.resolve instanceof Function, true);
+  }
+  await confirm();
+  fixture.resolve({status: 409, body: {error: 'Datenstand verändert. Neue Vorschau erforderlich.', outcomeUnknown: false}});
+  await phrase.waitFor();
+  await page.waitForFunction(() => document.querySelector('#factory-reset-phrase')?.value === '');
+  assert.equal(await password.inputValue(), '');
+  assert.equal(await acknowledged.isChecked(), false);
+  assert.equal(await submit.isDisabled(), true);
+  assert.equal(fixture.writes, 1);
+  assert.equal(fixture.reads, 2);
+  await confirm();
+  fixture.resolve({status: 200, body: {deletedRecords: 152, deletedFiles: 12, filesNotDeleted: 0, partial: true, message: 'Datenbank-Reset ist bestätigt. Der technische Abschluss ist gestört.'}});
+  await modal.getByRole('status').filter({hasText: 'Der technische Abschluss ist gestört.'}).waitFor();
+  assert.equal((await modal.innerText()).includes('0 Mediendatei(en)'), false);
+  await page.screenshot({path: `${out}/${name}-reset-partial.png`});
+  await page.keyboard.press('Escape');
+  await modal.waitFor({state: 'detached'});
+  assert.equal(await opener.evaluate(element => element === document.activeElement), true);
+  await opener.click();
+  await confirm();
+  fixture.resolve({status: 503, body: {error: 'Antwort nicht eindeutig.', outcomeUnknown: true}});
+  await modal.getByRole('alert').filter({hasText: 'Reset-Ausgang unbestätigt.'}).waitFor();
+  const reads = fixture.reads;
+  await page.keyboard.press('Escape');
+  await modal.waitFor({state: 'detached'});
+  await opener.click();
+  await modal.getByRole('alert').filter({hasText: 'Reset-Ausgang unbestätigt.'}).waitFor();
+  assert.equal(fixture.reads, reads, name);
+  assert.equal(fixture.writes, 3, name);
+  assert.equal(await submit.count(), 0);
+  for (let index = 0; index < 6; index++) {
+    await page.keyboard.press('Tab');
+    assert.equal(await modal.evaluate(element => element.contains(document.activeElement)), true, name);
+  }
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, name);
+  await page.screenshot({path: `${out}/${name}-reset-unknown.png`});
+  await page.keyboard.press('Escape');
+  await modal.waitFor({state: 'detached'});
 }

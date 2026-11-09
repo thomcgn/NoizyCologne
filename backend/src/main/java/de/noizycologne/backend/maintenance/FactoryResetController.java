@@ -31,7 +31,7 @@ public class FactoryResetController {
         this.configuredSecret = configuredSecret;
     }
 
-    public record Confirmation(String phrase) { }
+    public record Confirmation(String phrase, @Nullable String revision) { }
 
     @GetMapping
     public FactoryResetService.Preview preview(
@@ -48,7 +48,9 @@ public class FactoryResetController {
         if (request == null || !CONFIRMATION.equals(request.phrase()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "Zur Bestätigung exakt „Kompletter Reset“ eingeben.");
-        return service.execute();
+        String revision = request.revision();
+        if (revision == null) throw new ResponseStatusException(HttpStatus.CONFLICT, "Die geprüfte Vorschau fehlt. Bitte neu öffnen.");
+        return service.execute(revision);
     }
 
     private void authenticate(@Nullable String provided) {
