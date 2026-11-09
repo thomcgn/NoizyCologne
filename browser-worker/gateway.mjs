@@ -31,14 +31,24 @@ export function createGateway(token, { lookup, connect = net.createConnection, r
   workerHost = 'browser-worker', workerPort = 3000 } = {}) {
   const proxyToken = proxySecret(token);
   const cache = new Map();
-  let active = 0, interval = Date.now(), bytes = 0, connections = 0;
+  let active = 0, interval = Date.now(), bytes = 0, connections = 0, reported = 0;
+  const diagnose = code => {if(reported++<24)console.warn(code);};
   const quota = amount => {
-    if (Date.now() - interval > 60000) { interval = Date.now(); bytes = 0; connections = 0; }
+    if (Date.now() - interval > 60000) { interval = Date.now(); bytes = 0; connections = 0; reported = 0; }
     bytes += amount;
     return bytes <= 64 * 1024 * 1024;
   };
   const server = http.createServer({ requestTimeout: 35000, headersTimeout: 5000, maxHeaderSize: 8192 }, async (request, response) => {
     if (request.method === 'GET' && request.url === '/health') { send(response, 200, { ok: true }); return; }
+    if (request.method === 'GET' && request.url === '/ready') {
+      try {
+        const worker = await fetch(`http://${workerHost}:${workerPort}/health`, {signal:AbortSignal.timeout(2500)});
+        const result = await worker.json();
+        if (!worker.ok || result.ok !== true) throw new Error('BROWSER_WORKER_UNAVAILABLE');
+        send(response,200,{ok:true});
+      } catch { send(response,503,{ok:false,status:'BROWSER_WORKER_UNAVAILABLE'}); }
+      return;
+    }
     try {
       if (request.method === 'POST' && request.url === '/robots' && authorized(request.headers.authorization, `Bearer ${proxyToken}`)) {
         const url = publicUrl((await readJson(request)).url);
@@ -72,13 +82,15 @@ export function createGateway(token, { lookup, connect = net.createConnection, r
   });
   server.on('connect', async (request, client, head) => {
     let upstream, timer; let counted = false;
-    const reject = () => { client.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); upstream?.destroy(); };
+    const reject = (code='BROWSER_PROXY_NETWORK_ERROR') => { diagnose(code); client.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); upstream?.destroy(); };
     client.on('error', () => upstream?.destroy());
     client.on('close', () => { clearTimeout(timer); upstream?.destroy(); if (counted) { active--; counted = false; } });
     try {
       const expected = `Basic ${Buffer.from(`discovery:${proxyToken}`).toString('base64')}`;
-      if (!authorized(request.headers['proxy-authorization'], expected) || active >= 32 || !quota(0) || ++connections > 200) { reject(); return; }
-      if (!request.url.endsWith(':443')) { reject(); return; }
+      if (!authorized(request.headers['proxy-authorization'], expected)) {reject('BROWSER_PROXY_AUTH_FAILED');return;}
+      if (active >= 32) {reject('BROWSER_PROXY_CONNECTION_LIMIT');return;}
+      if (!quota(0) || ++connections > 200) {reject('BROWSER_PROXY_RATE_LIMIT');return;}
+      if (!request.url.endsWith(':443')) { reject('BROWSER_PROXY_PORT_BLOCKED'); return; }
       const host = request.url.slice(0, -4); publicUrl(`https://${host}/`);
       active++; counted = true;
       const [address] = await resolvePublic(host, lookup);
@@ -90,10 +102,10 @@ export function createGateway(token, { lookup, connect = net.createConnection, r
         transferred += chunk.length;
         if (transferred > 12 * 1024 * 1024 || !quota(chunk.length)) { client.destroy(); upstream.destroy(); }
       };
-      upstream.on('error', reject);
+      upstream.on('error', () => reject());
       upstream.on('connect', () => { client.write('HTTP/1.1 200 Connection Established\r\n\r\n'); if (head.length) upstream.write(head); client.pipe(upstream); upstream.pipe(client); });
       client.on('data', account); upstream.on('data', account);
-    } catch { reject(); }
+    } catch(error) { reject(['UNSAFE_URL','UNSAFE_DNS','DNS_TIMEOUT'].includes(error.message)?error.message:'BROWSER_PROXY_NETWORK_ERROR'); }
   });
   return server;
 }

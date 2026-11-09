@@ -17,8 +17,17 @@ BROWSER_WORKER_TOKEN=$(python3 -c 'import secrets; print(secrets.token_urlsafe(3
 cleanup() {
   status=$?
   trap - EXIT
-  docker rm -f "$gateway" "$worker" >/dev/null 2>&1 || true
-  docker network rm "$sandbox" "$egress" >/dev/null 2>&1 || true
+  if [[ -n "${DISCOVERY_PROBE_OUTPUT:-}" ]]; then
+    mkdir -p "$DISCOVERY_PROBE_OUTPUT"
+    docker logs "$gateway" > "$DISCOVERY_PROBE_OUTPUT/gateway.log" 2>&1 || true
+    docker logs "$worker" > "$DISCOVERY_PROBE_OUTPUT/worker.log" 2>&1 || true
+  fi
+  for service in "$gateway" "$worker"; do
+    if docker container inspect "$service" >/dev/null 2>&1; then docker rm -f "$service" >/dev/null || status=1; fi
+  done
+  for network in "$sandbox" "$egress"; do
+    if docker network inspect "$network" >/dev/null 2>&1; then docker network rm "$network" >/dev/null || status=1; fi
+  done
   exit "$status"
 }
 trap cleanup EXIT
@@ -46,7 +55,7 @@ python3 - "$root" "$1" <<'PY'
 from pathlib import Path
 import os,subprocess,sys,time,urllib.request
 root=Path(sys.argv[1])
-health=os.environ['DISCOVERY_PROBE_BROWSER_URL'].removesuffix('/render')+'/health'
+health=os.environ['DISCOVERY_PROBE_BROWSER_URL'].removesuffix('/render')+'/ready'
 for attempt in range(20):
     try:
         urllib.request.urlopen(health,timeout=2).close()

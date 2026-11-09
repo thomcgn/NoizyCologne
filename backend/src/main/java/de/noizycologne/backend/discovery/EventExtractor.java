@@ -95,7 +95,7 @@ public class EventExtractor {
         var fetchedOn=LocalDate.now(clock.withZone(ZoneId.of("Europe/Berlin")));
         Map<HtmlEvent,GermanProgramText.ResolvedDate> resolvedByItem=new IdentityHashMap<>();
         for(var list:lists.values()) {
-            var resolved=GermanProgramText.resolve(list.stream().map(item -> new GermanProgramText.DateEvidence(item.label(),item.event().starts())).toList(),fetchedOn);
+            var resolved=GermanProgramText.resolve(list.stream().map(item -> new GermanProgramText.DateEvidence(item.label(),item.event().starts())).toList(),fetchedOn,GermanProgramText.calendarContext(Objects.requireNonNull(list.getFirst()).container().parent()));
             for(int i=0;i<list.size();i++) resolvedByItem.put(Objects.requireNonNull(list.get(i)),Objects.requireNonNull(resolved.get(i)));
         }
         // Resolve in local lists, but retain the original document order in the extraction.

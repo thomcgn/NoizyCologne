@@ -91,53 +91,138 @@ prepare_media_volume_permissions() {
     "$api_image" -R 10001:10001 /app/uploads
 }
 
+# Read only this setting; never source the persistent .env as shell code.
+setting() {
+  local key="$1" value="${!1-}"
+  if [[ -z "$value" && -f .env ]]; then
+    value="$(awk -F= -v key="$key" '$1 == key { print substr($0,index($0,"=")+1); exit }' .env)"
+    value="${value%\"}"; value="${value#\"}"
+    value="${value%\'}"; value="${value#\'}"
+  fi
+  printf '%s' "$value"
+}
+
+browser_preflight() {
+  local release="$1" token profile available
+  token="$(setting BROWSER_WORKER_TOKEN)"
+  if [[ -z "$token" ]]; then
+    token="$(od -An -N32 -tx1 /dev/urandom | tr -d '[:space:]')"
+    (( ${#token} == 64 )) || { echo 'BROWSER_CONFIG_INVALID: token generation failed' >&2; return 1; }
+    printf '\nBROWSER_WORKER_TOKEN=%s\n' "$token" >> .env
+    chmod 600 .env
+  fi
+  (( ${#token} >= 32 )) || { echo 'BROWSER_CONFIG_INVALID: token must have at least 32 characters (value withheld)' >&2; return 1; }
+  export BROWSER_WORKER_TOKEN="$token"
+  profile="$(setting BROWSER_SECCOMP_PROFILE)"
+  profile="${profile:-$release/seccomp_profile.json}"
+  [[ "$profile" == /* && -s "$profile" ]] || { echo 'BROWSER_SECCOMP_MISSING: an absolute, existing seccomp profile is required' >&2; return 1; }
+  cmp -s "$profile" "$release/seccomp_profile.json" || { echo 'BROWSER_SECCOMP_MISMATCH: profile must match the qualified release' >&2; return 1; }
+  export BROWSER_SECCOMP_PROFILE="$profile"
+  available="$(awk '$1 == "MemAvailable:" {print $2}' /proc/meminfo)"
+  [[ "$available" =~ ^[0-9]+$ ]] && (( available >= 1048576 )) || { echo 'BROWSER_RAM_INSUFFICIENT: require at least 1 GiB available RAM before rollout' >&2; return 1; }
+  echo "Browser preflight: available RAM $((available/1024)) MiB; worker 768 MiB/256 PIDs, gateway 128 MiB/64 PIDs"
+}
+
+compose_for() {
+  local release="$1" browser="$2"
+  compose=(docker compose --env-file "$server_dir/.env" -f "$release/compose.yaml")
+  if [[ "$browser" == true ]]; then compose+=(-f "$release/compose.browser.yaml"); fi
+  compose+=(-p noizycologne)
+}
+
+restore_configuration() {
+  local tag="$1" release="$2" browser="$3"
+  local -a compose services=(db api frontend landing)
+  [[ "$tag" =~ ^[0-9a-f]{40}$ && -f "$release/compose.yaml" ]] || { echo 'ROLLBACK_UNAVAILABLE: no recorded qualified release; manual recovery required' >&2; return 1; }
+  compose_for "$release" "$browser"
+  if [[ "$browser" == true ]]; then services+=(browser-worker browser-gateway); fi
+  echo "Restoring release $tag (browser=$browser)"
+  IMAGE_TAG="$tag" DISCOVERY_BROWSER_ENABLED="$browser" BROWSER_SECCOMP_PROFILE="$release/seccomp_profile.json" "${compose[@]}" up -d --no-build "${services[@]}" --wait --wait-timeout 180 || { echo 'ROLLBACK_FAILED: services did not become healthy' >&2; return 1; }
+  IMAGE_TAG="$tag" DISCOVERY_BROWSER_ENABLED="$browser" BROWSER_SECCOMP_PROFILE="$release/seccomp_profile.json" "${compose[@]}" up -d --no-build --no-deps caddy --wait --wait-timeout 180 || { echo 'ROLLBACK_FAILED: caddy did not become healthy' >&2; return 1; }
+}
+
+rollback() {
+  local tag release browser current_release
+  tag="$(cat .rollback-image-tag)"; release="$(cat .rollback-release)"; browser="$(cat .rollback-browser-enabled)"
+  current_release="$(cat .active-release)"
+  restore_configuration "$tag" "$release" "$browser"
+  if [[ "$browser" == false && -f "$current_release/compose.browser.yaml" ]]; then
+    local -a compose
+    compose_for "$current_release" true
+    BROWSER_WORKER_TOKEN="${BROWSER_WORKER_TOKEN:-rollback-placeholder-token-not-used-123456}" BROWSER_SECCOMP_PROFILE="$current_release/seccomp_profile.json" "${compose[@]}" rm -sf browser-gateway browser-worker
+  fi
+  printf '%s\n' "$tag" > .previous-image-tag
+  printf '%s\n' "$release" > .active-release
+  printf '%s\n' "$browser" > .active-browser-enabled
+}
+
+browser_smoke() {
+  local release browser
+  release="$(cat .active-release)"; browser="$(cat .active-browser-enabled)"
+  if [[ "$browser" != true ]]; then echo 'BROWSER_SMOKE_NOT_RUN: persistent browser setting is disabled'; return; fi
+  local -a compose
+  compose_for "$release" true
+  export BROWSER_SECCOMP_PROFILE="$release/seccomp_profile.json"
+  "${compose[@]}" exec -T api sh -ec 'wget -q -O /dev/null http://browser-gateway:3128/ready'
+  "${compose[@]}" exec -T browser-gateway node smoke.mjs
+}
+
 main() {
-  cd "$(dirname "${BASH_SOURCE[0]}")"
-
-  local image_tag="${1:?image tag is required}"
-  local previous_tag_file=".previous-image-tag"
-  local previous_tag="$(cat "$previous_tag_file" 2>/dev/null || true)"
-  local server_dir="$PWD"
-  local compose=(docker compose --env-file "$server_dir/.env" -f "$server_dir/compose.yaml" -p noizycologne)
-  local legacy_root="$(cd ../.. && pwd)"
-  local legacy_compose="$legacy_root/compose.yaml"
-
-  restore_previous_or_legacy_stack() {
-    if [[ -n "$previous_tag" ]]; then
-      echo "Attempting to restore image tag $previous_tag" >&2
-      IMAGE_TAG="$previous_tag" "${compose[@]}" up -d db api frontend --wait || true
-      IMAGE_TAG="$previous_tag" "${compose[@]}" up -d --no-deps caddy --wait || true
-      return
-    fi
-
-    if [[ -f "$legacy_compose" ]]; then
-      echo "Attempting to restore the previous noizycologne stack" >&2
-      docker compose -p noizycologne -f "$legacy_compose" up -d caddy landing smoke || true
-    else
-      echo "Legacy compose file not found at $legacy_compose; manual rollback is required" >&2
-    fi
-  }
-
+  local release_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local server_dir="${NOIZY_SERVER_DIR:-$release_dir}"
+  cd "$server_dir"
+  if [[ "${1:-}" == --rollback ]]; then rollback; return; fi
+  if [[ "${1:-}" == --browser-smoke ]]; then browser_smoke; return; fi
+  local image_tag="${1:?qualified commit SHA is required}"
+  [[ "$image_tag" =~ ^[0-9a-f]{40}$ ]] || { echo 'Deployment requires an immutable 40-character commit SHA' >&2; return 1; }
+  local previous_tag="$(cat .previous-image-tag 2>/dev/null || true)"
+  local previous_release="$(cat .active-release 2>/dev/null || printf '%s' "$server_dir")"
+  local previous_browser="$(cat .active-browser-enabled 2>/dev/null || printf false)"
+  local browser="$(setting DISCOVERY_BROWSER_ENABLED)"
+  browser="${browser:-false}"
+  [[ "$browser" == true || "$browser" == false ]] || { echo 'BROWSER_CONFIG_INVALID: DISCOVERY_BROWSER_ENABLED must be true or false' >&2; return 1; }
+  export DISCOVERY_BROWSER_ENABLED="$browser"
+  local -a compose images=(api frontend landing) services=(db api frontend)
   ensure_factory_reset_secret
+  if [[ "$browser" == true ]]; then
+    browser_preflight "$release_dir"
+    images+=(browser-worker browser-gateway); services+=(browser-worker browser-gateway)
+  fi
+  compose_for "$release_dir" "$browser"
+  IMAGE_TAG="$image_tag" "${compose[@]}" config --quiet
+  IMAGE_TAG="$image_tag" "${compose[@]}" pull "${images[@]}" || { echo 'IMAGE_PULL_FAILED: qualified release is incomplete; active stack unchanged' >&2; return 1; }
+  if [[ "$browser" == true ]]; then
+    IMAGE_TAG="$image_tag" "${compose[@]}" run --rm --no-deps browser-worker node --input-type=module -e "await (await import('./sandbox-check.mjs')).verifySandbox()" || { echo 'BROWSER_SANDBOX_FAILED: preflight failed; active stack unchanged' >&2; return 1; }
+  fi
   ensure_media_volume
-  "${compose[@]}" config >/dev/null
-  IMAGE_TAG="$image_tag" "${compose[@]}" pull api frontend landing
   prepare_media_volume_permissions "ghcr.io/thomcgn/noizycologne-backend:$image_tag"
-  "${compose[@]}" run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+  IMAGE_TAG="$image_tag" "${compose[@]}" run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
   check_host_port_conflicts
 
-  if ! IMAGE_TAG="$image_tag" "${compose[@]}" up -d db api frontend --wait; then
-    restore_previous_or_legacy_stack
-    exit 1
+  if ! IMAGE_TAG="$image_tag" "${compose[@]}" up -d --no-build "${services[@]}" --wait --wait-timeout 180 || ! IMAGE_TAG="$image_tag" "${compose[@]}" up -d --no-build --no-deps caddy --wait --wait-timeout 180; then
+    IMAGE_TAG="$image_tag" "${compose[@]}" ps >&2
+    IMAGE_TAG="$image_tag" "${compose[@]}" logs --tail=40 browser-gateway browser-worker >&2 || true
+    restore_configuration "$previous_tag" "$previous_release" "$previous_browser" || return 1
+    if [[ "$browser" == true && "$previous_browser" == false ]]; then IMAGE_TAG="$image_tag" "${compose[@]}" rm -sf browser-gateway browser-worker; fi
+    return 1
   fi
-
-  if ! IMAGE_TAG="$image_tag" "${compose[@]}" up -d --no-deps caddy --wait; then
-    restore_previous_or_legacy_stack
-    exit 1
+  if [[ "$browser" == false && "$previous_browser" == true ]]; then
+    local -a selected_compose=("${compose[@]}")
+    compose_for "$previous_release" true
+    if ! BROWSER_SECCOMP_PROFILE="$previous_release/seccomp_profile.json" "${compose[@]}" rm -sf browser-gateway browser-worker; then
+      restore_configuration "$previous_tag" "$previous_release" "$previous_browser"
+      return 1
+    fi
+    compose=("${selected_compose[@]}")
   fi
-
-  printf '%s\n' "$image_tag" > "$previous_tag_file"
-  "${compose[@]}" ps
+  # Keep the exact previous manifest and browser selection for a failed external smoke test.
+  printf '%s\n' "$previous_tag" > .rollback-image-tag
+  printf '%s\n' "$previous_release" > .rollback-release
+  printf '%s\n' "$previous_browser" > .rollback-browser-enabled
+  printf '%s\n' "$image_tag" > .previous-image-tag
+  printf '%s\n' "$release_dir" > .active-release
+  printf '%s\n' "$browser" > .active-browser-enabled
+  IMAGE_TAG="$image_tag" "${compose[@]}" ps
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

@@ -14,6 +14,13 @@ if [[ "$mode" == --unit ]]; then exit 0; fi
 frontend/node_modules/.bin/eslint --no-config-lookup --config browser-worker/eslint.config.mjs browser-worker --max-warnings=0
 command -v docker >/dev/null
 docker info --format '{{.ServerVersion}}'
+# Validate the production overlay without starting services or inheriting a real .env.
+env POSTGRES_DB=fixture POSTGRES_USER=fixture POSTGRES_PASSWORD=fixture \
+  TEAM_USER=fixture TEAM_PASSWORD_HASH=fixture TEAM_SESSION_SECRET=fixture ACME_EMAIL=fixture@example.invalid \
+  POSTGRES_DATA_VOLUME=fixture-db CADDY_DATA_VOLUME=fixture-caddy CADDY_CONFIG_VOLUME=fixture-config MEDIA_DATA_VOLUME=fixture-media \
+  BROWSER_WORKER_TOKEN=isolated-compose-fixture-token-123456789 BROWSER_SECCOMP_PROFILE="$root/browser-worker/seccomp_profile.json" \
+  IMAGE_TAG=0000000000000000000000000000000000000000 \
+  docker compose --env-file /dev/null -f deploy/server/compose.yaml -f deploy/server/compose.browser.yaml config --quiet
 docker build -t noizycologne-browser-worker:quality browser-worker
 container="noizy-browser-quality-$PPID-$RANDOM-$RANDOM"
 containers=("$container")

@@ -42,7 +42,9 @@ public class VenueSourceDiscoveryService {
     }
     private List<@NonNull Found> discover(String input,EventExtractor.Profile profile,boolean independent) throws IOException {
         URI root = SafeUrls.parse(independent?CanonicalSourceUrl.of(input):input);
-        record Step(URI url, int depth, boolean detail) { }
+        record Step(URI url, int depth, boolean detail,boolean browserPass) {
+            Step(URI url,int depth,boolean detail) {this(url,depth,detail,false);}
+        }
         var queue = new ArrayDeque<Step>(); queue.add(new Step(root, 0, false));
         Set<URI> seen = new HashSet<>(); Map<String, String> robots = new HashMap<>();
         List<@NonNull Found> found = new ArrayList<>();
@@ -51,20 +53,27 @@ public class VenueSourceDiscoveryService {
         if (parties!=null) parties.findAll().forEach(p -> knownNames.add(p.getName()));
         if (store!=null) store.aliases().values().forEach(knownNames::addAll);
         Set<URI> eligibleDetails = new HashSet<>();
+        Map<URI,Step> deferred=new LinkedHashMap<>();
+        Map<URI,EventPageFetcher.Page> staticPages=new HashMap<>();
         int browserJobs=0;
         long deadline=System.nanoTime()+60_000_000_000L;
-        while (!queue.isEmpty() && seen.size() < 8) {
+        while (!queue.isEmpty() || !deferred.isEmpty()) {
+            if(seen.size()>=8) queue.clear();
+            if(queue.isEmpty() && (deferred.isEmpty() || found.stream().anyMatch(f -> f.extraction().events().stream()
+                    .anyMatch(event -> event.starts().stream().anyMatch(start -> EventNormalizer.date(start)!=null))))) break;
             if (System.nanoTime()>deadline) {
                 found.add(new Found(root,new EventExtractor.Extraction(List.of(),"CRAWL_LIMIT"),"HTTP",List.of("CRAWL_LIMIT")));
                 break;
             }
             // Find programme sections before spending the page budget on event details.
-            Step step = queue.stream().filter(s -> !s.detail()).findFirst().orElse(queue.getFirst());
-            queue.remove(step);
-            if (!seen.add(step.url())) continue;
+            Step step;
+            if(queue.isEmpty()) {var next=deferred.entrySet().iterator().next();step=next.getValue();deferred.remove(next.getKey());}
+            else {step=queue.stream().filter(s -> !s.detail()).findFirst().orElse(queue.getFirst());queue.remove(step);}
+            if (!step.browserPass() && !seen.add(step.url())) continue;
             try {
-                if (!fetcher.robotsAllowed(step.url(), robots)) throw new EventPageFetcher.FetchFailure("ROBOTS_BLOCKED","robots.txt untersagt den Abruf von " + step.url());
-                var page = fetcher.fetch(step.url());
+                if (!step.browserPass() && !fetcher.robotsAllowed(step.url(), robots)) throw new EventPageFetcher.FetchFailure("ROBOTS_BLOCKED","robots.txt untersagt den Abruf von " + step.url());
+                var page = step.browserPass() ? Objects.requireNonNull(staticPages.get(step.url())) : fetcher.fetch(step.url());
+                if(step.browserPass()) found.removeIf(previous -> previous.url().equals(step.url()) && previous.fetchMethod().equals("HTTP"));
                 var extraction = extractor.extract(page, profile);
                 var portalLinks=independent && !step.detail() && step.depth()<2 ? portalLinks(page,root) : List.<URI>of();
                 if (!portalLinks.isEmpty() && extraction.events().isEmpty())
@@ -72,7 +81,10 @@ public class VenueSourceDiscoveryService {
                 for (var detail:portalLinks) if (!seen.contains(detail) && queue.size()<16 && queue.stream().noneMatch(s -> s.url().equals(detail)))
                     queue.add(new Step(detail,step.depth()+1,true));
                 String method="HTTP";List<@NonNull String> diagnostics=List.of();
-                if (browser!=null && portalLinks.isEmpty() && extractor.needsRendering(page,extraction) && !hasStaticProgrammeLink(page)) {
+                boolean needsBrowser=browser!=null && portalLinks.isEmpty() && extractor.needsRendering(page,extraction);
+                boolean deferBrowser=needsBrowser && !step.browserPass() && hasStaticProgrammeLink(page);
+                if(deferBrowser) {staticPages.put(step.url(),page);deferred.put(step.url(),new Step(step.url(),step.depth(),step.detail(),true));}
+                if (needsBrowser && !deferBrowser) {
                     var rendered=browserJobs++<2 ? browser.render(step.url())
                         : new BrowserPageRenderer.Result("BROWSER_LIMIT",List.of(),List.of("BROWSER_LIMIT"),false);
                     diagnostics=rendered.warnings();
@@ -101,7 +113,7 @@ public class VenueSourceDiscoveryService {
                 var site=metadata.selectFirst("meta[property=og:site_name][content]");
                 String siteName=site==null ? metadata.title() : site.attr("content");
                 found.add(new Found(page.url(), extraction,method,diagnostics,siteName.substring(0,Math.min(200,siteName.length()))));
-                if (step.depth() >= 2) continue;
+                if (step.browserPass() || step.depth() >= 2) continue;
                 if (step.detail()) continue;
                 Set<URI> eventLinks = new HashSet<>();
                 for (var event : extraction.events()) {

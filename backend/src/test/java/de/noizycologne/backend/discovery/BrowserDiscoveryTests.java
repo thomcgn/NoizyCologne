@@ -31,6 +31,25 @@ class BrowserDiscoveryTests {
         }
         verifyNoInteractions(browser);
     }
+    @Test void staticProgrammeNavigationIsTriedBeforeChromiumAndAvoidsUnnecessaryRendering() throws Exception {
+        var service=service("<div id='root'></div><script src='/bundle.js'></script><a href='/programme'>Programm</a>");
+        var programme=root.resolve("/programme");
+        when(http.fetch(programme)).thenReturn(new EventPageFetcher.Page(programme,"<article><h2>Emo Party</h2><time datetime='2026-11-14'></time></article>","text/html"));
+        var found=service.discover(root.toString(),EventExtractor.Profile.defaults());
+        assertThat(found).anySatisfy(page->assertThat(page.extraction().events()).hasSize(1));
+        verifyNoInteractions(browser);
+    }
+    @Test void navigationWithoutDatedEventsCannotPermanentlySuppressTheDeferredBrowser() throws Exception {
+        var service=service("<div id='root'></div><script src='/bundle.js'></script><a href='/programme'>Programm</a>");
+        var programme=root.resolve("/programme");
+        when(http.fetch(programme)).thenReturn(new EventPageFetcher.Page(programme,"<p>Tickets demnächst</p>","text/html"));
+        when(browser.render(root)).thenReturn(new BrowserPageRenderer.Result("RENDERED",List.of(new EventPageFetcher.Page(root,
+            "<section><h2>November 2026</h2><article><h3>DARK UNICORN by DJ Martin Heiland</h3><p class='date'>14th Nov | 23:00</p><p>Genres: Dark Electro, EBM, New Wave, Synth, Wave, Post-Punk</p></article></section>","text/html")),List.of(),false));
+        var found=service.discover(root.toString(),EventExtractor.Profile.defaults());
+        var order=inOrder(http,browser);order.verify(http).fetch(root);order.verify(http).fetch(programme);order.verify(browser).render(root);
+        assertThat(found.stream().flatMap(page->page.extraction().events().stream()).toList()).hasSize(1);
+        assertThat(found).anySatisfy(page->{assertThat(page.fetchMethod()).isEqualTo("BROWSER");assertThat(page.extraction().complete()).isFalse();});
+    }
     @Test void blockedRobotsNeverTriggerBrowserBypass() throws Exception {
         var service=service("<div id='root'></div><script src='/bundle.js'></script>");
         when(http.robotsAllowed(any(),any())).thenReturn(false);
@@ -63,6 +82,18 @@ class BrowserDiscoveryTests {
         }
         var footer=new EventPageFetcher.Page(root,"<main><h2>Emo Night</h2><footer>Updated November 7, 2026</footer></main>","text/html");
         assertThat(new EventExtractor().extract(footer,EventExtractor.Profile.defaults()).events()).isEmpty();
+    }
+    @Test void controlAuthenticationAndWorkerAvailabilityHaveDistinctDiagnostics() throws Exception {
+        var server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
+        server.createContext("/auth",exchange->{exchange.sendResponseHeaders(403,-1);exchange.close();});
+        server.createContext("/worker",exchange->{exchange.sendResponseHeaders(502,-1);exchange.close();});
+        server.start();
+        try {
+            for(var failure:Map.of("auth","BROWSER_AUTH_FAILED","worker","BROWSER_WORKER_UNAVAILABLE").entrySet()) {
+                var renderer=new BrowserPageRenderer(true,"http://127.0.0.1:"+server.getAddress().getPort()+"/"+failure.getKey(),"isolated-test-token-not-a-secret-12345");
+                assertThat(renderer.render(root).status()).isEqualTo(failure.getValue());
+            }
+        } finally {server.stop(0);}
     }
     @Test void internalClientAuthenticatesAndCannotTrustWorkerCompleteness() throws Exception {
         var observed=new AtomicReference<String>();
