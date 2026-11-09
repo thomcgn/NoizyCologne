@@ -20,7 +20,17 @@ env POSTGRES_DB=fixture POSTGRES_USER=fixture POSTGRES_PASSWORD=fixture \
   POSTGRES_DATA_VOLUME=fixture-db CADDY_DATA_VOLUME=fixture-caddy CADDY_CONFIG_VOLUME=fixture-config MEDIA_DATA_VOLUME=fixture-media \
   BROWSER_WORKER_TOKEN=isolated-compose-fixture-token-123456789 BROWSER_SECCOMP_PROFILE="$root/browser-worker/seccomp_profile.json" \
   IMAGE_TAG=0000000000000000000000000000000000000000 \
-  docker compose --env-file /dev/null -f deploy/server/compose.yaml -f deploy/server/compose.browser.yaml config --quiet
+  docker compose --env-file /dev/null -f deploy/server/compose.yaml -f deploy/server/compose.browser.yaml config --format json | python3 -c '
+import json,sys
+services=json.load(sys.stdin)["services"]
+mounts=services["browser-worker"]["tmpfs"]
+if len(mounts)!=1:
+    raise SystemExit("Browser worker must have exactly one bounded /tmp tmpfs mount; quote comma-separated YAML values")
+path,options=mounts[0].split(":",1)
+if path!="/tmp" or not {"rw","size=134217728","mode=1777"}.issubset(options.split(",")):
+    raise SystemExit("Browser worker tmpfs must retain /tmp, size and permission limits")
+print("PASS: normalized production browser tmpfs mount")
+'
 docker build -t noizycologne-browser-worker:quality browser-worker
 container="noizy-browser-quality-$PPID-$RANDOM-$RANDOM"
 containers=("$container")
