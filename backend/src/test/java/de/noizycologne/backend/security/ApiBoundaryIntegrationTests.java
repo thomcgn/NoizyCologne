@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
 import static java.util.Objects.requireNonNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -13,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(properties={"noizy.api.trust.secret=isolated-api-boundary-fixture-key-not-for-production","noizy.test.trusted-defaults=false","noizy.discovery.enabled=false","noizy.discovery.monitor.enabled=false","logging.level.root=WARN"})
 @AutoConfigureMockMvc
 @ActiveProfiles("local")
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class ApiBoundaryIntegrationTests {
     @Autowired MockMvc mvc;
     @Test void actualServletFilterProtectsReadsAndWritesBeforeControllers() throws Exception {
