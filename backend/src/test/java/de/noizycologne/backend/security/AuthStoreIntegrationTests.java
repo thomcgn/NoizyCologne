@@ -7,6 +7,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.web.server.ResponseStatusException;
@@ -24,9 +25,10 @@ import static org.assertj.core.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(properties={"noizy.auth.service-secret=fixture-auth-store-key-not-a-production-secret", "noizy.test.trusted-defaults=false", "noizy.discovery.enabled=false", "noizy.discovery.monitor.enabled=false", "logging.level.root=WARN"})
+@SpringBootTest(properties={"noizy.auth.service-secret=fixture-auth-store-key-not-a-production-secret", "noizy.test.trusted-defaults=false", "noizy.discovery.enabled=false", "noizy.discovery.monitor.enabled=false", "logging.level.root=WARN", "spring.datasource.hikari.maximum-pool-size=4", "spring.datasource.hikari.minimum-idle=0"})
 @AutoConfigureMockMvc
 @ActiveProfiles("local")
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class AuthStoreIntegrationTests {
     private static final String KEY = "fixture-auth-store-key-not-a-production-secret";
     private static final Instant NOW = Instant.parse("2026-11-09T12:00:00Z");
