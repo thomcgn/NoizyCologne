@@ -214,6 +214,9 @@ if [[ "$browser" == true ]]; then
   else run browser-tests scripts/check-browser.sh --full
   fi
 fi
+if [[ "$mode" == --full ]]; then
+  run backup-restore-fixture python3 scripts/test-backup-integration.py
+fi
 run final-diff-worktree git diff --check
 run final-diff-index git diff --cached --check
 run final-repository python3 scripts/check-repository.py
