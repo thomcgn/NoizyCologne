@@ -11,6 +11,7 @@ import java.util.Map;
 
 @Service
 public class TesseractFlyerGenreAnalyzer implements FlyerGenreAnalyzer {
+    private static final java.util.concurrent.Semaphore ANALYSIS_SLOT = new java.util.concurrent.Semaphore(1);
 
     private final ImagePreprocessor imagePreprocessor;
     private final TesseractOcrService ocrService;
@@ -26,6 +27,9 @@ public class TesseractFlyerGenreAnalyzer implements FlyerGenreAnalyzer {
 
     @Override
     public FlyerGenreAnalysisResponse analyze(MediaAsset asset, Path imagePath) {
+        // Reject excess work before decoding or constructing OCR variants; no unbounded queue.
+        if (!ANALYSIS_SLOT.tryAcquire()) throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                "Eine Flyer-Texterkennung läuft bereits. Bitte danach erneut versuchen.");
         try (ImagePreprocessor.PreparedImages prepared = imagePreprocessor.prepare(imagePath)) {
             Map<String, TesseractOcrService.OcrWord> bestWords = new java.util.LinkedHashMap<>();
             TesseractOcrService.OcrResult base = ocrService.recognize(prepared.image("original"), 11, 1);
@@ -58,7 +62,7 @@ public class TesseractFlyerGenreAnalyzer implements FlyerGenreAnalyzer {
         } catch (RuntimeException exception) {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT,
                     "Der Flyer konnte offline nicht zuverlässig analysiert werden.", exception);
-        }
+        } finally { ANALYSIS_SLOT.release(); }
     }
 
     private void merge(Map<String, TesseractOcrService.OcrWord> bestWords,

@@ -19,7 +19,7 @@ public class ImagePreprocessor {
 
     public PreparedImages prepare(Path source) {
         try {
-            BufferedImage original = ImageIO.read(source.toFile());
+            BufferedImage original = SafeImageReader.read(source, MAX_PIXELS);
             if (original == null || original.getWidth() <= 0 || original.getHeight() <= 0) {
                 throw new IllegalArgumentException("Der Flyer konnte nicht als Bild gelesen werden.");
             }
