@@ -131,27 +131,22 @@ Maschinenlesbare Browserergebnisse: [results.json](screenshots/discovery/results
 
 ### Browserprüfung wiederholen
 
-Einen separaten lokalen Next-Server mit einem **wegwerfbaren**
-`TEAM_SESSION_SECRET` (mindestens 32 Zeichen), `LOCAL_BACKEND_URL=http://127.0.0.1:9`
-und Port 3107 starten. Einen bereits laufenden Entwicklungsserver nicht beenden.
-Für diese Abnahme lief ein eigener temporärer Custom-Server mit separatem
-Ausgabeverzeichnis unter `.next/`; Projektkonfiguration blieb unverändert.
-Nach Quelländerungen die isolierte Preview frisch starten, damit keine alten
-Buildartefakte fotografiert werden.
-
-Playwright kann außerhalb des Repos installiert werden; keine neue App-Abhängigkeit:
+Der Wrapper startet einen kurzlebigen HTTPS-Next auf Loopback und einen eigenen
+lokalen Auth-Store mit registrierten Fixture-Sitzungen. Bestehende
+Entwicklungsprozesse, Konfiguration und Zugangsdaten bleiben erhalten.
+Playwright kann außerhalb des Repositorys installiert werden; Chrome muss lokal
+verfügbar sein. Die Auth-Voraussetzungen und Abnahmegrenzen beschreibt
+[AUTH-PROXY.md](AUTH-PROXY.md).
 
 ```sh
-npm install --prefix /tmp/noizy-discovery-visual --no-package-lock playwright@1.64.1
 PLAYWRIGHT_MODULE=/tmp/noizy-discovery-visual/node_modules/playwright/index.mjs \
-  DISCOVERY_VISUAL_SECRET="$TEAM_SESSION_SECRET" \
-  node frontend/tests/visual-discovery.mjs
+  AUTH_VISUAL_SCRIPT=visual-discovery.mjs \
+  node frontend/tests/visual-auth.mjs
 ```
 
-`DISCOVERY_VISUAL_SECRET` muss dem separaten Next-Prozess entsprechen.
-`CHROME_PATH`, `DISCOVERY_VISUAL_URL` und `DISCOVERY_VISUAL_OUTPUT` sind optional
-konfigurierbar. Der Test akzeptiert nur localhost oder 127.0.0.1, blockiert
-fremde Browserziele und ersetzt sämtliche `/api/v1/`-Antworten durch Fixtures.
+Die bestehenden Visualskripte akzeptieren nur Loopback-Ziele und verwenden
+synthetische API-Antworten. Screenshots liegen unter `.quality/`; diese Prüfung
+ersetzt keine Live-Daten-/Geräteabnahme und kein FULL in GitHub Actions.
 
 ## Grenzen
 

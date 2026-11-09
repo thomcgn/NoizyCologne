@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {createHmac} from 'node:crypto';
+import {visualSession} from './fixtures/authSession.mjs';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {controlCenterFixture,mockControlCenterApi} from './fixtures/controlCenter.mjs';
@@ -7,15 +7,13 @@ import {candidate} from './fixtures/discovery.mjs';
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE??'playwright');
 const origin=process.env.DISCOVERY_VISUAL_URL??'http://127.0.0.1:3107';
 assert.ok(['localhost','127.0.0.1'].includes(new URL(origin).hostname));
-const secret=process.env.DISCOVERY_VISUAL_SECRET;assert.ok(secret);
 const out=resolve(process.env.CC_OUTPUT??'.quality/discovery-geography');await mkdir(out,{recursive:true});
-const now=Math.floor(Date.now()/1000),payload=Buffer.from(JSON.stringify({sub:'geography-fixture',iat:now,exp:now+3600,nonce:'synthetic-only'})).toString('base64url');
-const token=`${payload}.${createHmac('sha256',secret).update(payload).digest('base64url')}`;
+const {token, contextOptions} = await visualSession(origin);
 const browser=await chromium.launch({executablePath:process.env.CHROME_PATH??'/usr/bin/google-chrome-stable',headless:true});
 const results=[];
 try {
  for(const width of [1440,390,320]) {
-  const context=await browser.newContext({viewport:{width,height:1000},isMobile:width<768,hasTouch:width<768});
+  const context=await browser.newContext({...contextOptions, viewport:{width,height:1000},isMobile:width<768,hasTouch:width<768});
   await context.addCookies([{name:'noizy_team_session',value:token,url:origin}]);
   const data=controlCenterFixture();data.venues[0].name='Blue Shell';
   const local={...candidate('cologne','Kölner Party'),party_id:'party-0',special_source:true,geo_status:'INSIDE',status:'NEEDS_REVIEW',venue_id:'venue-0'};

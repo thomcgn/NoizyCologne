@@ -113,6 +113,20 @@ class AuthStoreIntegrationTests {
         assertThat(store(NOW).attempt(account, ip).allowed()).isFalse();
         assertThat(store(NOW.plusSeconds(100)).attempt(account, ip).allowed()).isTrue();
     }
+    @Test void committedSessionValidationDoesNotFailDuringUnrelatedAuthWrites() throws Exception {
+        String nonce = key(), generation = key();
+        store(NOW).register(nonce, generation, NOW.plusSeconds(3600).getEpochSecond());
+        try (var connection = requireNonNull(jdbc.getDataSource()).getConnection(); var statement = connection.createStatement()) {
+            connection.setAutoCommit(false);
+            statement.execute("SELECT pg_advisory_xact_lock(73624603)");
+            assertThat(store(NOW).validate(nonce, generation)).isTrue();
+            assertThatThrownBy(() -> store(NOW).attempt(key(), key())).isInstanceOfSatisfying(ResponseStatusException.class,
+                error -> assertThat(error.getStatusCode().value()).isEqualTo(429));
+            connection.rollback();
+        }
+        store(NOW).revoke(nonce);
+        assertThat(store(NOW).validate(nonce, generation)).isFalse();
+    }
     @Test void missingConfigurationKeepsStoreDisabled() {
         var disabled = new AuthStoreController(store(NOW), "");
         var session = new AuthStoreController.Session(key(), key(), NOW.plusSeconds(60).getEpochSecond());

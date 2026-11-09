@@ -15,7 +15,7 @@ frontend/node_modules/.bin/eslint --no-config-lookup --config browser-worker/esl
 command -v docker >/dev/null
 docker info --format '{{.ServerVersion}}'
 # Validate the production overlay without starting services or inheriting a real .env.
-env API_TRUST_SECRET=isolated-api-compose-key-at-least-32-characters POSTGRES_DB=fixture POSTGRES_USER=fixture POSTGRES_PASSWORD=fixture \
+env AUTH_SERVICE_SECRET=isolated-auth-service-fixture-key-never-production API_TRUST_SECRET=isolated-api-compose-key-at-least-32-characters POSTGRES_DB=fixture POSTGRES_USER=fixture POSTGRES_PASSWORD=fixture \
   TEAM_USER=fixture TEAM_PASSWORD_HASH=fixture TEAM_SESSION_SECRET=fixture ACME_EMAIL=fixture@example.invalid \
   POSTGRES_DATA_VOLUME=fixture-db CADDY_DATA_VOLUME=fixture-caddy CADDY_CONFIG_VOLUME=fixture-config MEDIA_DATA_VOLUME=fixture-media \
   BROWSER_WORKER_TOKEN=isolated-compose-fixture-token-123456789 BROWSER_SECCOMP_PROFILE="$root/browser-worker/seccomp_profile.json" \
