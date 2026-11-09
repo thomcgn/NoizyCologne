@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   CAPTION_PRETEXT_STORAGE_KEY,
   DEFAULT_CAPTION_PRETEXT,
@@ -17,6 +17,19 @@ type Genre = {
   active: boolean;
   aliases: GenreAlias[];
 };
+
+function isAlias(value: unknown): value is GenreAlias {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  return typeof item.id === "string" && !!item.id.trim() && typeof item.value === "string";
+}
+function isGenre(value: unknown): value is Genre {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  return typeof item.id === "string" && !!item.id.trim() && typeof item.canonicalName === "string"
+    && typeof item.displayName === "string" && typeof item.active === "boolean"
+    && Array.isArray(item.aliases) && item.aliases.every(isAlias);
+}
 
 const inputStyle = "w-full rounded-lg border border-white/15 bg-neutral-900 px-3 py-2.5 text-sm text-white outline-none focus:border-white/60";
 
@@ -35,6 +48,7 @@ export default function GenresPage() {
   const [genres, setGenres] = useState<Genre[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const mutationInFlight = useRef(false);
   const [error, setError] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -63,7 +77,7 @@ export default function GenresPage() {
   }, [editorError]);
 
   function closeEditor() {
-    if (saving || (dirty && !window.confirm("Ungespeicherte Änderungen verwerfen?"))) return;
+    if (mutationInFlight.current || (dirty && !window.confirm("Ungespeicherte Änderungen verwerfen?"))) return;
     setEditorOpen(false);
   }
   const [captionPreText, setCaptionPreText] = useState(() => {
@@ -78,7 +92,9 @@ export default function GenresPage() {
     try {
       const response = await fetch("/api/v1/genres", { credentials: "same-origin" });
       if (!response.ok) throw new Error(await apiError(response));
-      setGenres(await response.json() as Genre[]);
+      const items: unknown = await response.json();
+      if (!Array.isArray(items) || !items.every(isGenre)) throw new Error("Die Katalogantwort ist unvollständig. Bitte erneut laden.");
+      setGenres(items);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Genres konnten nicht geladen werden.");
     } finally {
@@ -113,8 +129,9 @@ export default function GenresPage() {
 
   async function saveGenre(event: FormEvent) {
     event.preventDefault();
-    if (saving) return;
+    if (mutationInFlight.current) return;
     if (!canonicalName.trim() || !displayName.trim()) { setEditorError("Bitte kanonischen Namen und Anzeigenamen eingeben."); return; }
+    mutationInFlight.current = true;
     setSaving(true); setEditorError("");
     try {
       const response = await fetch(editingId ? `/api/v1/genres/${encodeURIComponent(editingId)}` : "/api/v1/genres", {
@@ -123,52 +140,41 @@ export default function GenresPage() {
         body: JSON.stringify({ canonicalName: canonicalName.trim(), displayName: displayName.trim(), active }),
       });
       if (!response.ok) throw new Error(await apiError(response));
-      const saved = await response.json() as Genre;
+      const saved: unknown = await response.json();
+      if (!isGenre(saved) || (editingId !== null && saved.id !== editingId)) throw new Error("Die Speicherung wurde nicht vollständig bestätigt. Bitte den Katalog neu laden und den Stand prüfen.");
       setGenres((current) => editingId ? current.map((item) => item.id === saved.id ? saved : item) : [...current, saved]);
       setBaseline({ canonicalName: saved.canonicalName, displayName: saved.displayName, active: saved.active });
       setEditorOpen(false);
       setNotice(`Genre „${saved.displayName}“ gespeichert.`);
     } catch (cause) {
       setEditorError(cause instanceof Error ? cause.message : "Genre konnte nicht gespeichert werden.");
-    } finally { setSaving(false); }
-  }
-
-  async function toggleActive(genre: Genre) {
-    setSaving(true); setError("");
-    try {
-      const response = await fetch(`/api/v1/genres/${encodeURIComponent(genre.id)}`, {
-        method: "PUT", credentials: "same-origin", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ canonicalName: genre.canonicalName, displayName: genre.displayName, active: !genre.active }),
-      });
-      if (!response.ok) throw new Error(await apiError(response));
-      const saved = await response.json() as Genre;
-      setGenres((current) => current.map((item) => item.id === saved.id ? saved : item));
-      if (editingId === saved.id) { setCanonicalName(saved.canonicalName); setDisplayName(saved.displayName); setActive(saved.active); }
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Status konnte nicht geändert werden."); }
-    finally { setSaving(false); }
+    } finally { mutationInFlight.current = false; setSaving(false); }
   }
 
   async function addAlias(event: FormEvent, genre: Genre) {
     event.preventDefault();
-    if (saving) return;
+    if (mutationInFlight.current) return;
     const value = (aliasDrafts[genre.id] ?? "").trim();
     if (!value) { setAliasErrors(current => ({ ...current, [genre.id]: "Bitte einen Alias eingeben." })); return; }
+    mutationInFlight.current = true;
     setSaving(true); setAliasErrors(current => ({ ...current, [genre.id]: "" }));
     try {
       const response = await fetch(`/api/v1/genres/${encodeURIComponent(genre.id)}/aliases`, {
         method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ value }),
       });
       if (!response.ok) throw new Error(await apiError(response));
-      const alias = await response.json() as GenreAlias;
+      const alias: unknown = await response.json();
+      if (!isAlias(alias)) throw new Error("Der Alias wurde nicht vollständig bestätigt. Bitte den Katalog neu laden.");
       setGenres((current) => current.map((item) => item.id === genre.id ? { ...item, aliases: [...item.aliases, alias] } : item));
       setAliasDrafts(current => ({ ...current, [genre.id]: "" }));
       setNotice(`Alias „${alias.value}“ für „${genre.displayName}“ gespeichert.`);
     } catch (cause) { setAliasErrors(current => ({ ...current, [genre.id]: cause instanceof Error ? cause.message : "Alias konnte nicht gespeichert werden." })); }
-    finally { setSaving(false); }
+    finally { mutationInFlight.current = false; setSaving(false); }
   }
 
   async function deleteAlias(genre: Genre, alias: GenreAlias) {
-    if (saving) return;
+    if (mutationInFlight.current) return;
+    mutationInFlight.current = true;
     setSaving(true); setAliasErrors(current => ({ ...current, [genre.id]: "" }));
     try {
       const response = await fetch(`/api/v1/genres/${encodeURIComponent(genre.id)}/aliases/${encodeURIComponent(alias.id)}`, { method: "DELETE", credentials: "same-origin" });
@@ -177,25 +183,27 @@ export default function GenresPage() {
       setAliasToDelete(null);
       setNotice(`Alias „${alias.value}“ entfernt. Das Genre bleibt erhalten.`);
     } catch (cause) { setAliasErrors(current => ({ ...current, [genre.id]: cause instanceof Error ? cause.message : "Alias konnte nicht entfernt werden." })); }
-    finally { setSaving(false); }
+    finally { mutationInFlight.current = false; setSaving(false); }
   }
 
   async function saveAlias(event: FormEvent, genre: Genre, alias: GenreAlias) {
     event.preventDefault();
-    if (saving || aliasEditor?.genreId !== genre.id || aliasEditor.aliasId !== alias.id) return;
+    if (mutationInFlight.current || aliasEditor?.genreId !== genre.id || aliasEditor.aliasId !== alias.id) return;
     const value = aliasEditor.value.trim();
     if (!value) { setAliasErrors(current => ({ ...current, [genre.id]: "Bitte einen Alias eingeben." })); return; }
+    mutationInFlight.current = true;
     setSaving(true); setAliasErrors(current => ({ ...current, [genre.id]: "" }));
     try {
       const response = await fetch(`/api/v1/genres/${encodeURIComponent(genre.id)}/aliases/${encodeURIComponent(alias.id)}`, {
         method: "PUT", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ value }),
       });
       if (!response.ok) throw new Error(await apiError(response));
-      const saved = await response.json() as GenreAlias;
+      const saved: unknown = await response.json();
+      if (!isAlias(saved) || saved.id !== alias.id) throw new Error("Der Alias wurde nicht vollständig bestätigt. Bitte den Katalog neu laden.");
       setGenres((current) => current.map((item) => item.id === genre.id ? { ...item, aliases: item.aliases.map((itemAlias) => itemAlias.id === saved.id ? saved : itemAlias) } : item));
       setAliasEditor(null); setNotice(`Alias „${saved.value}“ gespeichert.`);
     } catch (cause) { setAliasErrors(current => ({ ...current, [genre.id]: cause instanceof Error ? cause.message : "Alias konnte nicht bearbeitet werden." })); }
-    finally { setSaving(false); }
+    finally { mutationInFlight.current = false; setSaving(false); }
   }
 
   function renderAliases(genre: Genre) {
@@ -224,7 +232,7 @@ export default function GenresPage() {
   }
 
   const columns: CollectionColumn<Genre>[] = [
-    { key: "name", label: "Genre", sortValue: genre => genre.displayName, render: genre => <div><strong>{genre.displayName}</strong><p className="mt-1 text-xs text-neutral-500">Kanonisch: {genre.canonicalName}</p><p className="mt-1 text-xs text-neutral-400">{genre.active ? "Aktiv für Genreerkennung und Discovery" : "Inaktiv"}</p></div> },
+    { key: "name", label: "Genre", sortValue: genre => genre.displayName, render: genre => <div><strong>{genre.displayName}</strong><p className="mt-1 text-xs text-neutral-500">Kanonisch: {genre.canonicalName}</p></div> },
     { key: "aliases", label: "Aliase", className: "col-span-full", render: renderAliases },
   ];
 
@@ -232,7 +240,6 @@ export default function GenresPage() {
     <div className="mx-auto max-w-5xl">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div><p className="text-xs uppercase tracking-[0.2em] text-neutral-500">NoizyCologne / Einstellungen</p><h1 className="mt-2 text-3xl font-bold">Genres</h1><p className="mt-3 text-neutral-400">Genres und Aliase für lokale Flyer-Erkennung und Discovery.</p></div>
-        <button type="button" disabled={saving} onClick={newGenre} className="min-h-12 rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black">+ Genre anlegen</button>
       </header>
       <section className="mt-8 rounded-xl border border-white/10 bg-neutral-950 p-4 sm:p-5">
         <h2 className="text-lg font-semibold">Instagram-Caption</h2>
@@ -250,10 +257,7 @@ export default function GenresPage() {
         </div>
         <p className="mt-3 text-xs text-neutral-500">Beispiel: {captionPreText.trim() || DEFAULT_CAPTION_PRETEXT} Samstag 31.10.26 Garage, Punk, Doom mit @dj im @location</p>
       </section>
-      <div className="mt-8 flex flex-wrap gap-3"><GenreImport disabled={saving || loading} onImported={async message => { setNotice(message); await loadGenres(); }} /><button type="button" disabled={saving || loading} onClick={() => void loadGenres()} className="cc-button">Neu laden</button></div>
-      {error && <p role="alert" className="mt-4 rounded-lg border border-red-400/40 bg-red-950/30 p-3 text-sm text-red-300">{error}</p>}
-      {notice && <p role="status" className="mt-4 rounded-lg border border-white/15 p-3 text-sm">{notice}</p>}
-      <DashboardModal open={editorOpen} onClose={closeEditor} title={editingId ? "Genre bearbeiten" : "Neues Genre"} description="Aktive Genres und Aliase für Genreerkennung und Discovery verwalten.">
+      <DashboardModal open={editorOpen} busy={saving} onClose={closeEditor} title={editingId ? "Genre bearbeiten" : "Neues Genre"} description="Genres und Aliase für Genreerkennung und Discovery verwalten.">
         <form onSubmit={saveGenre} className="space-y-4" aria-busy={saving}>
           {editorError && <p id="genre-editor-error" tabIndex={-1} role="alert" className="rounded-lg border border-red-400/40 p-3 text-sm text-red-400">{editorError}</p>}
           <fieldset disabled={saving} className="space-y-4">
@@ -261,15 +265,27 @@ export default function GenresPage() {
               <label><span className="mb-2 block text-sm text-neutral-300">Kanonischer Name</span><input className={inputStyle} value={canonicalName} onChange={event => setCanonicalName(event.target.value)} maxLength={100} required /></label>
               <label><span className="mb-2 block text-sm text-neutral-300">Anzeigename</span><input className={inputStyle} value={displayName} onChange={event => setDisplayName(event.target.value)} maxLength={100} required /></label>
             </div>
-            <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={active} onChange={event => setActive(event.target.checked)} className="size-4 accent-white" /> Für Genreerkennung und Discovery aktiv</label>
-            <p className="text-sm text-neutral-400">Aktive Genres werden mit ihren Aliasen für Flyer-Vorschläge und den Genreabgleich von Veranstaltungen berücksichtigt.</p>
             <div className="flex flex-wrap gap-3"><button type="submit" className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black disabled:opacity-60">{saving ? "Speichern ..." : "Speichern und schließen"}</button><button type="button" onClick={closeEditor} className="rounded-lg border border-white/15 px-5 py-3 text-sm">Abbrechen</button></div>
           </fieldset>
         </form>
       </DashboardModal>
-      <section className="mt-8 rounded-xl border border-white/10 bg-neutral-950 p-4 sm:p-5">
-        {loading ? <p role="status" className="py-8 text-center text-sm text-neutral-400">Genres werden geladen ...</p> : <DataCollection items={genres} columns={columns} label="Genres" storageKey="noizy-view-genres" getName={genre => genre.displayName} searchLabel="Genres und Aliase durchsuchen" searchText={genre => [genre.canonicalName, genre.displayName, ...genre.aliases.map(alias => alias.value)].join(" ")} empty={genres.length ? "Keine passenden Genres oder Aliase gefunden." : "Noch keine Genres erfasst."} actions={genre => <div className="flex flex-wrap gap-2"><button type="button" disabled={saving} onClick={() => editGenre(genre)} className="cc-button">Bearbeiten</button><button type="button" disabled={saving} onClick={() => void toggleActive(genre)} className="cc-button">{genre.active ? "Deaktivieren" : "Aktivieren"}</button></div>} />}
-      </section>
+      <GenreImport disabled={saving || loading} onImported={async message => { setNotice(message); await loadGenres(); }} renderActions={({ importAction, restoreAction }) => <>
+        <div className="mt-8 flex flex-wrap gap-3" role="group" aria-label="Genre-Aktionen">
+          {importAction}
+          <button type="button" disabled={saving} onClick={newGenre} className="cc-button">+ Genre anlegen</button>
+          <button type="button" disabled={saving || loading} onClick={() => void loadGenres()} className="cc-button">Neu laden</button>
+        </div>
+        {error && <p role="alert" className="cc-status-danger mt-4 rounded-lg border p-3 text-sm">{error}</p>}
+        {notice && <p role="status" className="mt-4 rounded-lg border border-white/15 p-3 text-sm">{notice}</p>}
+        <section className="cc-panel mt-6" aria-label="Genre-Katalog">
+          {loading ? <p role="status" className="py-8 text-center text-sm">Genres werden geladen ...</p> : error && !genres.length ? <p>Der Katalog konnte nicht geladen werden. Bitte „Neu laden“ versuchen.</p> : <DataCollection items={genres} columns={columns} label="Genres" storageKey="noizy-view-genres" getName={genre => genre.displayName} searchLabel="Genres und Aliase durchsuchen" searchText={genre => [genre.canonicalName, genre.displayName, ...genre.aliases.map(alias => alias.value)].join(" ")} empty={genres.length ? "Keine passenden Genres oder Aliase gefunden. Bitte den Suchbegriff ändern." : "Noch keine Genres erfasst. Über „Genres importieren“ einen Katalog übernehmen oder mit „+ Genre anlegen“ beginnen. Die Basisgenres können unten separat wiederhergestellt werden."} actions={genre => <button type="button" disabled={saving} onClick={() => editGenre(genre)} className="cc-button">Bearbeiten</button>} />}
+        </section>
+        <section className="cc-panel mt-8" aria-labelledby="genre-restore-title">
+          <h2 id="genre-restore-title">Basisgenres wiederherstellen</h2>
+          <p>Die 38 Basisgenres separat prüfen und ausdrücklich übernehmen. Vor der Übernahme wird eine Vorschau angezeigt.</p>
+          {restoreAction}
+        </section>
+      </>} />
     </div>
   </main>;
 }
