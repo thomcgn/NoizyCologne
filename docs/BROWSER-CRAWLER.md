@@ -346,3 +346,63 @@ Größen- und Modusgrenzen. Die persistente Browserauswahl ist gesetzt; der
 Browser-Token wurde separat erzeugt. Bestehende Einstellungen wurden beim
 Setzen des Schalters bytegleich erhalten. Der neue qualifizierte Rollout muss
 weiterhin Sandbox- und Smoke-Prüfung erfolgreich abschließen.
+
+## Veranstaltungskarten, Accordions und Detailanreicherung (09.11.2026)
+
+Die generische Extraktion liest auch eingeklappte, bereits im DOM vorhandene
+Beschreibungen. Semantische Karten behalten ihre zugehörigen Detail-Links
+(unter anderem „Erfahre hier mehr“, „Details“, „Mehr erfahren“, „Tickets & Infos“)
+vor Bild-/Share-Links. JSON-LD, HTML und wiederholte Browser-Snapshots derselben
+Ausgabe werden zusammengeführt. Originaltitel, explizite Genres, Ortsbelege und
+Status bleiben erhalten; widersprüchliche Tage/Zeiten werden nicht überschrieben.
+Explizit beschrifteter Einlass und Beginn werden unterschieden. Eine abweichende
+dritte Startzeit bleibt ein Konflikt; ein möglicher Mitternachtswechsel erhält
+kein erfundenes Folgedatum. Eigenständig betitelte Aftershows bleiben getrennt.
+
+Unbekannte Karten ohne Genres erhalten jetzt ebenfalls eine Detailprüfung.
+Bekannte Reihen und bereits passende Karten haben Vorrang; Programm-/Folge-Seiten
+werden vor Detailseiten geprüft. Die vorhandenen Grenzen bleiben: gleicher Host,
+Tiefe zwei, acht HTTP-Seiten, 16 vorgemerkte Seiten, 200 Links pro Seite, 60 Sekunden
+und höchstens zwei Browserjobs. Detailseiten ohne eigenes Datum können eine
+zugeordnete Karte um Beschreibung/Genres ergänzen. Unklare Titelzuordnung oder
+nicht gelesene Details bleiben ausdrücklich unbestätigt. Genre-, Schlagwort-,
+Konzert- und Portfolioentscheidungen folgen erst auf diese Anreicherung; die
+bestehenden Archivierungs-, Dubletten- und Schutzregeln bleiben zuständig.
+
+Der Worker speichert zuerst das vorhandene DOM. Er öffnet ausschließlich
+semantische Event-Steuerelemente mit fehlendem Inhalt, höchstens acht Panels;
+bereits gefüllte ARIA-Zielbereiche beziehungsweise `details`-Inhalte benötigen
+keinen Klick. Navigationsmenüs, Formulare und Dialoge werden nicht geöffnet.
+Es gelten zwei Scrollschritte und höchstens zwei „Mehr laden“-/Paginationaktionen.
+Ausbleibender DOM-Fortschritt, verbleibende Schalter, nicht abgearbeiteter Scrollraum,
+Panel-/Seiten-/Zeitlimits werden diagnostiziert. Ein gefundener Termin beweist
+niemals die Vollständigkeit. Schnappschüsse enthalten weiterhin versteckte Panels
+und JSON-LD, aber keine wiederholten ausführbaren Skripte/CSS/SVG; die laufende
+Website und sämtliche Abruf-/Sandboxregeln bleiben unverändert.
+
+Quellendiagnosen nennen `EVENT_CARDS_RECOGNIZED`, `RELIABLE_DATES`,
+`INCOMPLETE_ENTRIES`, `DETAIL_PAGES_READ`, `COLLAPSIBLE_ELEMENTS_FOUND/OPENED`,
+`PAGINATION_STEPS` und `FURTHER_PAGES_UNPROCESSED`. Nach tatsächlicher Bewertung
+werden persistierte `FILTERED_EVENTS` samt begrenzten Beispielen und Gründen
+angehängt. Das vollständige Einzelereignis mit Ausschlussbeleg und Filterversion
+bleibt im bestehenden Archiv. Es gibt keine neue Location-Blacklist und keine
+Änderung manueller Freigaben/Ablehnungen oder bestehender Kalenderverknüpfungen.
+
+Die reale, ausschließlich lesende Garagenclub-Prüfung unter den unveränderten
+Schutzregeln erkannte am 09.11.2026 **18 unterschiedliche Veranstaltungen** und
+las sieben Detailseiten. `NO CIGAR` wurde mit **12.11.2026, 20:00 Beginn** und
+**19:00 Einlass** extrahiert, `BEATSxBASSxWEEKEND SPECIAL` mit **13.11.2026, 23:00**,
+`PULZ. x lieb:sein` mit **14.11.2026, 23:00**; der Live-Originaltitel bleibt erhalten.
+`11.11. KARNEVAL` wird extrahiert und anschließend den aktiven Schlagwortregeln
+übergeben. Nachladen blieb wegen blockierter Wix-Anfragen beziehungsweise fehlendem
+DOM-Fortschritt unvollständig; weitere Details überschritten das Seitenbudget.
+**Kein vollständiges Programm und kein Kalenderimport werden behauptet.**
+MTC bleibt mit `BROWSER_PARTIAL`, null Events und den oben dokumentierten Grenzen
+unvollständig; die Änderung umgeht diese Grenzen nicht.
+
+Die reduzierten November-Fixtures übernehmen Titel/Termine aus dem Auftrag;
+zusätzliche Genres in synthetischen Detailseiten sind ausdrücklich Testdaten,
+keine Behauptung über die tatsächlichen Genres dieser Veranstaltungen. Tests
+prüfen versteckte/dynamische Beschreibungen, Detailzuordnung ohne Übersichtsgenres,
+Pagination, Konflikte, Konzert/Aftershow sowie wiederholte Crawls mit Archivierung
+und geschützter manueller Ablehnung in einer isolierten PostgreSQL-Datenbank.

@@ -67,6 +67,17 @@ public class DiscoveryStore {
             WHERE o.candidate_id=? ORDER BY o.source_id,o.observed_at DESC,o.id DESC
             """,candidate).stream().map(DiscoveryStore::forApi).toList();
     }
+    /** Post-enrichment editorial outcomes; source diagnostics do not change any decision. */
+    public void recordFilterDiagnostics(String sourceId) {
+        int count=Objects.requireNonNull(db.queryForObject("SELECT count(*) FROM discovery_candidates c WHERE c.status='IGNORED' AND (c.source_id=? OR EXISTS(SELECT 1 FROM discovery_observations o WHERE o.candidate_id=c.id AND o.source_id=?))",Integer.class,sourceId,sourceId));
+        var excluded=db.queryForList("SELECT title,reason FROM discovery_candidates c WHERE c.status='IGNORED' AND (c.source_id=? OR EXISTS(SELECT 1 FROM discovery_observations o WHERE o.candidate_id=c.id AND o.source_id=?)) ORDER BY title,id LIMIT 6",sourceId,sourceId);
+        StringBuilder summary=new StringBuilder("FILTERED_EVENTS: "+count);
+        for(var event:excluded) {
+            String text=Objects.toString(event.get("title"),"")+": "+Objects.toString(event.get("reason"),"");
+            summary.append("; ").append(text,0,Math.min(180,text.length()));
+        }
+        db.update("UPDATE discovery_sources SET fetch_diagnostics=left(split_part(coalesce(fetch_diagnostics,''),'; FILTERED_EVENTS:',1),800)||'; '||? WHERE id=?",summary.toString(),sourceId);
+    }
     public void fetched(String id,VenueSourceDiscoveryService.Found found) {
         String diagnostics=String.join("; ",found.diagnostics());
         db.update("""

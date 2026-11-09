@@ -103,6 +103,7 @@ public class SpecialSourceService {
                 for (var page:found) {diagnostics.addAll(page.diagnostics());if (!List.of("EVENTS_FOUND","NO_EVENTS","SOURCE_LINKS_FOUND").contains(page.extraction().status())) diagnostics.add(Objects.requireNonNull(page.extraction().status()));}
                 if (found.stream().mapToInt(page -> page.extraction().events().size()).sum()>300) {complete=false;status="PARTIAL_FAILURE";diagnostics.add("EVENT_LIMIT");}
                 store.fetched(id,new VenueSourceDiscoveryService.Found(SafeUrls.parse(root),new EventExtractor.Extraction(List.copyOf(events),status,complete),found.stream().anyMatch(page -> page.fetchMethod().equals("BROWSER")) ? "BROWSER" : "HTTP",diagnostics.stream().distinct().limit(20).toList()));
+                store.recordFilterDiagnostics(id);
                 if (!clean || status.equals("PARTIAL_FAILURE")) failed++;
             } catch (java.io.IOException | RuntimeException e) {
                 if (e instanceof java.util.concurrent.CancellationException cancelled) throw cancelled;

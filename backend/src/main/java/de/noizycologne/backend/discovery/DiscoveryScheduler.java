@@ -220,6 +220,7 @@ public class DiscoveryScheduler {
             var ids=store.jdbc().queryForList("SELECT candidate_id FROM discovery_candidate_identities WHERE venue_id=? AND identity_key=?",String.class,venue.getId(),EventChangeMonitor.identity(EventPrivacy.safe(event)));
             if (!ids.isEmpty()) for (var origin:merged.origins()) monitor.rememberOrigin(Objects.requireNonNull(ids.getFirst()),origin.sourceId(),origin.event(),operation);
         }
+        pending.stream().map(Pending::sourceId).distinct().forEach(store::recordFilterDiagnostics);
         var outcomes=statuses.stream().filter(s -> !List.of("SOURCE_LINKS_FOUND","EXCLUDED_CONCERTS").contains(s)).toList();
         String status=outcomes.contains("EVENTS_FOUND") ? "EVENTS_FOUND"
                 : !outcomes.isEmpty() && outcomes.stream().allMatch(s -> s.equals("NO_EVENTS")) ? "NO_EVENTS"
