@@ -107,6 +107,13 @@
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>
 				<configuration>
+					<!-- Bound cached test contexts/pools below the isolated PostgreSQL limit.
+					     These JVM properties apply only to Surefire, never the deployed API. -->
+					<systemPropertyVariables>
+						<spring.test.context.cache.maxSize>8</spring.test.context.cache.maxSize>
+						<spring.datasource.hikari.maximum-pool-size>4</spring.datasource.hikari.maximum-pool-size>
+						<spring.datasource.hikari.minimum-idle>0</spring.datasource.hikari.minimum-idle>
+					</systemPropertyVariables>
 					<!-- Run Mockito's inline mock maker as a declared agent on modern JDKs. -->
 					<argLine>-javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</argLine>
 				</configuration>
