@@ -937,3 +937,88 @@ test('Discovery portfolio recurrence requires confirmed location and start date 
   assert.ok(calls.some(call=>call.url.endsWith('?filter=UNCLEAR')));
   assert.ok(calls.some(call=>call.url.endsWith('?filter=RELEVANT')));
  });
+
+// A confirmed calendar mutation and the following read-only refreshes are separate outcomes.
+test('confirmed import ID is visible before pending refreshes finish and pending dismissal never discards it', async () => {
+  await mount(candidate({party_id:'paradise'}));
+  const original = catalogue.reloadEntries;
+  let finish;
+  const gate = new Promise(resolve => { finish = resolve; });
+  let requestedOptions;
+  catalogue.reloadEntries = async options => { requestedOptions = options; await original(); await gate; };
+  let prompts = 0;
+  window.confirm = () => { prompts++; return false; };
+  try {
+    await openReview();
+    await settle(() => { const confirm = button('Bestätigen & übernehmen', dialog()); confirm.click(); confirm.click(); });
+    assert.deepEqual(requestedOptions, {throwOnError:true});
+    const saved = dialog().querySelector('[aria-label="Gespeicherter Kalendereintrag"]');
+    assert.ok(saved, 'Confirmed ID must be retained before awaiting a catalogue refresh');
+    assert.match(saved.querySelector('[role="status"]').textContent, /Termin ist im Kalender gespeichert.*Ansichten werden aktualisiert/);
+    assert.equal(saved.querySelector('a').getAttribute('href'), '/dashboard/kalender?entry=imported-entry');
+    assert.equal(button('Bestätigen & übernehmen', dialog()).disabled, true);
+    assert.equal(dialog().querySelector('[data-modal-close]').disabled, true);
+    await settle(() => document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape',bubbles:true,cancelable:true})));
+    assert.equal(prompts, 0);
+    assert.ok(dialog().querySelector('[aria-label="Gespeicherter Kalendereintrag"]'));
+    assert.equal(calls.filter(call => call.url.endsWith('/confirm') && call.method === 'POST').length, 1);
+    await settle(() => finish());
+    assert.equal(button('Bestätigen & übernehmen', dialog()).disabled, true);
+    assert.equal(dialog().querySelector('[data-modal-close]').disabled, false);
+  } finally { finish(); catalogue.reloadEntries = original; window.confirm = () => true; }
+});
+
+for (const [method, label] of [['reloadEntries','Kalender'], ['reloadDrafts','Redaktion'], ['reloadParties','Portfolio']]) {
+  test(`confirmed import survives ${label} refresh failure and retries reads without a second confirmation`, async () => {
+    await mount(candidate({party_id:'paradise'}));
+    const original = catalogue[method];
+    let attempts = 0;
+    const requested = [];
+    catalogue[method] = async options => {
+      attempts++; requested.push(options); await original();
+      if (attempts === 1) throw new Error(`Synthetic ${label} read outage`);
+    };
+    try {
+      await openReview();
+      await settle(() => button('Bestätigen & übernehmen', dialog()).click());
+      const saved = dialog().querySelector('[aria-label="Gespeicherter Kalendereintrag"]');
+      assert.equal(saved.querySelector('a').getAttribute('href'), '/dashboard/kalender?entry=imported-entry');
+      assert.match(saved.querySelector('[role="status"]').textContent, /Termin ist im Kalender gespeichert/);
+      assert.match(saved.querySelector('[role="alert"]').textContent, new RegExp(`Kalenderimport ist bestätigt.*Noch nicht aktualisiert: ${label}`));
+      assert.equal(button('Bestätigen & übernehmen', dialog()).disabled, true);
+      assert.equal(button('Speichern', dialog()).disabled, true);
+      await settle(() => button('Bestätigen & übernehmen', dialog()).click());
+      assert.equal(calls.filter(call => call.url.endsWith('/confirm') && call.method === 'POST').length, 1);
+      await settle(() => button('Ansichten erneut laden', dialog()).click());
+      assert.equal(attempts, 2);
+      assert.deepEqual(requested, [{throwOnError:true},{throwOnError:true}]);
+      assert.equal(reloadedEntries, 2); assert.equal(reloadedParties, 2); assert.equal(reloadedDrafts, 2);
+      assert.equal(saved.querySelector('[role="alert"]'), null);
+      assert.match(document.body.textContent, /Termin bestätigt und in den Kalender übernommen. Ansichten aktualisiert/);
+      assert.equal(calls.filter(call => call.url.endsWith('/confirm') && call.method === 'POST').length, 1);
+      assert.ok(!calls.some(call => call.method === 'PUT' || call.url.endsWith('/portfolio')));
+    } finally { catalogue[method] = original; }
+  });
+}
+
+test('confirmed import survives Discovery overview failure and retries the overview without re-importing', async () => {
+  await mount(candidate({party_id:'paradise'}));
+  const fallback = globalThis.fetch;
+  let overviewFails = false;
+  globalThis.fetch = async (url, options = {}) => {
+    if (url.endsWith('/confirm') && options.method === 'POST') {
+      const result = await fallback(url, options); overviewFails = true; return result;
+    }
+    if (overviewFails && url.includes('/api/v1/discovery?filter=')) return new Response(JSON.stringify({message:'Discovery-Ansicht vorübergehend nicht erreichbar'}), {status:503});
+    return fallback(url, options);
+  };
+  await openReview();
+  await settle(() => button('Bestätigen & übernehmen', dialog()).click());
+  assert.match(dialog().textContent, /Discovery-Ansicht vorübergehend nicht erreichbar/);
+  assert.ok(dialog().querySelector('a[href="/dashboard/kalender?entry=imported-entry"]'));
+  assert.equal(button('Bestätigen & übernehmen', dialog()).disabled, true);
+  overviewFails = false;
+  await settle(() => button('Ansichten erneut laden', dialog()).click());
+  assert.equal(calls.filter(call => call.url.endsWith('/confirm') && call.method === 'POST').length, 1);
+  assert.doesNotMatch(dialog().textContent, /Discovery-Ansicht vorübergehend nicht erreichbar/);
+});

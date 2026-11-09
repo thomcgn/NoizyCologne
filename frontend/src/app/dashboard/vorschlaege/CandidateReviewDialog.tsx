@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { calendarEntryHref } from "../kalender/calendarNavigation";
 import DashboardModal from "../DashboardModal";
@@ -19,6 +19,11 @@ export default function CandidateReviewDialog({ candidate, currentCandidate, bus
 }) {
  const { parties, venues, reloadEntries, reloadParties, reloadDrafts } = useCatalog();
  const [importedId,setImportedId] = useState(candidate.calendar_entry_id);
+ const confirmedImport = useRef(candidate.calendar_entry_id);
+ const importInFlight = useRef(false);
+ const [refreshing,setRefreshing] = useState(false);
+ const [refreshError,setRefreshError] = useState("");
+ const calendarEntryId = importedId || currentCandidate?.calendar_entry_id || candidate.calendar_entry_id;
  const [origins,setOrigins] = useState<{url:string;source_kind:string;event_data:string}[]>([]);
  const [portfolioStartTime,setPortfolioStartTime] = useState("");
  const [recurrenceKind,setRecurrenceKind] = useState<"none"|"weekly"|"monthly_weekday"|"other">("none");
@@ -53,8 +58,37 @@ export default function CandidateReviewDialog({ candidate, currentCandidate, bus
  const selectedStandards=dialogParties.find(item => item.id === party)?.standardGenres ?? currentCandidate?.genreCoverage?.standardNames ?? [];
  function setCandidate(value: Candidate | null) { if (value === null) onClose(); }
  async function save() { await api(`/candidates/${candidate.id}`,"PUT",{partyId: party || null,date: date || null,status,inquiryStatus: inquiry,dmText: dm,...(needsVenue ? {venueId:venueId || null} : {})}); }
+ async function refreshImportedViews() {
+   if (refreshing || !(confirmedImport.current || calendarEntryId)) return;
+   setRefreshing(true); setRefreshError("");
+   try {
+     const reloads = [
+       {name: "Kalender", run: () => reloadEntries({throwOnError: true})},
+       {name: "Redaktion", run: () => reloadDrafts({throwOnError: true})},
+       {name: "Portfolio", run: () => reloadParties({throwOnError: true})},
+     ];
+     const results = await Promise.allSettled(reloads.map(item => Promise.resolve().then(item.run)));
+     const failed = reloads.filter((_, index) => results[index]?.status === "rejected").map(item => item.name);
+     if (failed.length) setRefreshError(`Kalenderimport ist bestätigt. Noch nicht aktualisiert: ${failed.join(", ")}. Bitte die Ansichten erneut laden.`);
+     else setNotice("Termin bestätigt und in den Kalender übernommen. Ansichten aktualisiert.");
+   } finally {setRefreshing(false);}
+ }
+ async function confirmImport() {
+   if (busy || importInFlight.current || confirmedImport.current || calendarEntryId) return;
+   importInFlight.current = true;
+   try {
+     const result = await api<{calendarEntryId:string}>(`/candidates/${candidate.id}/confirm`,"POST",{partyId:party,date,inquiryStatus:inquiry,dmText:dm,seriesAlias:rememberName ? seriesAlias.trim() : null,...(needsVenue ? {venueId:venueId || null} : {})});
+     if (typeof result?.calendarEntryId !== "string" || !result.calendarEntryId.trim()) throw new Error("Kalenderimport wurde nicht bestätigt. Bitte den Vorschlag erneut prüfen.");
+     // The confirmed mutation survives any later catalogue or overview refresh failure.
+     confirmedImport.current = result.calendarEntryId;
+     setImportedId(result.calendarEntryId);
+     setNotice("Termin bestätigt und in den Kalender übernommen.");
+     await refreshImportedViews();
+   } finally {importInFlight.current = false;}
+ }
+
  return (
-    <DashboardModal variant="drawer" protectChanges open={!!candidate} onClose={() => setCandidate(null)} title={candidate?.title ?? "Discovery prüfen"}>
+    <DashboardModal variant="drawer" protectChanges busy={busy || refreshing} open={!!candidate} onClose={() => setCandidate(null)} title={candidate?.title ?? "Discovery prüfen"}>
       {candidate && <div className="space-y-4">
         {error && <p role="alert" className="text-red-400">{error}</p>}
         <p>{candidate.venue_name} · {candidate.reason}</p>
@@ -95,8 +129,14 @@ export default function CandidateReviewDialog({ candidate, currentCandidate, bus
           <label className="block mt-3">Rückfragestatus<select className={field} value={inquiry} onChange={e => setInquiry(e.target.value)}>{["NONE","PREPARED","SENT","ANSWERED"].map(s => <option key={s} value={s}>{labels[s]}</option>)}</select></label>
           <p className="text-sm mt-2">Nachrichten werden von dir in Instagram verschickt. Den Status anschließend manuell setzen.</p>
         </details>
-        <div className="flex flex-wrap gap-2"><button disabled={busy || !!importedId} className={button} onClick={() => void action(async () => { await save(); setCandidate(null); setNotice("Bearbeitungsstand gespeichert. Kein Kalenderimport."); })}>Speichern</button><button disabled={busy || !!importedId || !party || !date || (needsVenue && !venueId) || ["REJECTED","DUPLICATE"].includes(status) || (rememberName && !seriesAlias.trim()) || !!currentCandidate?.calendar_entry_id || !!currentCandidate?.assessment?.importBlockers.length} className={`${button} discovery-button-primary`} onClick={() => void action(async () => { const result=await api<{calendarEntryId:string}>(`/candidates/${candidate.id}/confirm`,"POST",{partyId:party,date,inquiryStatus:inquiry,dmText:dm,seriesAlias:rememberName ? seriesAlias.trim() : null,...(needsVenue ? {venueId:venueId || null} : {})}); if (!result?.calendarEntryId) throw new Error("Kalenderimport wurde nicht bestätigt. Bitte den Vorschlag erneut prüfen."); await Promise.all([reloadEntries(),reloadDrafts(),reloadParties()]); setImportedId(result.calendarEntryId); setNotice("Termin bestätigt und in den Kalender übernommen. Er steht jetzt in der Redaktion bereit."); })}>Bestätigen &amp; übernehmen</button></div>
-        {importedId && <p><Link className={button} href={calendarEntryHref(importedId)}>Im Kalender anzeigen</Link></p>}
+        <div className="flex flex-wrap gap-2"><button disabled={busy || !!calendarEntryId} className={button} onClick={() => void action(async () => { await save(); setCandidate(null); setNotice("Bearbeitungsstand gespeichert. Kein Kalenderimport."); })}>Speichern</button><button disabled={busy || !!calendarEntryId || !party || !date || (needsVenue && !venueId) || ["REJECTED","DUPLICATE"].includes(status) || (rememberName && !seriesAlias.trim()) || !!currentCandidate?.calendar_entry_id || !!currentCandidate?.assessment?.importBlockers.length} className={`${button} discovery-button-primary`} onClick={() => void action(confirmImport)}>Bestätigen &amp; übernehmen</button></div>
+        {calendarEntryId && <section aria-label="Gespeicherter Kalendereintrag" className="space-y-3 rounded-lg border p-3">
+          <p role="status">Termin ist im Kalender gespeichert.{refreshing ? " Ansichten werden aktualisiert …" : ""}</p>
+          {refreshError && <p role="alert">{refreshError}</p>}
+          <div className="flex flex-wrap gap-2"><Link className={button} href={calendarEntryHref(calendarEntryId)}>Im Kalender anzeigen</Link>
+            {(refreshError || error) && <button type="button" className={button} disabled={busy || refreshing} onClick={() => void action(refreshImportedViews)}>Ansichten erneut laden</button>}
+          </div>
+        </section>}
       </div>}
     </DashboardModal>
  );
