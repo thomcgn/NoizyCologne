@@ -46,7 +46,9 @@ public class EventCandidateProcessor {
             var matching=previous.stream().filter(row -> row.get("event_date") instanceof java.sql.Date date && date.toLocalDate().equals(day)).toList();
             if(!matching.isEmpty()) previous=matching;
             var prior=Objects.requireNonNull(previous.getFirst());
-            if(prior.get("event_date") instanceof java.sql.Date date && !date.toLocalDate().equals(day)
+            var priorDay="AUTOMATIC".equals(prior.get("decision_origin")) && prior.get("event_date") instanceof java.sql.Date storedDay
+                ? storedDay.toLocalDate() : EventChangeMonitor.date(evaluator.event(prior));
+            if(priorDay!=null && !priorDay.equals(day)
                 && prior.get("calendar_entry_id")==null && ("AUTOMATIC".equals(prior.get("decision_origin")) || List.of("REJECTED","IGNORED").contains(prior.get("status"))) && EventLifecycle.signal(event).equals("ACTIVE")) {
                 identity=EventNormalizer.hash("edition|"+EventChangeMonitor.identity(event)+"|"+day);
                 previous=store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE source_id=? AND identity_key=?",sourceId,identity);
@@ -195,7 +197,10 @@ public class EventCandidateProcessor {
         }
         if(!previous.isEmpty() && date!=null) {
             var prior=Objects.requireNonNull(previous.getFirst());
-            var priorDay=prior.get("event_date") instanceof java.sql.Date storedDay ? storedDay.toLocalDate() : EventChangeMonitor.date(evaluator.event(prior));
+            // An editor may correct the calendar date independently of source evidence.
+            // Only automatic rows use the persisted day to survive geography enrichment.
+            var priorDay="AUTOMATIC".equals(prior.get("decision_origin")) && prior.get("event_date") instanceof java.sql.Date storedDay
+                ? storedDay.toLocalDate() : EventChangeMonitor.date(evaluator.event(prior));
             if(priorDay!=null && !priorDay.equals(date) && prior.get("calendar_entry_id")==null
                 && ("AUTOMATIC".equals(prior.get("decision_origin")) || List.of("REJECTED","IGNORED").contains(prior.get("status"))) && EventLifecycle.signal(event).equals("ACTIVE")) {
                 identity=EventNormalizer.hash("edition|"+EventChangeMonitor.identity(event)+"|"+date);
