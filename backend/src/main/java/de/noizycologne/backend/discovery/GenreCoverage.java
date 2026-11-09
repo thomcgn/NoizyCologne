@@ -67,7 +67,7 @@ public final class GenreCoverage {
         if (text.length()>100 || text.contains("http")) return;
         found.put("source:"+normalized,new Genre("source:"+normalized,text,Set.of(text),false));
     }
-    private static List<@NonNull String> declaredGenres(String evidence) {
+    static List<@NonNull String> declaredGenres(String evidence) {
         List<@NonNull String> values=new ArrayList<>();String text=evidence;
         if (evidence.stripLeading().startsWith("{")) try {
             JsonNode node=JSON.readTree(evidence);var genre=node.path("genre");

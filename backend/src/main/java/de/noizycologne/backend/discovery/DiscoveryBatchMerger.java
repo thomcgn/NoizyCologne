@@ -45,7 +45,10 @@ final class DiscoveryBatchMerger {
                 states.append(state).append(' ');
                 // Reserve room for every source instead of letting a long primary text
                 // consume the entire merged evidence budget. Full originals stay in observations.
-                String details=origin.event().evidence();int budget=Math.max(1,7000/ordered.size());
+                String details=origin.event().evidence();
+                var declared=GenreCoverage.declaredGenres(details);
+                if(!declared.isEmpty()) evidence.append("Genres: ").append(String.join(", ",declared)).append('\n');
+                int budget=Math.max(1,7000/ordered.size());
                 evidence.append("Quelle: ").append(origin.event().url()).append('\n').append(details,0,Math.min(budget,details.length())).append('\n');
             }
             if (conflict) states.append(" SOURCE_CONFLICT");

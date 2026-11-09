@@ -53,3 +53,26 @@ test('request diagnostics preserve blocked method and source without leaking que
   assert.ok(result.warnings.some(warning=>warning.includes('POST fetch https://fixture.example/api')));
   assert.ok(result.warnings.every(warning=>!warning.includes('private-fixture-value')));
 });
+
+test('accordion data is read before clicking; only missing event panels are expanded',async()=>{
+  const result=await render('https://fixture.example/accordion',{permit:async()=>true,prepare:async context=>{
+    await context.route('https://fixture.example/accordion',route=>route.fulfill({status:200,contentType:'text/html',body:`<title>Events</title>
+      <nav><button aria-expanded="false" onclick="document.body.dataset.unsafe='clicked'">Menu</button></nav>
+      <article><h2>NO CIGAR</h2><time datetime="2026-11-12T19:00"></time><button aria-expanded="false" aria-controls="cigar" onclick="document.body.dataset.unnecessary='clicked'">Infos</button><div id="cigar" hidden>Einlass: 19:00 Uhr · Beginn: 20:00 Uhr</div></article>
+      <article><h2>PULZ. x lieb</h2><time datetime="2026-11-14T23:00"></time><button aria-expanded="false" aria-controls="pulz" onclick="this.setAttribute('aria-expanded','true');setTimeout(()=>document.getElementById('pulz').innerHTML='<p>Dynamisch geladene Beschreibung</p>',80)">Beschreibung öffnen</button><div id="pulz"></div><a href="/events/pulz">Erfahre hier mehr.</a></article>`}));
+  }});
+  const dom=result.pages.map(page=>page.body).join('');
+  assert.match(dom,/Einlass: 19:00/);assert.match(dom,/Dynamisch geladene Beschreibung/);
+  assert.doesNotMatch(dom,/data-(unsafe|unnecessary)="clicked"/);
+  assert.ok(result.warnings.includes('COLLAPSIBLE_ELEMENTS_FOUND: 2'));
+  assert.ok(result.warnings.includes('COLLAPSIBLE_ELEMENTS_OPENED: 1'));
+});
+
+test('load more stops on no progress and remaining pages are explicit',async()=>{
+  const result=await render('https://fixture.example/stuck',{permit:async()=>true,prepare:async context=>{
+    await context.route('https://fixture.example/stuck',route=>route.fulfill({status:200,contentType:'text/html',body:'<title>Events</title><article><h2>BEATSxBASSxWEEKEND SPECIAL</h2><time datetime="2026-11-13T23:00"></time></article><button>Mehr laden</button>'}));
+  }});
+  assert.ok(result.warnings.includes('PAGINATION_NO_PROGRESS'));
+  assert.ok(result.warnings.includes('FURTHER_PAGES_UNPROCESSED: true'));
+  assert.ok(result.warnings.includes('PAGINATION_STEPS: 1'));assert.equal(result.complete,false);
+});

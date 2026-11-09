@@ -58,9 +58,13 @@ public class VenueSourceDiscoveryService {
         int browserJobs=0;
         long deadline=System.nanoTime()+60_000_000_000L;
         while (!queue.isEmpty() || !deferred.isEmpty()) {
-            if(seen.size()>=8) queue.clear();
+            if(seen.size()>=8 && !queue.isEmpty()) {
+                var previous=Objects.requireNonNull(found.removeLast());
+                List<@NonNull String> limit=new ArrayList<>(previous.diagnostics());limit.add("FURTHER_PAGES_UNPROCESSED: page limit 8");
+                found.add(new Found(previous.url(),new EventExtractor.Extraction(previous.extraction().events(),previous.extraction().status(),false),previous.fetchMethod(),limit,previous.siteName()));queue.clear();
+            }
             if(queue.isEmpty() && (deferred.isEmpty() || found.stream().anyMatch(f -> f.extraction().events().stream()
-                    .anyMatch(event -> event.starts().stream().anyMatch(start -> EventNormalizer.date(start)!=null))))) break;
+                    .anyMatch(event -> event.starts().stream().anyMatch(start -> EventNormalizer.date(start)!=null))) && deferred.values().stream().noneMatch(s -> EventExtractor.interactiveList(Jsoup.parse(Objects.requireNonNull(staticPages.get(s.url())).body()))))) break;
             if (System.nanoTime()>deadline) {
                 found.add(new Found(root,new EventExtractor.Extraction(List.of(),"CRAWL_LIMIT"),"HTTP",List.of("CRAWL_LIMIT")));
                 break;
@@ -73,35 +77,39 @@ public class VenueSourceDiscoveryService {
             try {
                 if (!step.browserPass() && !fetcher.robotsAllowed(step.url(), robots)) throw new EventPageFetcher.FetchFailure("ROBOTS_BLOCKED","robots.txt untersagt den Abruf von " + step.url());
                 var page = step.browserPass() ? Objects.requireNonNull(staticPages.get(step.url())) : fetcher.fetch(step.url());
+                staticPages.putIfAbsent(step.url(),page);
                 if(step.browserPass()) found.removeIf(previous -> previous.url().equals(step.url()) && previous.fetchMethod().equals("HTTP"));
-                var extraction = extractor.extract(page, profile);
+                List<EventExtractor.@NonNull Event> embeddedEvents=new ArrayList<>();
+                var extraction = step.detail()?extractor.extractDetail(page,profile):extractor.extract(page, profile);
                 var portalLinks=independent && !step.detail() && step.depth()<2 ? portalLinks(page,root) : List.<URI>of();
                 if (!portalLinks.isEmpty() && extraction.events().isEmpty())
                     extraction=new EventExtractor.Extraction(List.of(),"SOURCE_LINKS_FOUND");
                 for (var detail:portalLinks) if (!seen.contains(detail) && queue.size()<16 && queue.stream().noneMatch(s -> s.url().equals(detail)))
                     queue.add(new Step(detail,step.depth()+1,true));
-                String method="HTTP";List<@NonNull String> diagnostics=List.of();
+                String method="HTTP";List<@NonNull String> diagnostics=new ArrayList<>();
+                if(extraction.events().size()>=200) diagnostics.add("EVENT_LIMIT: 200");
                 boolean needsBrowser=browser!=null && portalLinks.isEmpty() && extractor.needsRendering(page,extraction);
                 boolean deferBrowser=needsBrowser && !step.browserPass() && hasStaticProgrammeLink(page);
                 if(deferBrowser) {staticPages.put(step.url(),page);deferred.put(step.url(),new Step(step.url(),step.depth(),step.detail(),true));}
                 if (needsBrowser && !deferBrowser) {
                     var rendered=browserJobs++<2 ? browser.render(step.url())
                         : new BrowserPageRenderer.Result("BROWSER_LIMIT",List.of(),List.of("BROWSER_LIMIT"),false);
-                    diagnostics=rendered.warnings();
+                    diagnostics.addAll(rendered.warnings());
                     if (!rendered.status().equals("BROWSER_DISABLED")) method="BROWSER";
                     if (!rendered.pages().isEmpty()) {
                         method="BROWSER";
-                        StringBuilder combined=new StringBuilder();
+                        StringBuilder combined=new StringBuilder(page.body()).append("\n");
                         for (var renderedPage:rendered.pages()) {
                             if (renderedPage.url().equals(step.url())) combined.append(renderedPage.body()).append("\n");
                             else {
                                 var embedded=extractor.extract(renderedPage,profile);
+                                if(renderedPage.url().getHost().equalsIgnoreCase(root.getHost())) embeddedEvents.addAll(embedded.events());
                                 found.add(new Found(renderedPage.url(),new EventExtractor.Extraction(embedded.events(),embedded.status(),false),"BROWSER",diagnostics));
                             }
                         }
                         if (!combined.isEmpty()) {
                             page=new EventPageFetcher.Page(step.url(),Objects.requireNonNull(combined.toString()),"text/html");
-                            var parsed=extractor.extract(page,profile);
+                            var parsed=step.detail()?extractor.extractDetail(page,profile):extractor.extract(page,profile);
                             extraction=new EventExtractor.Extraction(parsed.events(),parsed.status(),false);
                         }
                         if (!rendered.status().equals("RENDERED"))
@@ -113,20 +121,22 @@ public class VenueSourceDiscoveryService {
                 var site=metadata.selectFirst("meta[property=og:site_name][content]");
                 String siteName=site==null ? metadata.title() : site.attr("content");
                 found.add(new Found(page.url(), extraction,method,diagnostics,siteName.substring(0,Math.min(200,siteName.length()))));
-                if (step.browserPass() || step.depth() >= 2) continue;
+                if (step.depth() >= 2) {
+                    if(metadata.selectFirst("a[rel=next]")!=null) diagnostics.add("FURTHER_PAGES_UNPROCESSED: depth limit 2");
+                    continue;
+                }
                 if (step.detail()) continue;
                 Set<URI> eventLinks = new HashSet<>();
-                for (var event : extraction.events()) {
+                for (var event : java.util.stream.Stream.concat(extraction.events().stream(),embeddedEvents.stream()).sorted(Comparator.comparingInt(event -> knownNames.stream().anyMatch(name -> PartySeriesRecognition.containsName(event.title(),name)) ? 0 : DiscoveryGenreFilter.matches(event,genreTerms) ? 1 : 2)).toList()) {
                     try {
                         URI detail = SafeUrls.parse(independent?CanonicalSourceUrl.of(step.url().resolve(event.url()).toString().split("#",2)[0]):step.url().resolve(event.url()).toString().split("#",2)[0]);
                         eventLinks.add(detail);
-                        boolean known=knownNames.stream().anyMatch(name -> PartySeriesRecognition.containsName(event.title(),name));
-                        boolean partyLead=EventNormalizer.text(event.title()).matches(".*\\b([\\p{L}]*party|partys|parties|clubnacht|disco|dancefloor|dj|djs)\\b.*");
-                        if (PartyOnlyPolicy.concert(event) || (!known && (EventMatcher.unrelated(event) || (!partyLead && !DiscoveryGenreFilter.matches(event, genreTerms)))) || detail.equals(step.url())
-                                || !detail.getHost().equalsIgnoreCase(root.getHost())) continue;
+                        // The overview may omit all genres, or hide the party/aftershow description.
+                        // Only scoped, same-host event links are eligible; no editorial filter runs here.
+                        if (detail.equals(step.url()) || !detail.getHost().equalsIgnoreCase(root.getHost())) continue;
                         eligibleDetails.add(detail);
-                        if (!seen.contains(detail) && queue.size() < 16)
-                            queue.addFirst(new Step(detail, step.depth() + 1, true));
+                        if (!seen.contains(detail) && queue.size() < 16 && queue.stream().noneMatch(s -> s.url().equals(detail)))
+                            queue.addLast(new Step(detail, step.depth() + 1, true));
                     } catch (IllegalArgumentException ignored) { }
                 }
                 if (page.body().contains("BEGIN:VCALENDAR")) continue;
@@ -138,11 +148,12 @@ public class VenueSourceDiscoveryService {
                         URI next = SafeUrls.parse(independent?CanonicalSourceUrl.of(href):href);
                         String label = EventNormalizer.text(link.text().isBlank()
                                 ? (link.hasAttr("aria-label") ? link.attr("aria-label") : link.attr("title")) : link.text());
-                        boolean overview = label.matches("events|party|partys|parties|programm|kalender|veranstaltungen|calendar|veranstaltungskalender|alle events|zum programm|mehr events|live|live shows|konzerte|shows|upcoming events|whats on")
+                        boolean pagination = link.attr("rel").equalsIgnoreCase("next") || label.matches("next(?: page)?|nächste[rns]? seite|weiter|mehr laden");
+                        boolean overview = pagination || label.matches("events|party|partys|parties|programm|kalender|veranstaltungen|calendar|veranstaltungskalender|alle events|zum programm|mehr events|live|live shows|konzerte|shows|upcoming events|whats on")
                                 || next.getPath().matches("(?i).*/(events|party|partys|parties|programm|kalender|veranstaltungen|calendar|live-shows|konzerte|shows)/?")
                                 || next.getPath().toLowerCase(Locale.ROOT).endsWith(".ics")
                                 || link.attr("type").equalsIgnoreCase("text/calendar");
-                        if (!overview || PartyOnlyPolicy.concertLink(label,next)) continue;
+                        if (!overview || !pagination && PartyOnlyPolicy.concertLink(label,next)) continue;
                         if (!eventLinks.contains(next) && !next.equals(step.url()) && next.getHost().equalsIgnoreCase(root.getHost())) {
                             programmeLink = true;
                             if (!seen.contains(next) && queue.size() < 16 && navigationLinks++ < 40
@@ -158,7 +169,23 @@ public class VenueSourceDiscoveryService {
                     "HTTP",List.of(Objects.requireNonNull(Objects.toString(e.getMessage(),"HTTP-Abruf fehlgeschlagen: " + step.url())))));
             }
         }
-        return enrich(found, eligibleDetails);
+        return enrich(found, eligibleDetails).stream().map(source -> {
+            var parsed=Jsoup.parse(staticPages.containsKey(source.url())?Objects.requireNonNull(staticPages.get(source.url())).body():"");
+            List<@NonNull String> details=new ArrayList<>();
+            long dated=source.extraction().events().stream().filter(event -> EventVerification.assess(event,"").sufficient()).count();
+            details.add("EVENT_CARDS_RECOGNIZED: "+source.extraction().events().size());
+            details.add("RELIABLE_DATES: "+dated);
+            details.add("INCOMPLETE_ENTRIES: "+source.extraction().events().stream().filter(event ->
+                !EventVerification.assess(event,"").sufficient() || event.state().contains("Detailseite nicht eindeutig") || event.state().contains("Detailzuordnung unklar")).count());
+            long read=source.extraction().events().stream().map(event -> {
+                try{return source.url().resolve(event.url());}catch(IllegalArgumentException ignored){return source.url();}
+            }).filter(url -> !url.equals(source.url()) && eligibleDetails.contains(url) && found.stream().anyMatch(other -> other.url().equals(url) && !other.extraction().events().isEmpty())).distinct().count();
+            details.add("DETAIL_PAGES_READ: "+(eligibleDetails.contains(source.url()) && !source.extraction().events().isEmpty()?1:read));
+            if(eligibleDetails.stream().anyMatch(url -> !seen.contains(url))) details.add("FURTHER_PAGES_UNPROCESSED: detail budget exhausted");
+            details.addAll(source.diagnostics());
+            if(!parsed.select("[aria-expanded=false], details:not([open])").isEmpty()) details.add("COLLAPSIBLE_ELEMENTS_FOUND: "+parsed.select("[aria-expanded=false], details:not([open])").size());
+            return new Found(source.url(),source.extraction(),source.fetchMethod(),details.stream().distinct().toList(),source.siteName());
+        }).toList();
     }
     private List<URI> portalLinks(EventPageFetcher.Page page,URI root) {
         var result=new LinkedHashSet<URI>();
@@ -186,7 +213,7 @@ public class VenueSourceDiscoveryService {
     private List<@NonNull Found> enrich(List<@NonNull Found> found, Set<URI> eligible) {
         Map<URI, Found> pages = new HashMap<>();
         found.forEach(f -> pages.put(f.url(), f));
-        Map<URI, EventExtractor.Event> mergedDetails = new HashMap<>();
+        Map<URI,List<EventExtractor.@NonNull Event>> mergedDetails = new HashMap<>();
         List<@NonNull Found> result = new ArrayList<>();
         for (Found page : found) {
             List<EventExtractor.@NonNull Event> events = new ArrayList<>();
@@ -205,15 +232,18 @@ public class VenueSourceDiscoveryService {
                 }
                 var d = Objects.requireNonNull(matching.get(0), "Detailveranstaltung fehlt");
                 List<@NonNull String> starts = new ArrayList<>(event.starts()); starts.addAll(d.starts());
-                String evidence = "Übersicht: " + event.evidence() + "\nDetailseite " + url + ": " + d.evidence();
+                var declared=new LinkedHashSet<String>(GenreCoverage.declaredGenres(event.evidence()));declared.addAll(GenreCoverage.declaredGenres(d.evidence()));
+                String evidence = (declared.isEmpty()?"":"Genres: "+String.join(", ",declared)+"\n")+"Übersicht: " + event.evidence() + "\nDetailseite " + url + ": " + d.evidence();
                 String state = event.state() + " " + d.state();
+                if(starts.stream().map(EventNormalizer::date).filter(Objects::nonNull).distinct().count()>1
+                    || starts.stream().map(EventNormalizer::time).filter(Objects::nonNull).distinct().count()>1) state += " SOURCE_CONFLICT";
                 if (!event.location().isBlank() && !d.location().isBlank()
                         && !EventNormalizer.text(event.location()).equals(EventNormalizer.text(d.location()))) state += " UNCONFIRMED Location-Widerspruch";
                 var merged = new EventExtractor.Event(event.identity().isBlank() ? url.toString() : event.identity(),
                         event.title(), url.toString(), starts.stream().distinct().toList(),
                         evidence.substring(0, Math.min(evidence.length(), 8000)), state,
                         d.location().isBlank() ? event.location() : d.location(),event.place().merge(d.place()));
-                events.add(merged); mergedDetails.put(url, merged);
+                events.add(merged); mergedDetails.computeIfAbsent(url,key -> new ArrayList<>()).add(merged);
             }
             result.add(page.withExtraction(new EventExtractor.Extraction(events, page.extraction().status(),page.extraction().complete())));
         }
@@ -221,7 +251,7 @@ public class VenueSourceDiscoveryService {
         return result.stream().map(f -> {
             var merged=mergedDetails.get(f.url());
             if (merged!=null)
-                return f.withExtraction(new EventExtractor.Extraction(List.of(merged), "EVENTS_FOUND",f.extraction().complete()));
+                return f.withExtraction(new EventExtractor.Extraction(merged.stream().distinct().toList(), "EVENTS_FOUND",f.extraction().complete()));
             if (eligible.contains(f.url()))
                 return f.withExtraction(new EventExtractor.Extraction(f.extraction().events().stream().map(e ->
                         new EventExtractor.Event(e.identity(), e.title(), e.url(), e.starts(), e.evidence(),
