@@ -1,7 +1,13 @@
+let internalKey='';
+if(process.argv.includes('--key-stdin')) {
+  for await(const chunk of process.stdin) {internalKey+=chunk.toString();if(internalKey.length>256)throw new Error('BROWSER_API_KEY_INVALID');}
+  internalKey=internalKey.trim();
+  if(internalKey.length<32)throw new Error('BROWSER_API_KEY_MISSING');
+}
 // Run inside the private gateway container; read-only onboarding preview, never /scan or /sources.
 const ready=await fetch('http://127.0.0.1:3128/ready',{signal:AbortSignal.timeout(4000)});
 if(!ready.ok)throw new Error('BROWSER_WORKER_UNAVAILABLE: gateway readiness failed');
-const response=await fetch('http://api:8080/api/v1/discovery/onboard',{method:'POST',headers:{'Content-Type':'application/json'},
+const response=await fetch('http://api:8080/api/v1/discovery/onboard',{method:'POST',headers:{'Content-Type':'application/json','X-Noizy-Api-Key':internalKey,'Origin':'https://tsa.noizycologne.de','X-Noizy-Proxy-Host':'tsa.noizycologne.de','X-Noizy-Proxy-Proto':'https'},
   body:JSON.stringify({url:'https://www.mtc-cologne.de/'}),signal:AbortSignal.timeout(90000)});
 if(!response.ok)throw new Error(`BROWSER_API_SMOKE_FAILED: HTTP ${response.status}`);
 const report=await response.json();

@@ -106,3 +106,12 @@ test('production smoke exercises only read-only preview and rejects infrastructu
     assert.match(result.stdout,/"event_count": 0/);
   }
 });
+
+test('production smoke obtains internal API key from stdin without exposing it',async()=>{
+  const {spawnSync}=await import('node:child_process');
+  const secret='isolated-api-key-fixture-at-least-32-characters';
+  const smoke=new URL('../smoke.mjs',import.meta.url).href;
+  const script=`process.argv.push('--key-stdin');globalThis.fetch=async(url,options)=>{if(url.endsWith('/ready'))return {ok:true};if(options.headers['X-Noizy-Api-Key']!==${JSON.stringify(secret)}||options.headers.Origin!=='https://tsa.noizycologne.de')throw Error('Wrong internal identity');return {ok:true,json:async()=>({eventCount:0,incomplete:true,sources:[{url:'https://fixture.example/',fetchMethod:'BROWSER',diagnostics:[],extraction:{status:'BROWSER_PARTIAL',events:[],complete:false}}]})};};await import(${JSON.stringify(smoke)});`;
+  const result=spawnSync(process.execPath,['--input-type=module','-e',script],{encoding:'utf8',input:secret+'\n'});
+  assert.equal(result.status,0,result.stderr);assert.ok(!result.stdout.includes(secret));
+});

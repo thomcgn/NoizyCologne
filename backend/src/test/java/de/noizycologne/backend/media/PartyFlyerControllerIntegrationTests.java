@@ -32,7 +32,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+@SpringBootTest(properties="noizy.api.trust.secret=isolated-proxy-fixture-key-not-a-production-secret")
 @ActiveProfiles("local")
 @AutoConfigureMockMvc
 @TestPropertySource(properties = "noizy.media.root=target/test-party-flyers")
