@@ -980,24 +980,38 @@ test('genres UX: pending save ignores dismissal until the result is known', asyn
   assert.equal(document.querySelector('[role="dialog"]'), null);
 });
 
-test('genres UX: alias drafts are isolated by genre and cross-row submit cannot move an alias', async () => {
+test('genres UX: drawer alias drafts cannot cross genres and discarding never submits them', async () => {
   const calls = [];
   const other = { ...genre, id: 'other', displayName: 'EBM', canonicalName: 'ebm' };
   await mountGenreEditor(async (url, options = {}) => {
     if (!options.method) return jsonResponse([genre, other]);
     calls.push({ url, body: JSON.parse(options.body) });
-    return jsonResponse({ id: `alias-${calls.length}`, value: JSON.parse(options.body).value });
+    return jsonResponse({ id: 'new-alias', value: JSON.parse(options.body).value });
   });
-  changeField(genreRow('genre').querySelector('input'), 'Rock-Alias');
-  await submitGenreForm(genreRow('other').querySelector('form'));
+  click([...genreRow('genre').querySelectorAll('button')].find(item => item.textContent === 'Bearbeiten'));
+  click(button('+ Alias hinzufügen'));
+  const draft = document.querySelector('[aria-label="Aliase bearbeiten"] input');
+  changeField(draft, 'Rock-Alias');
+  window.confirm = () => false;
+  key('Escape');
+  assert.equal(draft.value, 'Rock-Alias');
+  await submitGenreForm();
   assert.equal(calls.length, 0);
-  assert.match(genreRow('other').querySelector('[role="alert"]').textContent, /Alias eingeben/);
-  assert.equal(genreRow('genre').querySelector('input').value, 'Rock-Alias');
-  changeField(genreRow('other').querySelector('input'), 'Electronic Body Music');
-  await submitGenreForm(genreRow('other').querySelector('form'));
+  assert.match(document.querySelector('#genre-editor-error').textContent, /offenen Alias zuerst/);
+  window.confirm = () => true; key('Escape');
+  click([...genreRow('other').querySelectorAll('button')].find(item => item.textContent === 'Bearbeiten'));
+  click(button('+ Alias hinzufügen'));
+  assert.equal(document.querySelector('[aria-label="Aliase bearbeiten"] input').value, '');
+  const form = document.querySelector('[aria-label="Aliase bearbeiten"] form');
+  await submitGenreForm(form);
+  assert.equal(calls.length, 0);
+  assert.match(document.querySelector('#genre-alias-error').textContent, /Alias eingeben/);
+  changeField(form.querySelector('input'), 'Electronic Body Music');
+  await submitGenreForm(form);
   assert.deepEqual(calls, [{ url: '/api/v1/genres/other/aliases', body: { value: 'Electronic Body Music' } }]);
-  assert.equal(genreRow('genre').querySelector('input').value, 'Rock-Alias');
-  assert.ok(genreRow('genre').querySelector('[aria-label="Alias für Rock hinzufügen"]'));
+  assert.match(document.querySelector('[role="dialog"] [role="status"]').textContent, /Electronic Body Music.*gespeichert/);
+  assert.match(genreRow('other').textContent, /Electronic Body Music/);
+  assert.doesNotMatch(genreRow('genre').textContent, /Rock-Alias/);
 });
 
 test('genres UX: alias inline edit and confirmed delete use the correct event-independent IDs without native prompts', async () => {
@@ -1012,15 +1026,18 @@ test('genres UX: alias inline edit and confirmed delete use the correct event-in
   window.prompt = () => { throw new Error('Alias edit must use the application form'); };
   window.confirm = () => { throw new Error('Alias deletion must show its consequence in the application'); };
   try {
+    click([...genreRow('genre').querySelectorAll('button')].find(item => item.textContent === 'Bearbeiten'));
     click(document.querySelector('[aria-label="Alias Alternative für Rock bearbeiten"]'));
-    const editForm = genreRow('genre').querySelector('li form');
+    assert.equal(button('+ Alias hinzufügen').disabled, true);
+    assert.equal(document.querySelector('[aria-label="Alias Rock and Roll für Rock entfernen"]').disabled, true);
+    const editForm = document.querySelector('[role="dialog"] li form');
     changeField(editForm.querySelector('input'), 'Alternative Rock');
     await submitGenreForm(editForm);
     assert.deepEqual(calls[0], { url: '/api/v1/genres/genre/aliases/alias-a', method: 'PUT', body: { value: 'Alternative Rock' } });
     click(document.querySelector('[aria-label="Alias Rock and Roll für Rock entfernen"]'));
-    assert.match(genreRow('genre').textContent, /Das Genre bleibt erhalten/);
+    assert.match(document.querySelector('[role="dialog"]').textContent, /Das Genre bleibt erhalten/);
     assert.equal(calls.length, 1);
-    click(genreRow('genre').querySelector('[role="group"] button:last-child'));
+    click(document.querySelector('[role="dialog"] [role="group"] button:last-child'));
     assert.equal(calls.length, 1);
     click(document.querySelector('[aria-label="Alias Rock and Roll für Rock entfernen"]'));
     await act(async () => button('Alias endgültig entfernen').click());
@@ -1474,7 +1491,7 @@ test('genres consistency: synchronous repeated submit sends one mutation and bus
     await act(async () => { release(jsonResponse({ message: 'Bitte erneut prüfen.' }, 409)); });
     assert.equal(genreEditorField('Anzeigename').value, 'EBM');
     assert.match(document.querySelector('[role="dialog"] [role="alert"]').textContent, /erneut prüfen/);
-    assert.equal(button('Speichern und schließen').disabled, false);
+    assert.equal(button('Speichern').disabled, false);
   } finally { window.confirm = () => true; }
 });
 
@@ -1482,10 +1499,11 @@ test('genres consistency: catalogue empty state differs from failed load; import
   await mountGenreEditor(async () => jsonResponse([]));
   assert.match(document.querySelector('[aria-label="Genre-Katalog"]').textContent, /Noch keine Genres erfasst/);
   const toolbar = document.querySelector('[aria-label="Genre-Aktionen"]');
-  assert.deepEqual([...toolbar.querySelectorAll('button')].map(item => item.textContent), ['Genres importieren', '+ Genre anlegen', 'Neu laden']);
-  assert.ok(toolbar.querySelector('.cc-button-primary').textContent === 'Genres importieren');
-  assert.equal(toolbar.contains(button('Basisgenres wiederherstellen')), false);
-  assert.ok(document.querySelector('[aria-labelledby="genre-restore-title"]').contains(button('Basisgenres wiederherstellen')));
+  assert.deepEqual([...toolbar.querySelectorAll(':scope > button')].map(item => item.textContent), ['+ Genre anlegen', 'Genres importieren']);
+  assert.equal(toolbar.querySelector('.cc-button-primary').textContent, '+ Genre anlegen');
+  assert.ok(toolbar.querySelector('details').contains(button('Basisgenres wiederherstellen')));
+  assert.equal(toolbar.querySelector('details').open, false);
+  assert.equal([...document.querySelectorAll('button')].some(item => /Genres löschen/.test(item.textContent)), false);
 });
 
 test('genres consistency: a failed initial load never reports an empty catalogue', async () => {
@@ -1640,4 +1658,61 @@ test('genres consistency: an HTTP preview error cannot enable confirmation even 
   const alert = document.querySelector('[role="dialog"] [role="alert"]');
   assert.equal(document.activeElement, alert);
   assert.match(document.querySelector('[role="dialog"]').textContent, /catalog.json/);
+});
+
+for (const size of [0, 1, 105]) {
+  test(`genre redesign: ${size} records keep a compact overview, real paging and full alias search`, async () => {
+    const rows = Array.from({length: size}, (_, index) => ({...genre, id: `compact-${index}`, canonicalName: `canonical-${index}`, displayName: `Genre ${String(index).padStart(3, '0')}`, aliases: index === 0 ? Array.from({length: 20}, (_, alias) => ({id: `alias-${alias}`, value: `Synonym ${alias}`})) : []}));
+    await mountGenreEditor(async () => jsonResponse(rows));
+    const overview = document.querySelector('[aria-label="Genre-Katalog"]');
+    assert.equal(overview.querySelectorAll('input:not([type="search"]), form').length, 0);
+    assert.equal(overview.querySelectorAll('[data-record-id]').length, Math.min(size, 25));
+    assert.equal(overview.querySelector('[aria-label="Genre-Aktionen"] .cc-button-primary').textContent, '+ Genre anlegen');
+    if (!size) { assert.match(overview.textContent, /Noch keine Genres/); return; }
+    const first = genreRow('compact-0');
+    assert.equal(first.querySelectorAll('li').length, 4);
+    assert.deepEqual([...first.querySelectorAll('button')].map(item => item.textContent), ['+16 weitere', 'Bearbeiten']);
+    const more = first.querySelector('[aria-expanded]'); click(more);
+    assert.equal(more.getAttribute('aria-expanded'), 'true');
+    assert.equal(document.getElementById(more.getAttribute('aria-controls')).querySelectorAll('li').length, 20);
+    click(more); assert.equal(first.querySelectorAll('li').length, 4);
+    changeField(overview.querySelector('input[type="search"]'), 'Synonym 19');
+    assert.equal(overview.querySelectorAll('[data-record-id]').length, 1);
+    changeField(overview.querySelector('input[type="search"]'), 'canonical-0');
+    assert.equal(overview.querySelectorAll('[data-record-id]').length, 1);
+    changeField(overview.querySelector('input[type="search"]'), '');
+    if (size > 25) {
+      for (let page = 1; page < 5; page++) click(button('Weiter'));
+      assert.equal(overview.querySelectorAll('[data-record-id]').length, 5);
+      assert.equal(button('Weiter').disabled, true);
+      changeField(overview.querySelector('input[type="search"]'), 'Genre 000');
+      assert.equal(genreRow('compact-0').querySelectorAll('li').length, 4);
+    }
+  });
+}
+
+test('genre redesign: committed alias survives a later name-save error, with truthful feedback and retained name draft', async () => {
+  const calls = [];
+  await mountGenreEditor(async (url, options = {}) => {
+    if (!options.method) return jsonResponse([genre]);
+    calls.push({url, method: options.method});
+    return options.method === 'POST' ? jsonResponse({id: 'persisted-alias', value: 'Saved synonym'}) : jsonResponse({message: 'Namenskonflikt'}, 409);
+  });
+  const trigger = [...genreRow('genre').querySelectorAll('button')].find(item => item.textContent === 'Bearbeiten');
+  trigger.focus(); click(trigger);
+  assert.ok(document.querySelector('[role="dialog"]').classList.contains('cc-drawer'));
+  changeField(genreEditorField('Anzeigename'), 'Mein Entwurf');
+  click(button('+ Alias hinzufügen'));
+  assert.equal(document.activeElement, document.querySelector('#genre-aliases input'));
+  changeField(document.querySelector('#genre-aliases input'), 'Saved synonym');
+  await submitGenreForm(document.querySelector('#genre-aliases form'));
+  await submitGenreForm();
+  assert.equal(genreEditorField('Anzeigename').value, 'Mein Entwurf');
+  assert.match(document.querySelector('[role="dialog"] [role="status"]').textContent, /Saved synonym.*gespeichert/);
+  assert.match(document.querySelector('#genre-editor-error').textContent, /Namenskonflikt/);
+  assert.match(genreRow('genre').textContent, /Saved synonym/);
+  assert.deepEqual(calls.map(item => item.method), ['POST', 'PUT']);
+  window.confirm = () => false; key('Escape'); assert.ok(document.querySelector('[role="dialog"]'));
+  window.confirm = () => true; key('Escape'); assert.equal(document.activeElement, trigger);
+  assert.match(genreRow('genre').textContent, /Saved synonym/);
 });

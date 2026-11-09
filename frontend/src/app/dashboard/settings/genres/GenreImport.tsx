@@ -29,7 +29,7 @@ function isReport(value: unknown): value is Report {
 
 type ImportActions = { importAction: ReactNode; restoreAction: ReactNode };
 
-export default function GenreImport({ disabled, onImported, renderActions }: { disabled: boolean; onImported: (message: string) => Promise<void>; renderActions?: (actions: ImportActions) => ReactNode }) {
+export default function GenreImport({ disabled, onImported, renderActions, importPrimary = true }: { disabled: boolean; onImported: (message: string) => Promise<void>; renderActions?: (actions: ImportActions) => ReactNode; importPrimary?: boolean }) {
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState("");
   const [filename, setFilename] = useState("");
@@ -98,7 +98,7 @@ export default function GenreImport({ disabled, onImported, renderActions }: { d
   }
 
   const actions: ImportActions = {
-    importAction: <button type="button" className="cc-button cc-button-primary" disabled={disabled || busy} onClick={() => begin(false)}>Genres importieren</button>,
+    importAction: <button type="button" className={`cc-button${importPrimary ? " cc-button-primary" : ""}`} disabled={disabled || busy} onClick={() => begin(false)}>Genres importieren</button>,
     restoreAction: <button type="button" className="cc-button" disabled={disabled || busy} onClick={() => begin(true)}>Basisgenres wiederherstellen</button>,
   };
   return <>
