@@ -203,6 +203,17 @@ html[data-density="compact"] .cc-description { max-width: 75ch; }
 .cc-cell-details { max-width: 320px; overflow-wrap: anywhere; font-size: 0.75rem; color: var(--muted-strong); line-height: 1.7; }
 .cc-inline-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .cc-button-danger, .cc-status-danger { color: var(--danger); }
+.cc-factory-reset { margin-top: var(--ui-section-gap); border-color: var(--danger); }
+.cc-factory-reset-body { display: grid; gap: 14px; font-size: 0.88rem; line-height: 1.6; }
+.cc-factory-reset-body .cc-message { margin: 0; }
+.cc-factory-reset-counts { margin: 0; }
+.cc-factory-reset-form { display: grid; gap: 10px; }
+.cc-factory-reset-form .cc-input { width: 100%; font-size: 16px; }
+.cc-factory-reset-check { display: flex; align-items: flex-start; gap: 10px; }
+.cc-factory-reset-check input { width: 20px; height: 20px; flex: 0 0 20px; }
+.cc-factory-reset-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.cc-factory-reset-actions .cc-button { min-height: 44px; }
+.cc-factory-reset .cc-button-danger { border-color: var(--danger); }
 .cc-list-heading { gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
 .cc-list-heading h2 { font-weight: 600; margin-bottom: 5px; }
 .cc-calendar-name { display: inline-flex; align-items: center; gap: 8px; }
