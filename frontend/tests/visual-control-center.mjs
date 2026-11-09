@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {visualSession} from './fixtures/authSession.mjs';
-import {mkdir, writeFile} from 'node:fs/promises';
+import {mkdir, writeFile, readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {controlCenterFixture, mockControlCenterApi} from './fixtures/controlCenter.mjs';
 import {candidate as discoveryCandidate} from './fixtures/discovery.mjs';
@@ -15,7 +15,7 @@ const {token, contextOptions} = await visualSession(origin);
 const browser = await chromium.launch({executablePath: process.env.CHROME_PATH ?? '/usr/bin/google-chrome-stable', headless: true});
 const results = [];
 try {
-  const scenarios = [6, 7, 8].includes(phase)
+  const scenarios = [6, 7, 8, 9].includes(phase)
     ? ['graphite', 'midnight', 'light'].flatMap(theme => ['compact', 'comfortable'].flatMap(density => [1440, 390].map(width => [theme, density, width, 'populated'])))
     : [
     ['graphite', 'compact', 1440, 'populated'], ['midnight', 'comfortable', 1440, 'populated'], ['light', 'compact', 1440, 'populated'],
@@ -32,9 +32,10 @@ try {
     await mockControlCenterApi(context, data, {state, onRequest: request => calls.push(request)});
     const saveFixture = phase === 7 ? await mockSaveResults(context, data, calls) : null;
     const importFixture = phase === 8 ? await mockImportRefresh(context, data, calls) : null;
+    const genreImportFixture = phase === 9 ? await mockGenreImport(context, data) : null;
     const nativeDialogs = [];
     const page = await context.newPage();
-    if ([7, 8].includes(phase)) page.on('dialog', dialog => {nativeDialogs.push(dialog.type()); void dialog.dismiss().catch(error => errors.push(error.message));});
+    if ([7, 8, 9].includes(phase)) page.on('dialog', dialog => {nativeDialogs.push(dialog.type()); void dialog.dismiss().catch(error => errors.push(error.message));});
     page.setDefaultTimeout(15000);
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(`${origin}/dashboard`);
@@ -86,8 +87,8 @@ try {
       if (phase === 4) continue;
       if (phase === 8 && route !== '/dashboard/vorschlaege') continue;
       if (phase === 7 && !['/dashboard/partys', '/dashboard/locations'].includes(route)) continue;
-      if (phase === 6 && route !== '/dashboard/settings/genres') continue;
-      if (phase !== 6 && route === '/dashboard/settings/genres') continue;
+      if ([6, 9].includes(phase) && route !== '/dashboard/settings/genres') continue;
+      if (![6, 9].includes(phase) && route === '/dashboard/settings/genres') continue;
       if (phase === 5 && route !== '/dashboard/redaktion') continue;
       if (phase === 1 && !['/dashboard/settings', '/dashboard/automatisierung'].includes(route)) continue;
       if (phase === 2 && route !== '/dashboard/vorschlaege') continue;
@@ -105,6 +106,7 @@ try {
         }
       }
       if (phase === 8) await checkImportRefresh(page, importFixture, calls, name);
+      if (phase === 9) await checkGenreImport(page, genreImportFixture, name);
       if (phase === 6) {
         await page.locator('[data-record-id]').first().waitFor();
         const aliasInput = page.getByRole('textbox', {name: 'Neuer Alias für Emo', exact: true});
@@ -465,4 +467,65 @@ async function checkImportRefresh(page, fixture, calls, name) {
   assert.equal(writes.length, 1);
   assert.equal(writes[0].path, fixture.confirmPath);
   assert.deepEqual(JSON.parse(writes[0].body), {partyId: 'party-0', date: '2026-11-14', inquiryStatus: 'NONE', dmText: '', seriesAlias: null});
+}
+
+
+async function mockGenreImport(context, data) {
+  const source = await readFile(new URL('../../backend/src/test/resources/genres/catalog-2026-11-09.csv', import.meta.url));
+  const rows = source.toString('utf8').replace(/^\uFEFF/, '').trim().split(/\r?\n/).slice(1).map((line, index) => {
+    const [canonicalName, displayName, active, aliases, gruppe, status, quelle, hinweis] = line.split(';');
+    return {line: index + 2, canonicalName, displayName, active: active === 'true', aliases: aliases ? aliases.split(' | ') : [], metadata: {gruppe, status, quelle, hinweis}, action: 'NEU'};
+  });
+  const stats = {previews: 0, applies: 0, fail: true, source, rows};
+  await context.route('**/api/v1/genres/import{,/preview}', async route => {
+    assert.equal(route.request().method(), 'POST');
+    const preview = route.request().url().endsWith('/preview');
+    const payload = route.request().postDataJSON();
+    assert.equal(payload.schemaVersion, 1);
+    assert.ok(payload.csv?.includes('Dark Electro'));
+    if (preview) stats.previews++; else stats.applies++;
+    const conflict = !preview && stats.fail;
+    if (!preview && !conflict) data.genres = rows.map((row, index) => ({...row, id: `import-${index}`, aliases: row.aliases.map((value, n) => ({id: `alias-${index}-${n}`, value}))}));
+    return route.fulfill({status: conflict ? 409 : 200, contentType: 'application/json', body: JSON.stringify({total: 104, created: 104, unchanged: 0, supplemented: 0, inactive: 24, aliases: 85, aliasesAdded: 85, valid: !conflict, applied: !preview && !conflict, rows, conflicts: conflict ? [{line: 9, genre: 'Rock’n’Roll', field: 'aliases', message: 'Alias gehört inzwischen zu einem anderen Genre.'}] : []})});
+  });
+  return stats;
+}
+
+async function checkGenreImport(page, fixture, name) {
+  const opener = page.getByRole('button', {name: 'Genres importieren', exact: true});
+  await opener.click();
+  const dialog = page.getByRole('dialog');
+  const confirm = dialog.getByRole('button', {name: 'Import bestätigen', exact: true});
+  assert.equal(await confirm.isDisabled(), true);
+  await dialog.locator('input[type="file"]').setInputFiles({name: 'catalog.csv', mimeType: 'text/csv', buffer: fixture.source});
+  assert.equal(fixture.previews, 0); assert.equal(fixture.applies, 0);
+  await dialog.getByRole('button', {name: 'Vorschau prüfen', exact: true}).click();
+  await dialog.getByRole('status').waitFor();
+  assert.match(await dialog.innerText(), /104 Genres geprüft.*24 inaktiv.*85 Aliase/);
+  await dialog.locator('summary').click();
+  await dialog.getByText('Synth-Punk', {exact: true}).waitFor();
+  const actionBox = await confirm.boundingBox();
+  assert.ok(actionBox && actionBox.y >= 0 && actionBox.y + actionBox.height <= page.viewportSize().height, 'Sticky import actions stay visible with expanded catalogue');
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await confirm.focus();
+  await page.keyboard.press('Tab');
+  assert.equal(await dialog.getByRole('button', {name: 'Abbrechen', exact: true}).evaluate(element => element === document.activeElement), true);
+  await confirm.click();
+  await dialog.getByText('1 Konflikte – kein Import möglich', {exact: true}).waitFor();
+  assert.equal(await confirm.isDisabled(), true);
+  assert.equal(await dialog.locator('input[type="file"]').evaluate(element => element.files[0].name), 'catalog.csv');
+  await dialog.locator('summary').click();
+  await dialog.getByRole('alert').last().scrollIntoViewIfNeeded();
+  await page.screenshot({path: `${out}/${name}-genre-import-conflict.png`});
+  fixture.fail = false;
+  await dialog.getByRole('button', {name: 'Vorschau prüfen', exact: true}).click();
+  await confirm.waitFor({state: 'visible'});
+  await page.waitForFunction(() => ![...document.querySelectorAll('button')].find(button => button.textContent === 'Import bestätigen')?.disabled);
+  await confirm.click();
+  await dialog.waitFor({state: 'detached'});
+  await page.getByRole('status').filter({hasText: '104 Genres geprüft · 104 neu angelegt · 85 Aliase übernommen'}).waitFor();
+  assert.equal(fixture.applies, 2); assert.equal(fixture.previews, 2);
+  await page.getByRole('searchbox', {name: 'Genres und Aliase durchsuchen'}).fill('Shoegaze');
+  await page.getByText('Shoegaze', {exact: true}).waitFor();
+  await page.screenshot({path: `${out}/${name}-genre-import-success.png`});
 }

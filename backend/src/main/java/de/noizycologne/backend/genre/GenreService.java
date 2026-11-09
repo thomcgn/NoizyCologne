@@ -9,10 +9,9 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.text.Normalizer;
+import org.springframework.jdbc.core.JdbcTemplate;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 @Service
@@ -20,11 +19,13 @@ public class GenreService {
     private final GenreRepository genreRepository;
     private final GenreAliasRepository aliasRepository;
     private final GenreLexicon genreLexicon;
+    private final JdbcTemplate jdbc;
 
-    public GenreService(GenreRepository genreRepository, GenreAliasRepository aliasRepository, GenreLexicon genreLexicon) {
+    public GenreService(GenreRepository genreRepository, GenreAliasRepository aliasRepository, GenreLexicon genreLexicon, JdbcTemplate jdbc) {
         this.genreRepository = genreRepository;
         this.aliasRepository = aliasRepository;
         this.genreLexicon = genreLexicon;
+        this.jdbc = jdbc;
     }
 
     @Transactional
@@ -34,6 +35,7 @@ public class GenreService {
 
     @Transactional
     public GenreResponse create(GenreRequest request) {
+        lockCatalogue();
         String canonical = clean(request.canonicalName());
         String display = clean(request.displayName());
         ensureCanonicalAvailable(canonical, null);
@@ -44,6 +46,7 @@ public class GenreService {
 
     @Transactional
     public GenreResponse update(String id, GenreRequest request) {
+        lockCatalogue();
         Genre genre = findGenre(id);
         String canonical = clean(request.canonicalName());
         ensureCanonicalAvailable(canonical, id);
@@ -55,6 +58,7 @@ public class GenreService {
 
     @Transactional
     public GenreAliasResponse addAlias(String genreId, GenreAliasRequest request) {
+        lockCatalogue();
         findGenre(genreId);
         String value = clean(request.value());
         ensureAliasAvailable(value, null);
@@ -65,6 +69,7 @@ public class GenreService {
 
     @Transactional
     public GenreAliasResponse updateAlias(String genreId, String aliasId, GenreAliasRequest request) {
+        lockCatalogue();
         findGenre(genreId);
         GenreAlias alias = aliasRepository.findById(aliasId)
                 .filter(item -> item.getGenreId().equals(genreId))
@@ -79,6 +84,7 @@ public class GenreService {
 
     @Transactional
     public void deleteAlias(String genreId, String aliasId) {
+        lockCatalogue();
         findGenre(genreId);
         GenreAlias alias = aliasRepository.findById(aliasId)
                 .filter(item -> item.getGenreId().equals(genreId))
@@ -117,17 +123,17 @@ public class GenreService {
 
     private String clean(String value) { return value == null ? "" : value.trim(); }
 
-    private String normalize(String value) {
-        return Normalizer.normalize(value.toLowerCase(Locale.ROOT), Normalizer.Form.NFKD)
-                .replaceAll("[‐‑‒–—−]", "-").replaceAll("[’'`´]", "'")
-                .replaceAll("[&]", " and ").replaceAll("[^\\p{L}\\p{N}']+", " ")
-                .replaceAll("\\s+", " ").trim();
+    private String normalize(String value) { return GenreNormalizer.normalize(value); }
+
+    void lockCatalogue() {
+        jdbc.execute("SET LOCAL lock_timeout = '1500ms'");
+        jdbc.execute("LOCK TABLE genres, genre_aliases IN SHARE ROW EXCLUSIVE MODE");
     }
 
     private ResponseStatusException notFound(String message) { return new ResponseStatusException(HttpStatus.NOT_FOUND, message); }
     private ResponseStatusException conflict(String message) { return new ResponseStatusException(HttpStatus.CONFLICT, message); }
 
-    private void refreshLexiconAfterCommit() {
+    void refreshLexiconAfterCommit() {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             genreLexicon.refresh();
             return;

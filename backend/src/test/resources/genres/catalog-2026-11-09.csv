@@ -1,0 +1,105 @@
+﻿canonicalName;displayName;active;aliases;gruppe;status;quelle;hinweis
+Rock;Rock;true;;Rock & Alternative;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Alternative;Alternative;true;;Rock & Alternative;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Indie;Indie;true;;Indie & Britpop;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Punk;Punk;true;;Punk & Hardcore;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Punkrock;Punkrock;true;punk rock;Punk & Hardcore;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Garage Rock;Garage Rock;true;60s garage;Garage & Sixties;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Garage-Punk;Garage-Punk;true;garagepunk;Garage & Sixties;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Rock’n’Roll;Rock’n’Roll;true;rock n roll | rock'n roll | rock and roll | RnR | R&R;Garage & Sixties;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+50s Rock’n’Roll;50s Rock’n’Roll;true;50s rnr | 50's rnr | 50s rock n roll;Garage & Sixties;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Wild R&B;Wild R&B;true;wild rnb | wild rhythm and blues;Garage & Sixties;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Rockabilly;Rockabilly;true;;Garage & Sixties;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Psychobilly;Psychobilly;true;;Garage & Sixties;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Emo;Emo;true;;Punk & Hardcore;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Hardcore;Hardcore;true;;Punk & Hardcore;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Metal;Metal;true;;Metal & Crossover;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Metalcore;Metalcore;true;metal core;Metal & Crossover;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Electronicore;Electronicore;true;;Metal & Crossover;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Heavy Metal;Heavy Metal;true;;Metal & Crossover;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Thrash Metal;Thrash Metal;true;;Metal & Crossover;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Death Metal;Death Metal;true;;Metal & Crossover;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Black Metal;Black Metal;true;;Metal & Crossover;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Doom;Doom;true;;Metal & Crossover;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Hard Rock;Hard Rock;true;;Rock & Alternative;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Psych;Psych;true;psychedelic | psychedelia;Garage & Sixties;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Ska;Ska;true;;Garage & Sixties;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Soul;Soul;true;;Garage & Sixties;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Northern Soul;Northern Soul;true;;Garage & Sixties;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Popcorn;Popcorn;true;;Garage & Sixties;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Rhythm & Blues;Rhythm & Blues;true;rnb;Garage & Sixties;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Post-Punk;Post-Punk;true;postpunk;Dark & Wave;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+New Wave;New Wave;true;;Dark & Wave;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Darkwave;Darkwave;true;dark wave;Dark & Wave;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Gothic Rock;Gothic Rock;true;goth rock | gothrock;Dark & Wave;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Britpop;Britpop;true;brit pop;Indie & Britpop;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Singer-Songwriter;Singer-Songwriter;true;;Indie & Britpop;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Folk;Folk;true;;Garage & Sixties;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Pop;Pop;true;;Indie & Britpop;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Sonstiges;Sonstiges;true;other;Andere & Reserve;Basis (Wiederherstellung);https://github.com/thomcgn/NoizyCologne/blob/main/backend/src/main/resources/db/migration/V6__add_dynamic_genres.sql;
+Alternative Rock;Alternative Rock;true;alt rock;Rock & Alternative;Neu (belegt);https://www.blue-shell.de/events/teenage-dirtbag-pop-punk-emo-alternative-numetal-8;Abgrenzung von generischem Alternative
+Indie Rock;Indie Rock;true;indierock;Indie & Britpop;Neu (ergänzend);https://tsunami-club.de/2-stuendchen-indie/;Typische Benennung der Indie-Gitarrenpartys
+Indie Pop;Indie Pop;true;indiepop;Indie & Britpop;Neu (ergänzend);https://tsunami-club.de/disco-2000/;Nicht mit Indie Rock gleichsetzen
+Alternative Pop;Alternative Pop;false;alt pop;Indie & Britpop;Optional (prüfen);https://tsunami-club.de/disco-2000/;Ohne explizite Genreangabe nicht aus Pop ableiten
+College Rock;College Rock;true;;Rock & Alternative;Neu (belegt);https://www.blue-shell.de/events/teenage-dirtbag-pop-punk-emo-alternative-numetal-8;Blue Shell Teenage Dirtbag
+Grunge;Grunge;true;;Rock & Alternative;Neu (ergänzend);https://qrushapp.de/eventfinder/koeln/locations/mtc-cologne;Alternative-Rock-Reihen
+Shoegaze;Shoegaze;true;shoe gaze;Indie & Britpop;Neu (belegt);https://tsunami-club.de/disco-2000/;DISCO 2000
+Madchester;Madchester;true;;Indie & Britpop;Neu (belegt);https://tsunami-club.de/disco-2000/;Britpop/Manchester-Szene
+Twee Pop;Twee Pop;true;;Indie & Britpop;Neu (belegt);https://tsunami-club.de/disco-2000/;DISCO 2000
+Power Pop;Power Pop;true;powerpop;Indie & Britpop;Neu (belegt);https://www.sonic-ballroom.de/index.php/parties;Shake Appeal
+Glam Rock;Glam Rock;true;glamrock;Rock & Alternative;Neu (belegt);https://www.sonic-ballroom.de/index.php/parties;Dynamit Jet Saloon
+Surf Rock;Surf Rock;true;surf music;Garage & Sixties;Neu (ergänzend);https://www.sonic-ballroom.de/index.php/parties;"Shake Appeal; Surf als Stilbezeichnung"
+Stoner Rock;Stoner Rock;false;;Rock & Alternative;Optional (prüfen);https://www.sonic-ballroom.de/index.php/parties;Für einzelne passende Partys, nicht Konzerte pauschal aufnehmen
+Krautrock;Krautrock;false;kraut rock;Rock & Alternative;Optional (prüfen);https://www.sonic-ballroom.de/index.php/parties;Stärker Konzertgenre
+Dream Pop;Dream Pop;false;dreampop;Indie & Britpop;Optional (prüfen);https://tsunami-club.de/disco-2000/;Nur bei expliziter Nennung
+Post-Rock;Post-Rock;false;postrock;Rock & Alternative;Optional (prüfen);https://tsunami-club.de/disco-2000/;Häufiger Konzert als Party
+Hamburger Schule;Hamburger Schule;true;;Indie & Britpop;Neu (belegt);https://tsunami-club.de/disco-2000/;DISCO 2000
+Schwedenpop;Schwedenpop;true;schweden pop | sweden pop;Indie & Britpop;Neu (belegt);https://tsunami-club.de/disco-2000/;DISCO 2000
+New Romantic;New Romantic;false;new romantics;Dark & Wave;Optional (prüfen);https://tsunami-club.de/disco-2000/;80er-Subgenre
+Big Beat;Big Beat;true;bigbeat;Elektronisch & Alternative;Neu (belegt);https://tsunami-club.de/disco-2000/;DISCO 2000
+Electropop;Electropop;true;electro pop;Elektronisch & Alternative;Neu (belegt);https://tsunami-club.de/disco-2000/;DISCO 2000
+Yé-yé;Yé-yé;true;yeye;Garage & Sixties;Neu (belegt);https://tsunami-club.de/disco-2000/;DISCO 2000
+Beat (60s);Beat (60s);true;60s beat | sixties beat | beatmusik;Garage & Sixties;Neu (belegt);https://www.sonic-ballroom.de/index.php/parties;Bewusst NICHT bloß 'Beat' als Alias: zu unspezifisch
+Freakbeat;Freakbeat;true;freak beat;Garage & Sixties;Neu (belegt);https://www.sonic-ballroom.de/index.php/parties;Dynamit Jet Saloon
+Mod Revival;Mod Revival;true;;Garage & Sixties;Neu (belegt);https://www.sonic-ballroom.de/index.php/parties;Shake Appeal
+Neo Garage;Neo Garage;true;neogarage;Garage & Sixties;Neu (belegt);https://www.sonic-ballroom.de/index.php/parties;Dynamit Jet Saloon
+Rocksteady;Rocksteady;false;rock steady;Garage & Sixties;Optional (prüfen);https://www.sonic-ballroom.de/index.php/parties;Angrenzend an Ska/Reggae
+Reggae;Reggae;true;;Garage & Sixties;Neu (belegt);https://www.sonic-ballroom.de/index.php/parties;Shake Appeal
+Dub;Dub;false;dub reggae;Garage & Sixties;Optional (prüfen);https://www.sonic-ballroom.de/index.php/parties;Spezifisches Genre statt unklarem Dub-Token
+Funk;Funk;false;funk music;Garage & Sixties;Optional (prüfen);https://tsunami-club.de/disco-2000/;Gilt nicht als Alternative ohne weitere Genres
+Chanson;Chanson;false;chansons;Indie & Britpop;Optional (prüfen);https://tsunami-club.de/disco-2000/;"DISCO 2000; nicht zwingend Disco-Genre"
+Pop-Punk;Pop-Punk;true;poppunk;Punk & Hardcore;Neu (belegt);https://www.blue-shell.de/events/teenage-dirtbag-pop-punk-emo-alternative-numetal-8;"Teenage Dirtbag; Pink Punk Party"
+Skate Punk;Skate Punk;true;skatepunk;Punk & Hardcore;Neu (belegt);https://rausgegangen.de/events/new-party-ppp-pink-punk-party-2/;Pink Punk Party
+Deutschpunk;Deutschpunk;true;deutsch punk | german punk;Punk & Hardcore;Neu (belegt);https://rausgegangen.de/events/new-party-ppp-pink-punk-party-2/;Pink Punk Party
+Riot Grrrl;Riot Grrrl;true;riot grrrl punk;Punk & Hardcore;Neu (belegt);https://rausgegangen.de/events/new-party-ppp-pink-punk-party-2/;Pink Punk Party
+Electropunk;Electropunk;true;electro punk;Punk & Hardcore;Neu (belegt);https://rausgegangen.de/events/new-party-ppp-pink-punk-party-2/;Pink Punk Party
+Emo-Punk;Emo-Punk;true;emopunk;Punk & Hardcore;Neu (belegt);https://rausgegangen.de/events/new-party-ppp-pink-punk-party-2/;Pink Punk Party
+Post-Hardcore;Post-Hardcore;true;posthardcore;Punk & Hardcore;Neu (ergänzend);https://www.blue-shell.de/events/teenage-dirtbag-pop-punk-emo-alternative-numetal-8;Punk/Emo/Metalcore-Kontext
+Hardcore Punk;Hardcore Punk;true;hc punk;Punk & Hardcore;Neu (ergänzend);https://www.sonic-ballroom.de/index.php/parties;Nicht alle Hardcore-Nennungen sind Metal
+Folk-Punk;Folk-Punk;true;;Punk & Hardcore;Neu (belegt);https://www.sonic-ballroom.de/index.php/parties;Irish-Pogo
+Street Punk;Street Punk;false;streetpunk;Punk & Hardcore;Optional (prüfen);https://www.sonic-ballroom.de/index.php/parties;Ergänzung
+Youth Crew;Youth Crew;true;youthcrew;Punk & Hardcore;Neu (belegt);https://www.sonic-ballroom.de/index.php/parties;Sonic Silvesterparty
+Fun-Punk;Fun-Punk;true;funpunk;Punk & Hardcore;Neu (belegt);https://rausgegangen.de/events/new-party-ppp-pink-punk-party-2/;Pink Punk Party
+Nu Metal;Nu Metal;true;numetal | new metal;Metal & Crossover;Neu (belegt);https://www.blue-shell.de/events/teenage-dirtbag-pop-punk-emo-alternative-numetal-8;Teenage Dirtbag
+Alternative Metal;Alternative Metal;true;alt metal;Metal & Crossover;Neu (ergänzend);https://qrushapp.de/eventfinder/koeln/locations/mtc-cologne;MTC Metal-/Alternative-Reihen
+Gothic Metal;Gothic Metal;false;goth-metal;Metal & Crossover;Optional (prüfen);https://www.blue-shell.de/events/tranentrinker-party-6;Nicht mit Gothic Rock gleichsetzen
+Industrial Metal;Industrial Metal;false;;Metal & Crossover;Optional (prüfen);https://qrushapp.de/eventfinder/koeln/locations/mtc-cologne;Spezialisierte Clubnächte
+Doom Metal;Doom Metal;false;;Metal & Crossover;Optional (prüfen);https://qrushapp.de/eventfinder/koeln/locations/mtc-cologne;Doom steht bereits separat als Basisgenre
+Deathcore;Deathcore;false;death core;Metal & Crossover;Optional (prüfen);https://qrushapp.de/eventfinder/koeln/locations/mtc-cologne;Spezialisierte Partys
+Crossover;Crossover;false;crossover rock;Metal & Crossover;Optional (prüfen);https://www.blue-shell.de/events/teenage-dirtbag-pop-punk-emo-alternative-numetal-8;Breiter Begriff, potenziell viele False Positives
+Dark Electro;Dark Electro;true;darkelectro;Dark & Wave;Neu (belegt);https://www.blue-shell.de/events/tranentrinker-party-6;Tränentrinker / SPLEEN
+EBM;EBM;true;electronic body music | e.b.m.;Dark & Wave;Neu (belegt);https://www.blue-shell.de/events/tranentrinker-party-6;Tränentrinker
+Industrial;Industrial;true;industrial music;Dark & Wave;Neu (belegt);https://rausgegangen.de/events/spleen-by-kiya-noir-und-dj-seb-7/;SPLEEN
+Coldwave;Coldwave;true;cold wave;Dark & Wave;Neu (belegt);https://rausgegangen.de/events/spleen-by-kiya-noir-und-dj-seb-7/;SPLEEN
+Minimal Wave;Minimal Wave;true;minimalwave;Dark & Wave;Neu (ergänzend);https://rausgegangen.de/events/spleen-by-kiya-noir-und-dj-seb-7/;Nicht 'minimal' allein matchen
+Synthpop;Synthpop;true;synth pop | synthiepop;Dark & Wave;Neu (ergänzend);https://rausgegangen.de/events/spleen-by-kiya-noir-und-dj-seb-7/;Nicht 'Synth' allein matchen
+Synthwave;Synthwave;true;synth wave;Dark & Wave;Neu (belegt);https://rausgegangen.de/events/spleen-by-kiya-noir-und-dj-seb-7/;SPLEEN-Tags
+Futurepop;Futurepop;false;future pop;Dark & Wave;Optional (prüfen);https://rausgegangen.de/events/spleen-by-kiya-noir-und-dj-seb-7/;"Gothic-Szene; konkrete Kölner Nennung noch prüfen"
+Witch House;Witch House;true;witchhouse;Dark & Wave;Neu (belegt);https://rausgegangen.de/events/spleen-by-kiya-noir-und-dj-seb-7/;SPLEEN-Tags
+Electro-Industrial;Electro-Industrial;false;electroindustrial;Dark & Wave;Optional (prüfen);https://rausgegangen.de/events/spleen-by-kiya-noir-und-dj-seb-7/;Abgrenzung zu Industrial
+Aggrotech;Aggrotech;false;aggro-tech;Dark & Wave;Optional (prüfen);https://www.blue-shell.de/events/tranentrinker-party-6;Gothic/EBM-Subgenre
+Batcave;Batcave;false;batcave goth;Dark & Wave;Optional (prüfen);https://www.blue-shell.de/events/tranentrinker-party-6;Gothic-Ursprung
+Dark Pop;Dark Pop;false;;Dark & Wave;Optional (prüfen);https://rausgegangen.de/events/spleen-by-kiya-noir-und-dj-seb-7/;Nicht mit generischem Pop gleichsetzen
+Neue Deutsche Härte;Neue Deutsche Härte;false;ndh | neue deutsche haerte;Metal & Crossover;Optional (prüfen);https://qrushapp.de/eventfinder/koeln/locations/mtc-cologne;Metallastige Party
+Synth-Punk;Synth-Punk;false;synthpunk;Punk & Hardcore;Optional (prüfen);https://rausgegangen.de/events/new-party-ppp-pink-punk-party-2/;Grenzbereich Electro-Punk
+Electroclash;Electroclash;false;electro clash;Elektronisch & Alternative;Optional (prüfen);https://rausgegangen.de/events/spleen-by-kiya-noir-und-dj-seb-7/;Alternative Elektronik

@@ -1359,3 +1359,78 @@ test('portfolio UX: cancelling a partial flow resets its persisted ID before cre
   assert.equal(calls.aliasWrites.length, 2);
   assert.equal(document.querySelector('[role="dialog"]'), null);
 });
+
+// Bulk imports exercise the actual page, file input, modal and API protocol.
+const importReport = (overrides = {}) => ({ total: 104, created: 104, unchanged: 0, supplemented: 0, inactive: 24, aliases: 85, aliasesAdded: 85, valid: true, applied: false, rows: [{ line: 2, canonicalName: 'EBM', displayName: 'EBM', active: true, aliases: ['electronic body music'], action: 'NEU', metadata: { quelle: 'https://example.test/catalogue' } }], conflicts: [], ...overrides });
+async function selectImportFile(name, bytes) {
+  const input = document.querySelector('[role="dialog"] input[type="file"]');
+  const content = typeof bytes === 'string' ? new TextEncoder().encode(bytes) : bytes;
+  Object.defineProperty(input, 'files', { configurable: true, value: [{ name, size: content.byteLength, arrayBuffer: async () => content.buffer }] });
+  await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); });
+}
+async function importClick(label) { await act(async () => button(label).click()); }
+
+test('genre import: CSV preview precedes confirmation; success closes and reloads the catalogue', async () => {
+  const calls = [];
+  await mountGenreEditor(async (url, options = {}) => {
+    calls.push({ url, method: options.method ?? 'GET', body: options.body && JSON.parse(options.body) });
+    return !options.method ? jsonResponse([genre]) : jsonResponse(importReport({ applied: !url.endsWith('/preview') }));
+  });
+  await importClick('Genres importieren'); assert.equal(button('Import bestätigen').disabled, true);
+  await selectImportFile('catalog.csv', '\uFEFFcanonicalName;displayName;active;aliases;gruppe;status;quelle;hinweis\nEBM;EBM;true;;;;;');
+  assert.equal(calls.filter(call => call.method === 'POST').length, 0);
+  await importClick('Vorschau prüfen');
+  assert.match(document.querySelector('[role="dialog"]').textContent, /Keine vorhandenen Genres werden überschrieben/);
+  assert.match(document.body.textContent, /104 Genres geprüft.*24 inaktiv.*85 Aliase/);
+  assert.equal(calls.at(-1).body.schemaVersion, 1); assert.ok(calls.at(-1).body.csv.startsWith('canonicalName;'));
+  await importClick('Import bestätigen'); assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.match(document.body.textContent, /104 Genres geprüft · 104 neu angelegt · 85 Aliase übernommen/);
+  assert.equal(calls.filter(call => call.url === '/api/v1/genres/import').length, 1); assert.equal(calls.at(-1).url, '/api/v1/genres');
+});
+
+test('genre import: conflict preserves selected file and open modal and requires a fresh preview', async () => {
+  await mountGenreEditor(async (url, options = {}) => !options.method ? jsonResponse([genre]) :
+    url.endsWith('/preview') ? jsonResponse(importReport()) : jsonResponse(importReport({ valid: false, conflicts: [{ line: 9, genre: 'EBM', field: 'aliases', message: 'Alias bereits zugeordnet' }] }), 409));
+  await importClick('Genres importieren'); await selectImportFile('catalog.json', '{"schemaVersion":1,"genres":[]}');
+  await importClick('Vorschau prüfen'); await importClick('Import bestätigen');
+  assert.match(document.querySelector('[role="dialog"]').textContent, /Zeile\/Eintrag 9 · EBM · aliases: Alias bereits zugeordnet/);
+  assert.equal(document.querySelector('input[type="file"]').files[0].name, 'catalog.json');
+  assert.equal(button('Import bestätigen').disabled, true); assert.equal(button('Vorschau prüfen').disabled, false);
+});
+
+test('genre import: base restore is explicit; pending apply blocks double submit and Escape', async () => {
+  let release; const held = new Promise(resolve => { release = resolve; }); let writes = 0;
+  await mountGenreEditor(async (url, options = {}) => {
+    if (!options.method) return jsonResponse([genre]);
+    assert.deepEqual(JSON.parse(options.body), { schemaVersion: 1, preset: 'base-v1' });
+    if (url.endsWith('/preview')) return jsonResponse(importReport({ total: 38, created: 38, aliases: 0 }));
+    writes++; await held; return jsonResponse(importReport({ total: 38, created: 0, unchanged: 38, aliasesAdded: 0, applied: true }));
+  });
+  await importClick('Basisgenres wiederherstellen'); assert.equal(writes, 0); await importClick('Vorschau prüfen');
+  await act(async () => { button('Import bestätigen').click(); button('Import bestätigen').click(); });
+  assert.equal(writes, 1); assert.equal(button('Abbrechen').disabled, true); key('Escape');
+  assert.ok(document.querySelector('[role="dialog"]')); assert.equal(document.querySelector('[data-modal-close]').disabled, true);
+  await act(async () => { release(); await held; }); assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.match(document.body.textContent, /Keine Änderungen – 38 Genres bereits vorhanden/);
+});
+
+test('genre import: format, size and UTF-8 errors never enable confirmation or send requests', async () => {
+  let posts = 0;
+  await mountGenreEditor(async (url, options = {}) => { if (options.method) posts++; return jsonResponse([genre]); });
+  await importClick('Genres importieren'); await selectImportFile('bad.txt', '{}'); assert.match(document.body.textContent, /JSON- oder CSV-Datei/);
+  await selectImportFile('huge.csv', new Uint8Array(1_048_577)); assert.match(document.body.textContent, /höchstens 1 MiB/);
+  await selectImportFile('bad.csv', new Uint8Array([0xc3,0x28])); assert.ok(document.querySelector('[role="dialog"] [role="alert"]'));
+  assert.equal(button('Vorschau prüfen').disabled, true); assert.equal(button('Import bestätigen').disabled, true); assert.equal(posts, 0);
+});
+
+test('genre import: transport failure keeps confirmation uncertain and requires a new preview', async () => {
+  await mountGenreEditor(async (url, options = {}) => {
+    if (!options.method) return jsonResponse([genre]);
+    if (url.endsWith('/preview')) return jsonResponse(importReport());
+    throw new TypeError('Failed to fetch');
+  });
+  await importClick('Genres importieren'); await selectImportFile('catalog.json', '{}');
+  await importClick('Vorschau prüfen'); await importClick('Import bestätigen');
+  assert.match(document.querySelector('[role="dialog"]').textContent, /Der Server kann bereits gespeichert haben/);
+  assert.equal(button('Import bestätigen').disabled, true); assert.equal(button('Vorschau prüfen').disabled, false);
+});

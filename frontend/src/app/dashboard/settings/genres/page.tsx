@@ -6,6 +6,7 @@ import {
   DEFAULT_CAPTION_PRETEXT,
 } from "../../captionSettings";
 import DashboardModal from "../../DashboardModal";
+import GenreImport from "./GenreImport";
 import DataCollection, { type CollectionColumn } from "../../DataCollection";
 
 type GenreAlias = { id: string; value: string };
@@ -249,7 +250,7 @@ export default function GenresPage() {
         </div>
         <p className="mt-3 text-xs text-neutral-500">Beispiel: {captionPreText.trim() || DEFAULT_CAPTION_PRETEXT} Samstag 31.10.26 Garage, Punk, Doom mit @dj im @location</p>
       </section>
-      <div className="mt-8"><button type="button" disabled={saving || loading} onClick={() => void loadGenres()} className="cc-button">Neu laden</button></div>
+      <div className="mt-8 flex flex-wrap gap-3"><GenreImport disabled={saving || loading} onImported={async message => { setNotice(message); await loadGenres(); }} /><button type="button" disabled={saving || loading} onClick={() => void loadGenres()} className="cc-button">Neu laden</button></div>
       {error && <p role="alert" className="mt-4 rounded-lg border border-red-400/40 bg-red-950/30 p-3 text-sm text-red-300">{error}</p>}
       {notice && <p role="status" className="mt-4 rounded-lg border border-white/15 p-3 text-sm">{notice}</p>}
       <DashboardModal open={editorOpen} onClose={closeEditor} title={editingId ? "Genre bearbeiten" : "Neues Genre"} description="Aktive Genres und Aliase für Genreerkennung und Discovery verwalten.">

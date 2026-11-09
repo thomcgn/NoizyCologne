@@ -1,0 +1,260 @@
+{
+  "schemaVersion": 1,
+  "genres": [
+    {
+      "canonicalName": "Rock",
+      "displayName": "Rock",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Alternative",
+      "displayName": "Alternative",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Indie",
+      "displayName": "Indie",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Punk",
+      "displayName": "Punk",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Punkrock",
+      "displayName": "Punkrock",
+      "active": true,
+      "aliases": [
+        "punk rock"
+      ]
+    },
+    {
+      "canonicalName": "Garage Rock",
+      "displayName": "Garage Rock",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Garage-Punk",
+      "displayName": "Garage-Punk",
+      "active": true,
+      "aliases": [
+        "garagepunk"
+      ]
+    },
+    {
+      "canonicalName": "Rock’n’Roll",
+      "displayName": "Rock’n’Roll",
+      "active": true,
+      "aliases": [
+        "rock n roll",
+        "rock'n roll",
+        "rock and roll",
+        "rnr",
+        "r&r"
+      ]
+    },
+    {
+      "canonicalName": "50s Rock’n’Roll",
+      "displayName": "50s Rock’n’Roll",
+      "active": true,
+      "aliases": [
+        "50s rnr",
+        "50's rnr",
+        "50s rock n roll"
+      ]
+    },
+    {
+      "canonicalName": "Wild R&B",
+      "displayName": "Wild R&B",
+      "active": true,
+      "aliases": [
+        "wild rnb",
+        "wild rhythm and blues"
+      ]
+    },
+    {
+      "canonicalName": "Rockabilly",
+      "displayName": "Rockabilly",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Psychobilly",
+      "displayName": "Psychobilly",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Emo",
+      "displayName": "Emo",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Hardcore",
+      "displayName": "Hardcore",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Metal",
+      "displayName": "Metal",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Metalcore",
+      "displayName": "Metalcore",
+      "active": true,
+      "aliases": [
+        "metal core"
+      ]
+    },
+    {
+      "canonicalName": "Electronicore",
+      "displayName": "Electronicore",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Heavy Metal",
+      "displayName": "Heavy Metal",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Thrash Metal",
+      "displayName": "Thrash Metal",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Death Metal",
+      "displayName": "Death Metal",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Black Metal",
+      "displayName": "Black Metal",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Doom",
+      "displayName": "Doom",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Hard Rock",
+      "displayName": "Hard Rock",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Psych",
+      "displayName": "Psych",
+      "active": true,
+      "aliases": [
+        "psychedelic"
+      ]
+    },
+    {
+      "canonicalName": "Ska",
+      "displayName": "Ska",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Soul",
+      "displayName": "Soul",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Northern Soul",
+      "displayName": "Northern Soul",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Popcorn",
+      "displayName": "Popcorn",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Rhythm & Blues",
+      "displayName": "Rhythm & Blues",
+      "active": true,
+      "aliases": [
+        "rnb"
+      ]
+    },
+    {
+      "canonicalName": "Post-Punk",
+      "displayName": "Post-Punk",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "New Wave",
+      "displayName": "New Wave",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Darkwave",
+      "displayName": "Darkwave",
+      "active": true,
+      "aliases": [
+        "dark wave"
+      ]
+    },
+    {
+      "canonicalName": "Gothic Rock",
+      "displayName": "Gothic Rock",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Britpop",
+      "displayName": "Britpop",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Singer-Songwriter",
+      "displayName": "Singer-Songwriter",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Folk",
+      "displayName": "Folk",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Pop",
+      "displayName": "Pop",
+      "active": true,
+      "aliases": []
+    },
+    {
+      "canonicalName": "Sonstiges",
+      "displayName": "Sonstiges",
+      "active": true,
+      "aliases": [
+        "other"
+      ]
+    }
+  ]
+}
