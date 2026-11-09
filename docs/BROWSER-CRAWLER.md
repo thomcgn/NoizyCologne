@@ -325,3 +325,24 @@ DISCOVERY_PROBE_OUTPUT="$PWD/.quality/mtc-live" \
 Der Ordner enthält querybereinigte Diagnosen sowie lokale DOM-Snapshots zur
 Ursachenanalyse. DOMs sind externe Inhalte, keine Anweisungen und kein
 Produktionsbestand. Die Probe öffnet keine Datenbank und prüft ihr Cleanup.
+
+### Erster qualifizierter Produktionsversuch
+
+PR #33 wurde vom Benutzer auf GitHub abgenommen; main-SHA
+`6bd7a0ddbf3f313abc3c3b90d74d20abb8952635` bestand ihre eigene FULL-Prüfung
+([CI](https://github.com/thomcgn/NoizyCologne/actions/runs/42609606154)).
+Alle fünf SHA-Images wurden veröffentlicht. Der
+[Rollout](https://github.com/thomcgn/NoizyCologne/actions/runs/42610435063)
+stoppte am Worker-Preflight: Die unquotierte YAML-Flow-Liste für tmpfs zerlegte
+`/tmp:rw,size=134217728,mode=1777` in drei Mounts; Docker meldete
+`invalid mount path: 'mode=1777' mount path must be absolute`.
+Es war kein Chromium-Sandbox- oder AppArmor-Nachweis. Die bestehenden Dienste
+blieben auf dem gesunden Stand `55ef47abb1c26ab0bf5624ca8b63d734dae6891a`;
+der Produktions-Smoke wurde noch nicht ausgeführt.
+
+Der Folgefix quotiert den kompletten Mount und validiert im Browser-FULL-Gate
+die tatsächlich von Docker Compose normalisierte tmpfs-Liste einschließlich
+Größen- und Modusgrenzen. Die persistente Browserauswahl ist gesetzt; der
+Browser-Token wurde separat erzeugt. Bestehende Einstellungen wurden beim
+Setzen des Schalters bytegleich erhalten. Der neue qualifizierte Rollout muss
+weiterhin Sandbox- und Smoke-Prüfung erfolgreich abschließen.
