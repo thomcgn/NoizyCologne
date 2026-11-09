@@ -1,27 +1,24 @@
 // Run against an isolated local Next server; see docs/DISCOVERY-REDESIGN.md.
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
+import {visualSession} from './fixtures/authSession.mjs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { scenario } from './fixtures/discovery.mjs';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright');
 const origin = process.env.DISCOVERY_VISUAL_URL ?? 'http://127.0.0.1:3107';
 assert.ok(['localhost', '127.0.0.1'].includes(new URL(origin).hostname), 'Local preview only');
-const secret = process.env.DISCOVERY_VISUAL_SECRET;
-assert.ok(secret, 'Use the same disposable secret as the isolated Next process');
 const out = resolve(process.env.DISCOVERY_VISUAL_OUTPUT ?? 'docs/screenshots/discovery');
 await mkdir(out, { recursive: true });
-const now = Math.floor(Date.now() / 1000);
-const payload = Buffer.from(JSON.stringify({sub: 'visual-fixture', iat: now, exp: now + 3600, nonce: 'local-ui-test'})).toString('base64url');
-const token = `${payload}.${createHmac('sha256', secret).update(payload).digest('base64url')}`;
+const {token, contextOptions} = await visualSession(origin);
 const browser = await chromium.launch({executablePath: process.env.CHROME_PATH ?? '/usr/bin/google-chrome-stable', headless: true});
 const results = [];
 try {
   for (const [name, width, theme] of [['desktop', 1440, 'dark'], ['empty', 1440, 'light'], ['history', 1440, 'dark'], ['running', 1440, 'dark'], ['source-error', 1440, 'light'], ['mobile', 390, 'dark'], ['mobile-navigation', 390, 'light'], ['mobile-dialog', 390, 'light']]) {
-    const context = await browser.newContext({viewport: {width, height: 1000}, deviceScaleFactor: 1});
+    const context = await browser.newContext({...contextOptions, viewport: {width, height: 1000}, deviceScaleFactor: 1});
     await context.addCookies([{name: 'noizy_team_session', value: token, url: origin}]);
-    await context.addInitScript(theme => localStorage.setItem('noizy-theme', theme), theme);
+    await context.addInitScript(theme => {localStorage.setItem('noizy-theme', theme); localStorage.setItem('noizy-view-discovery-new', 'cards'); localStorage.setItem('noizy-view-discovery-review', 'cards');}, theme);
     const data = scenario(name);
+    if (name === 'source-error') data.sources = data.sources.map(source => ({...source, venue_id: null, special_source: true, source_kind: 'PLATFORM', name: 'Fixture-Quelle'}));
     const calls = [];
     const errors = [];
     await context.route('**/*', async route => {
@@ -44,6 +41,7 @@ try {
     await page.getByRole('heading', {name: 'Discovery', exact: true}).waitFor();
     await page.waitForFunction(() => !document.querySelector('main')?.textContent.includes('Discovery wird geladen'), undefined, {timeout: 15000});
     await page.evaluate(() => document.fonts.ready);
+    if (name !== 'empty') await page.locator('details.discovery-review').first().locator('summary').click();
     if (name === 'empty') assert.equal(await page.locator('.discovery-card').count(), 0);
     else assert.equal(await page.locator('.discovery-card').count(), 4);
     if (name === 'history') {
@@ -65,7 +63,7 @@ try {
       assert.equal(await page.getByRole('link', {name: 'Discovery', exact: true}).getAttribute('aria-current'), 'page');
     }
     if (name === 'mobile-dialog') {
-      const trigger = page.locator('.discovery-card').first().getByRole('button');
+      const trigger = page.locator('.discovery-card').first().getByRole('button', {name: 'Ins Portfolio übernehmen', exact: true});
       await trigger.click();
       const dialog = page.getByRole('dialog');
       await dialog.waitFor();
@@ -74,6 +72,7 @@ try {
       await dialog.locator('button:enabled').last().focus();
       await page.keyboard.press('Tab');
       assert.equal(await dialog.locator('[data-modal-close]').evaluate(element => element === document.activeElement), true);
+      page.once('dialog', dialog => dialog.accept());
       await page.keyboard.press('Escape');
       assert.equal(await dialog.count(), 0);
       assert.equal(await trigger.evaluate(element => element === document.activeElement), true);

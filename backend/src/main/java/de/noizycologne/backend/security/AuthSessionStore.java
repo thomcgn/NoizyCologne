@@ -14,7 +14,7 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.function.Supplier;
 
-/** Bounded, shared PostgreSQL state. Every operation is serialized across API instances. */
+/** Bounded, shared PostgreSQL state. State changes are serialized across API instances; validation reads committed state. */
 @Service
 public final class AuthSessionStore {
     static final int SESSION_CAPACITY = 2048;
@@ -54,12 +54,14 @@ public final class AuthSessionStore {
 
     public boolean validate(String nonceHash, String generation) {
         hash(nonceHash); hash(generation);
-        return locked(() -> {
-            cleanup(clock.instant());
-            Long count = jdbc.queryForObject("SELECT count(*) FROM auth_sessions WHERE nonce_hash=? AND generation=? AND NOT revoked AND expires_at>?",
-                Long.class, nonceHash, generation, Timestamp.from(clock.instant()));
-            return Long.valueOf(1).equals(count);
-        });
+        // Reads must not turn parallel Caddy verification into spurious logouts.
+        // PostgreSQL observes committed revocations; the write lock only serializes state changes.
+        Instant now = clock.instant();
+        Long count = jdbc.queryForObject("SELECT count(*) FROM auth_sessions WHERE nonce_hash=? AND generation=? AND NOT revoked AND expires_at>?",
+            Long.class, nonceHash, generation, Timestamp.from(now));
+        boolean valid = Long.valueOf(1).equals(count);
+        if (!valid) jdbc.update("DELETE FROM auth_sessions WHERE nonce_hash=? AND expires_at<=?", nonceHash, Timestamp.from(now));
+        return valid;
     }
 
     public void revoke(String nonceHash) {

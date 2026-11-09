@@ -78,7 +78,9 @@ export async function POST(request: Request) {
       || typeof fields.password !== "string" || !fields.password
       || typeof fields.challenge !== "string")
     return failure("Bitte den Bestätigungstext und dein aktuelles Passwort eingeben.", 400);
-  const rate = loginRateLimit(request, session.sub);
+  let rate: { allowed: boolean; retryAfter: number };
+  try { rate = await loginRateLimit(request); }
+  catch { return failure("Anmeldespeicher nicht erreichbar. Kein Reset bestätigt.", 503); }
   if (!rate.allowed) return failure("Zu viele Versuche. Bitte später erneut versuchen.", 429);
   const confirmed = challenges.get(fields.challenge);
   challenges.delete(fields.challenge);
@@ -86,6 +88,7 @@ export async function POST(request: Request) {
     return failure("Bestätigung abgelaufen. Bitte die Vorschau erneut öffnen.", 409);
   if (!(await authenticate(session.sub, fields.password)))
     return failure("Das aktuelle Passwort ist nicht korrekt.", 401);
-  clearLoginRateLimit(request, session.sub);
+  try { await clearLoginRateLimit(request); }
+  catch { return failure("Anmeldespeicher nicht erreichbar. Kein Reset bestätigt.", 503); }
   return invokeBackend("POST");
 }

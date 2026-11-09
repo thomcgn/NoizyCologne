@@ -1,37 +1,27 @@
 // Local UI verification only; all API responses are synthetic and no writes are allowed.
 import assert from 'node:assert/strict';
-import {createHmac} from 'node:crypto';
+import {visualSession} from './fixtures/authSession.mjs';
 import {mkdir, writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
-import {scenario} from './fixtures/discovery.mjs';
+import {controlCenterFixture, mockControlCenterApi} from './fixtures/controlCenter.mjs';
 
 const {chromium} = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright');
 const origin = process.env.DISCOVERY_VISUAL_URL ?? 'http://127.0.0.1:3107';
 assert.ok(['localhost', '127.0.0.1'].includes(new URL(origin).hostname));
-const secret = process.env.DISCOVERY_VISUAL_SECRET;
-assert.ok(secret, 'A disposable local preview session secret is required');
 const out = resolve(process.env.PREFERENCES_VISUAL_OUTPUT ?? '.quality/ui-preferences');
 await mkdir(out, {recursive: true});
-const now = Math.floor(Date.now() / 1000);
-const payload = Buffer.from(JSON.stringify({sub: 'preferences-fixture', iat: now, exp: now + 3600, nonce: 'local-ui-test'})).toString('base64url');
-const token = `${payload}.${createHmac('sha256', secret).update(payload).digest('base64url')}`;
+const {token, contextOptions} = await visualSession(origin);
 const browser = await chromium.launch({executablePath: process.env.CHROME_PATH ?? '/usr/bin/google-chrome-stable', headless: true});
 const results = [];
 try {
   for (const width of [1440, 390]) {
-    const context = await browser.newContext({viewport: {width, height: 1000}, hasTouch: width === 390, isMobile: width === 390});
+    const context = await browser.newContext({...contextOptions, viewport: {width, height: 1000}, hasTouch: width === 390, isMobile: width === 390});
     await context.addCookies([{name: 'noizy_team_session', value: token, url: origin}]);
     const apiCalls = [];
     const errors = [];
-    await context.route('**/*', async route => {
-      const url = new URL(route.request().url());
-      if (url.origin !== origin) return route.abort();
-      if (!url.pathname.startsWith('/api/v1/')) return route.continue();
-      apiCalls.push(route.request().method());
-      const data = scenario('desktop');
-      const response = url.pathname === '/api/v1/discovery' ? {...data, candidates: data.candidates.filter(item => item.status === url.searchParams.get('filter'))} : [];
-      return route.fulfill({status: 200, contentType: 'application/json', body: JSON.stringify(response)});
-    });
+    await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
+    await mockControlCenterApi(context, controlCenterFixture(), {onRequest: request => apiCalls.push(request.method)});
+    await context.addInitScript(() => localStorage.setItem('noizy-view-discovery-new', 'cards'));
     const page = await context.newPage();
     page.setDefaultTimeout(15000);
     page.on('pageerror', error => errors.push(error.message));

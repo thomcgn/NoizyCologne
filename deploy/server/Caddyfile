@@ -18,6 +18,8 @@ tsa.noizycologne.de {
 	handle @api {
 		forward_auth frontend:3000 {
 			uri /api/auth/verify
+			header_up X-Noizy-Auth-Key {$AUTH_SERVICE_SECRET}
+			header_up X-Noizy-Client-IP {remote_host}
 		}
 		reverse_proxy api:8080 {
 			header_up X-Noizy-Api-Key {$API_TRUST_SECRET}
@@ -27,7 +29,10 @@ tsa.noizycologne.de {
 	}
 
 	handle {
-		reverse_proxy frontend:3000
+		reverse_proxy frontend:3000 {
+			header_up X-Noizy-Auth-Key {$AUTH_SERVICE_SECRET}
+			header_up X-Noizy-Client-IP {remote_host}
+		}
 	}
 }
 

@@ -35,7 +35,7 @@ services:
       FACTORY_RESET_SECRET: ${FACTORY_RESET_SECRET:-}
       API_TRUST_SECRET: ${API_TRUST_SECRET:?API_TRUST_SECRET is required}
       API_TRUST_PREVIOUS_SECRET: ${API_TRUST_PREVIOUS_SECRET:-}
-      AUTH_SERVICE_SECRET: ${AUTH_SERVICE_SECRET:-}
+      AUTH_SERVICE_SECRET: ${AUTH_SERVICE_SECRET:?AUTH_SERVICE_SECRET is required}
     depends_on:
       db:
         condition: service_healthy
@@ -57,6 +57,8 @@ services:
       TEAM_USER: ${TEAM_USER:?TEAM_USER is required}
       TEAM_PASSWORD_HASH: ${TEAM_PASSWORD_HASH:?TEAM_PASSWORD_HASH is required}
       TEAM_SESSION_SECRET: ${TEAM_SESSION_SECRET:?TEAM_SESSION_SECRET is required}
+      AUTH_SERVICE_SECRET: ${AUTH_SERVICE_SECRET:?AUTH_SERVICE_SECRET is required}
+      NOIZY_PUBLIC_ORIGIN: https://tsa.noizycologne.de
       FACTORY_RESET_SECRET: ${FACTORY_RESET_SECRET:-}
       NOIZY_INTERNAL_API_URL: http://api:8080
     expose: ["3000"]
@@ -79,6 +81,7 @@ services:
     restart: unless-stopped
     environment:
       ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required}
+      AUTH_SERVICE_SECRET: ${AUTH_SERVICE_SECRET:?AUTH_SERVICE_SECRET is required}
       API_TRUST_SECRET: ${API_TRUST_SECRET:?API_TRUST_SECRET is required}
     ports:
       - "80:80"

@@ -116,6 +116,20 @@ ensure_api_trust_secret() {
   export API_TRUST_SECRET="$value"
 }
 
+ensure_auth_service_secret() {
+  local value
+  value="$(setting AUTH_SERVICE_SECRET)"
+  if [[ -z "$value" ]]; then
+    if grep -q '^AUTH_SERVICE_SECRET=' .env; then echo 'AUTH_CONFIG_FAILED: existing key is empty' >&2; return 1; fi
+    value="$(od -An -N32 -tx1 /dev/urandom | tr -d '[:space:]')"
+    (( ${#value} == 64 )) || { echo 'AUTH_CONFIG_FAILED: key generation failed' >&2; return 1; }
+    printf '\nAUTH_SERVICE_SECRET=%s\n' "$value" >> .env
+    chmod 600 .env
+  fi
+  [[ "$value" =~ ^[A-Za-z0-9_-]{32,128}$ ]] || { echo 'AUTH_CONFIG_FAILED: invalid key format (value withheld)' >&2; return 1; }
+  export AUTH_SERVICE_SECRET="$value"
+}
+
 browser_preflight() {
   local release="$1" token profile available
   token="$(setting BROWSER_WORKER_TOKEN)"
@@ -199,6 +213,7 @@ main() {
   local -a compose images=(api frontend landing) services=(db api frontend)
   ensure_factory_reset_secret
   ensure_api_trust_secret
+  ensure_auth_service_secret
   if [[ "$browser" == true ]]; then
     browser_preflight "$release_dir"
     images+=(browser-worker browser-gateway); services+=(browser-worker browser-gateway)

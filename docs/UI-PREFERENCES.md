@@ -60,14 +60,16 @@ mindestens 44 px; Präferenz-Selects haben ebenfalls 44 px Mindesthöhe.
    müssen tatsächlich kürzer sein als komfortable. Neuladen und echte
    Tab-Synchronisierung werden im Browser geprüft.
 
-Browseraufruf gegen eine isolierte lokale Preview (wegwerfbares Session-Secret,
-Backendziel `http://127.0.0.1:9`; einen laufenden Entwicklungsserver nicht beenden):
+Browseraufruf mit kurzlebigem HTTPS-Next und lokalem registriertem Session-Store
+(keine bestehenden Entwicklungsprozesse oder Zugangsdaten ändern):
 
 ```sh
 PLAYWRIGHT_MODULE=/tmp/noizy-discovery-visual/node_modules/playwright/index.mjs \
-  DISCOVERY_VISUAL_SECRET="$TEAM_SESSION_SECRET" \
-  node frontend/tests/visual-preferences.mjs
+  AUTH_VISUAL_SCRIPT=visual-preferences.mjs \
+  node frontend/tests/visual-auth.mjs
 ```
+
+Die Auth-Fixtures und ihre Grenzen beschreibt [AUTH-PROXY.md](AUTH-PROXY.md).
 
 Playwright/Chrome und Preview-Vorgehen entsprechen
 [DISCOVERY-REDESIGN.md](DISCOVERY-REDESIGN.md). Screenshots und Messwerte werden

@@ -44,7 +44,7 @@ case "$*" in *'/proc/meminfo'*) echo "${TEST_RAM_KIB:-2097152}";; *) exec /usr/b
 ''')
         for executable in self.bin.iterdir():executable.chmod(0o755)
         self.env={**os.environ,'PATH':str(self.bin)+os.pathsep+os.environ['PATH'],'NOIZY_SERVER_DIR':str(self.server),'FAKE_LOG':str(self.log)}
-        for key in ('BROWSER_WORKER_TOKEN','BROWSER_SECCOMP_PROFILE','DISCOVERY_BROWSER_ENABLED','FACTORY_RESET_SECRET'):
+        for key in ('BROWSER_WORKER_TOKEN','BROWSER_SECCOMP_PROFILE','DISCOVERY_BROWSER_ENABLED','FACTORY_RESET_SECRET','API_TRUST_SECRET','API_TRUST_PREVIOUS_SECRET','AUTH_SERVICE_SECRET'):
             self.env.pop(key,None)
 
     def run_deploy(self,argument=SHA,**environment):
@@ -66,6 +66,29 @@ case "$*" in *'/proc/meminfo'*) echo "${TEST_RAM_KIB:-2097152}";; *) exec /usr/b
         self.assertNotIn(token.split('=',1)[1],result.stdout+result.stderr)
         self.assertEqual((self.server/'.active-browser-enabled').read_text().strip(),'true')
         self.assertEqual((self.server/'.previous-image-tag').read_text().strip(),SHA)
+
+    def test_auth_service_key_is_private_stable_and_never_logged(self):
+        first=self.run_deploy()
+        self.assertEqual(first.returncode,0,first.stderr)
+        before=(self.server/'.env').read_text()
+        key=next(line.split('=',1)[1] for line in before.splitlines() if line.startswith('AUTH_SERVICE_SECRET='))
+        self.assertRegex(key,r'^[0-9a-f]{64}$')
+        self.assertEqual((self.server/'.env').stat().st_mode & 0o777,0o600)
+        second=self.run_deploy()
+        self.assertEqual(second.returncode,0,second.stderr)
+        self.assertEqual((self.server/'.env').read_text(),before)
+        self.assertNotIn(key,first.stdout+first.stderr+second.stdout+second.stderr+self.log.read_text())
+        self.assertTrue(before.startswith(self.original))
+
+    def test_invalid_existing_auth_key_fails_before_rollout(self):
+        for value in ('','short','a'*32+' invalid'):
+            with self.subTest(value_length=len(value)):
+                self.log.write_text('')
+                (self.server/'.env').write_text(self.original+'AUTH_SERVICE_SECRET='+value+'\n')
+                result=self.run_deploy()
+                self.assertNotEqual(result.returncode,0)
+                self.assertIn('AUTH_CONFIG_FAILED',result.stderr)
+                self.assertFalse(any('up' in call['args'] or 'pull' in call['args'] for call in self.calls()))
 
     def test_missing_images_or_failed_sandbox_leave_active_release_untouched(self):
         for failure in ('FAIL_PULL','FAIL_SANDBOX'):
