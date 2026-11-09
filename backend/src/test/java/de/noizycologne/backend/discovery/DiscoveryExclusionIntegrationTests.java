@@ -80,7 +80,7 @@ class DiscoveryExclusionIntegrationTests {
             new EventPlace("Köln","DE","","","",null,null,false));
         processor.processSpecial(portal,event,null);
         String id=unassigned();
-        assertThat(store.candidate(id).get("status")).isEqualTo("NEEDS_REVIEW");
+        assertThat(store.candidate(id)).containsEntry("status","NEEDS_INQUIRY").containsEntry("matching_class","UNCLASSIFIABLE");
 
         var saved=reconciliation.saveBatch(List.of("Karneval","Dance","Querbeet"),"Falsche Musikgruppe",true);
         assertThat(saved.created()).isEqualTo(3);

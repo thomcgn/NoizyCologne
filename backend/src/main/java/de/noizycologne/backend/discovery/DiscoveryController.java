@@ -44,9 +44,9 @@ public class DiscoveryController {
                 "metrics",store.jdbc().queryForMap("""
                     SELECT count(*) FILTER (WHERE decision_origin='AUTOMATIC' AND status='IGNORED') AS "automaticallyIgnored",
                     count(*) FILTER (WHERE decision_origin='MANUAL' AND status='REJECTED') AS "manuallyRejected",
-                    count(*) FILTER (WHERE status IN ('NEEDS_REVIEW','NEEDS_INQUIRY','READY') AND (geo_status='INSIDE' OR source_id IN (SELECT id FROM discovery_sources WHERE venue_id IS NOT NULL))) AS "needsReview",
+                    count(*) FILTER (WHERE status IN ('NEEDS_REVIEW','NEEDS_INQUIRY','READY') AND NOT (matching_class='UNCLASSIFIABLE' AND decision_origin='AUTOMATIC' AND party_id IS NULL AND inquiry_status NOT IN ('PREPARED','SENT')) AND (geo_status='INSIDE' OR source_id IN (SELECT id FROM discovery_sources WHERE venue_id IS NOT NULL))) AS "needsReview",
                     count(*) FILTER (WHERE EXISTS (SELECT 1 FROM discovery_decisions d JOIN discovery_operations o ON o.id=d.operation_id WHERE d.candidate_id=discovery_candidates.id AND o.kind<>'SCAN' AND d.old_status IS NOT NULL)) AS reevaluated,
-                    count(*) FILTER (WHERE matching_class='UNVERIFIED' AND status NOT IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED') AND (geo_status='INSIDE' OR source_id IN (SELECT id FROM discovery_sources WHERE venue_id IS NOT NULL))) AS unverified,
+                    count(*) FILTER (WHERE matching_class IN ('UNVERIFIED','UNCLASSIFIABLE') AND status NOT IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED') AND (geo_status='INSIDE' OR source_id IN (SELECT id FROM discovery_sources WHERE venue_id IS NOT NULL))) AS unverified,
                     count(*) FILTER (WHERE matching_class='POSSIBLE_MATCH' AND status NOT IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED') AND (geo_status='INSIDE' OR source_id IN (SELECT id FROM discovery_sources WHERE venue_id IS NOT NULL))) AS possible,
                     count(*) FILTER (WHERE inquiry_status IN ('PREPARED','SENT') AND status NOT IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED') AND (geo_status='INSIDE' OR source_id IN (SELECT id FROM discovery_sources WHERE venue_id IS NOT NULL))) AS open,
                     count(*) FILTER (WHERE status IN ('REJECTED','DUPLICATE','IGNORED')) AS archive FROM discovery_candidates

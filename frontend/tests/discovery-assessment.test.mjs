@@ -380,7 +380,7 @@ test('source comparison displays title, date and location without raw JSON',asyn
 test('Discovery separates eligible new series, protected decisions and imported history without debug cards', async () => {
   const unknown = candidate({ id: 'new', title: 'Neue Indie-Nacht', assessment: assessment({ recognition: {status: 'NONE', parties: []} }), genreCoverage: {matched: 2, total: 4, percent: 50, names: ['Emo', 'Indie'], eligible: true} });
   await mount([unknown, candidate({id: 'protected', title: 'Manuelle Rückfrage', inquiry_status: 'SENT', decision_origin: 'MANUAL'}), candidate({id: 'imported', title: 'Historischer Termin', status: 'IMPORTED', calendar_entry_id: 'entry'})]);
-  const fresh = document.querySelector('section[aria-label="Neue Partyreihen"]');
+  const fresh = document.querySelector('section[aria-label="Relevant · Neue Partyreihen"]');
   const review = document.querySelector('section[aria-label="Prüfbedarf"]');
   assert.equal(fresh.querySelectorAll('[data-record-id]').length, 1);
   assert.match(fresh.textContent, /Neue Indie-Nacht/);
@@ -447,7 +447,7 @@ test('Prüfbedarf starts collapsed, shows its live count and preserves review co
   assert.equal(accordion.open,false);
   assert.equal(summary.getAttribute('aria-expanded'),'false');
   assert.match(summary.textContent,/Prüfbedarf 2/);
-  assert.equal(document.querySelector('section[aria-label="Neue Partyreihen"] details'),null);
+  assert.equal(document.querySelector('section[aria-label="Relevant · Neue Partyreihen"] details'),null);
 
   await settle(()=>summary.click());
   assert.equal(accordion.open,true);
@@ -905,7 +905,7 @@ test('comma-separated keyword rules are created together and individually editab
 test('keyword warnings on a confirmed venue stay visible in review rather than new-series promotion',async()=>{
  await mount(candidate({keywordWarning:'Schlagwortfilter „B2B“: Ausdrücklich prüfen',assessment:assessment({recognition:{status:'NONE',parties:[]}}),genreCoverage:{eligible:true,percent:100,names:['Emo']}}));
  assert.match(document.querySelector('[aria-label="Prüfbedarf"]').textContent,/Schlagwortfilter.*B2B.*Ausdrücklich prüfen/);
- assert.equal(document.querySelector('[aria-label="Neue Partyreihen"] [data-record-id]'),null);
+ assert.equal(document.querySelector('[aria-label="Relevant · Neue Partyreihen"] [data-record-id]'),null);
 });
 
 test('Discovery portfolio recurrence requires confirmed location and start date and only creates planned entries', async () => {
@@ -926,3 +926,14 @@ test('Discovery portfolio recurrence requires confirmed location and start date 
   assert.equal(control('Partyreihe zuordnen').value,'approved');
   assert.equal(reloadedEntries,1);assert.ok(!calls.some(call=>call.url.endsWith('/confirm')||/publish|instagram/.test(call.url)));
 });
+
+ test('Unclassifiable events are separate from relevant editorial decisions and stay inspectable', async () => {
+  await mount([candidate({id:'unclear',title:'Unbekannte Clubnacht',matching_class:'UNCLASSIFIABLE',assessment:assessment({recognition:{status:'NONE',parties:[]}}),genreCoverage:{total:0,percent:0,eligible:false,names:[],basis:'MISSING'}}),candidate({id:'known',title:'Misery',party_id:'misery'})]);
+  const unclear=document.querySelector('[aria-label="Unklare Angaben"]');
+  assert.match(unclear.textContent,/Nicht ausreichend klassifizierbar/);
+  assert.ok(unclear.querySelector('[data-record-id="unclear"]'));
+  assert.equal(document.querySelector('[aria-label="Prüfbedarf"] [data-record-id="unclear"]'),null);
+  assert.ok(document.querySelector('[aria-label="Prüfbedarf"] [data-record-id="known"]'));
+  assert.ok(calls.some(call=>call.url.endsWith('?filter=UNCLEAR')));
+  assert.ok(calls.some(call=>call.url.endsWith('?filter=RELEVANT')));
+ });

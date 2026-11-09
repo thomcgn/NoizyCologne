@@ -281,13 +281,13 @@ class SpecialSourcesIntegrationTests {
         } finally {store.jdbc().update("DELETE FROM discovery_sources WHERE id=?",other);}
     }
 
-    @Test void outsidePortalEventsNeverReachGenreMatchingOrCandidateCreation() throws Exception {
+    @Test void outsidePortalEventsAreArchivedWithoutGenreMatchingOrNormalReview() throws Exception {
         for(String city:List.of("Bonn","Aachen","Berlin","Frankfurt")) {
             var event=new EventExtractor.Event(city,"Köln Indie Party","https://qrushapp.de/koeln/events/"+city,List.of("2027-01-09"),"Köln Indie Emo Party","","Gleis8",new EventPlace(city,"DE","Echte Straße 12","","",null,null,false));
             processor.processSpecial(source,event,null);
         }
         verify(matcher,never()).match(any(),anyString(),anyList(),anyMap(),anyCollection(),anyBoolean());
-        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates WHERE source_id=?",Integer.class,source)).isZero();
+        assertThat(store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates WHERE source_id=? AND status='IGNORED'",Integer.class,source)).isEqualTo(4);
         assertThat(store.jdbc().queryForList("SELECT status FROM discovery_geo_events WHERE source_id=?",String.class,source)).containsOnly("OUTSIDE").hasSize(4);
         mvc.perform(get("/api/v1/discovery?filter=NEEDS_REVIEW")).andExpect(status().isOk()).andExpect(jsonPath("$.candidates.length()").value(0));
     }

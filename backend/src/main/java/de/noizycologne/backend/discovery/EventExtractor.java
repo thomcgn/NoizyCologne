@@ -49,7 +49,6 @@ public class EventExtractor {
             try { collect(json.readTree(page.body()), events, page.url().toString(), 0); }
             catch (RuntimeException e) { malformed = true; }
         }
-        if(concertPage && events.stream().noneMatch(event -> EventNormalizer.text(event.title()).matches(".*\\b(aftershow ?party|after ?party)\\b.*") && !PartyOnlyPolicy.concert(event))) return new Extraction(List.of(),"EXCLUDED_CONCERTS");
         List<@NonNull HtmlEvent> htmlEvents=new ArrayList<>();
         if (events.isEmpty()) {
             @NonNull String selector = profile.itemSelector().isBlank()
@@ -112,8 +111,9 @@ public class EventExtractor {
             }
         }
         boolean concerts = events.stream().anyMatch(PartyOnlyPolicy::concert);
-        events.removeIf(PartyOnlyPolicy::concert);
-        String status = !events.isEmpty() ? "EVENTS_FOUND" : concerts ? "EXCLUDED_CONCERTS" : malformed ? "UNINTERPRETABLE"
+        boolean concertContext=concertPage && events.stream().noneMatch(event -> EventNormalizer.text(event.title()).matches(".*\\b(aftershow ?party|after ?party)\\b.*") && !PartyOnlyPolicy.concert(event));
+        if (concertContext) events.replaceAll(event -> new Event(event.identity(),event.title(),event.url(),event.starts(),event.evidence()+"\nKonzert",event.state(),event.location(),event.place()));
+        String status = !events.isEmpty() ? (concertContext || events.stream().allMatch(PartyOnlyPolicy::concert) ? "EXCLUDED_CONCERTS" : "EVENTS_FOUND") : concerts ? "EXCLUDED_CONCERTS" : malformed ? "UNINTERPRETABLE"
                 : requiresRendering(doc) ? "JAVASCRIPT_REQUIRED"
                 : doc.body().text().matches("(?is).*(keine (veranstaltungen|events|termine)|no (upcoming )?events).*") ? "NO_EVENTS" : "UNINTERPRETABLE";
         return new Extraction(events, status);
@@ -280,8 +280,7 @@ public class EventExtractor {
             && page.body().lines().filter(line -> line.equals("BEGIN:VEVENT")).count()==events.size()
             && events.stream().allMatch(event -> !event.starts().isEmpty() && event.starts().stream().allMatch(start -> EventNormalizer.date(start)!=null));
         boolean concerts = events.stream().anyMatch(PartyOnlyPolicy::concert);
-        events.removeIf(PartyOnlyPolicy::concert);
-        return new Extraction(events, events.isEmpty() ? (concerts ? "EXCLUDED_CONCERTS" : !page.body().contains("BEGIN:VEVENT") && page.body().contains("END:VCALENDAR") ? "NO_EVENTS" : "UNINTERPRETABLE") : "EVENTS_FOUND", complete);
+        return new Extraction(events, !events.isEmpty() && events.stream().allMatch(PartyOnlyPolicy::concert) ? "EXCLUDED_CONCERTS" : events.isEmpty() ? (concerts ? "EXCLUDED_CONCERTS" : !page.body().contains("BEGIN:VEVENT") && page.body().contains("END:VCALENDAR") ? "NO_EVENTS" : "UNINTERPRETABLE") : "EVENTS_FOUND", complete);
     }
     private static String first(Map<String, List<@NonNull String>> map, String key) { return map.getOrDefault(key, List.of("")).get(0); }
     private static String riskyState(String text) {

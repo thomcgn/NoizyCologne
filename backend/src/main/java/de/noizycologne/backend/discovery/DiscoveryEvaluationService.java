@@ -92,8 +92,20 @@ public class DiscoveryEvaluationService {
         return evaluate(event,venueId,venueName,approved,rules,true);
     }
     private EventMatcher.Match evaluate(EventExtractor.Event event,String venueId,String venueName,boolean approved,Rules rules,boolean applyKeywords) {
+        var place=geography.assess(event);
+        if (place.status().equals("OUTSIDE")) return new EventMatcher.Match("IGNORED",null,place.reason(),"IGNORED");
         var keyword=applyKeywords ? keywords.match(event) : null;
         if(keyword!=null) return new EventMatcher.Match("IGNORED",null,keyword.explanation(),"UNVERIFIED");
+        var recognition=PartySeriesRecognition.recognize(event.title(),rules.parties(),rules.aliases());
+        if (recognition.parties().isEmpty() && !PartyOnlyPolicy.concert(event) && !EventMatcher.unrelated(event)) {
+            var coverage=GenreCoverage.assess(event,rules.coverageGenres().isEmpty() ? genres.coverageGenres() : rules.coverageGenres());
+            if (coverage.total()>0 && coverage.matched()==0)
+                return new EventMatcher.Match("IGNORED",null,"Explizite Veranstaltungsgenres ohne Portfolio-Bezug: "+String.join(", ",coverage.sourceNames()),"IGNORED");
+            if (!coverage.eligible())
+                return new EventMatcher.Match("NEEDS_INQUIRY",null,coverage.total()==0
+                    ? "Nicht ausreichend klassifizierbar: keine belegten Veranstaltungsgenres; "+String.join("; ",verification(event,venueId,venueName).reasons())
+                    : "Nicht ausreichend klassifizierbar: Genre-Match unter 50 % ("+coverage.percent()+" %)","UNCLASSIFIABLE");
+        }
         var result=matcher.match(event,venueId==null ? "" : verifiedVenueName(event,venueId,venueName),rules.parties(),rules.aliases(),rules.genres(),venueId!=null && approved);
         if (venueId==null && !result.status().equals("IGNORED")) return new EventMatcher.Match("NEEDS_REVIEW",result.partyId(),"Veranstaltungsort aus der Sonderquelle redaktionell zuordnen; "+result.reason(),result.classification());
         if (!result.status().equals("READY")) return result;
@@ -150,7 +162,7 @@ public class DiscoveryEvaluationService {
     }
     public EventMatcher.Match evaluate(Map<String,Object> row,Rules rules) {
         if(!keywords.released(row) && keywords.match(event(row))!=null) return evaluate(event(row),(String)row.get("venue_id"),(String)row.get("venue_name"),Boolean.TRUE.equals(row.get("approved")),rules);
-        if(Boolean.TRUE.equals(row.get("special_source"))) {var geo=geography.assess(event(row));if(!geo.inside())return new EventMatcher.Match("NEEDS_REVIEW",(String)row.get("party_id"),"Standortklärung: "+geo.reason(),"UNVERIFIED");}
+        if(Boolean.TRUE.equals(row.get("special_source"))) {var geo=geography.assess(event(row));if(!geo.inside() && !geo.status().equals("OUTSIDE"))return new EventMatcher.Match("NEEDS_REVIEW",(String)row.get("party_id"),"Standortklärung: "+geo.reason(),"UNVERIFIED");}
         return evaluate(event(row),(String)row.get("venue_id"),(String)row.get("venue_name"),Boolean.TRUE.equals(row.get("approved")),rules,!keywords.released(row));
     }
 }

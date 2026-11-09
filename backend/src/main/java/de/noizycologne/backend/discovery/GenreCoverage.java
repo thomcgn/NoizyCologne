@@ -37,14 +37,14 @@ public final class GenreCoverage {
         for (String declared:declaredGenres(event.evidence())) addDeclared(source,declared,genres);
         Map<String,Genre> defaults=new LinkedHashMap<>();
         for (String standard:standards) if (!standard.isBlank()) addDeclared(defaults,standard,genres);
-        var basis=source.isEmpty() ? defaults : source;
+        var basis=defaults.isEmpty() ? source : defaults;
         List<@NonNull String> names=new ArrayList<>(),sourceNames=new ArrayList<>(),standardNames=new ArrayList<>();
         for (var genre:source.values()) sourceNames.add(Objects.requireNonNull(genre.displayName()));
         for (var genre:defaults.values()) standardNames.add(Objects.requireNonNull(genre.displayName()));
         for (var genre:basis.values()) if (genre.active()) names.add(Objects.requireNonNull(genre.displayName()));
         int total=basis.size(),matched=names.size();
         return new Result(matched,total,total==0 ? 0 : matched*100/total,List.copyOf(names),total>0 && matched*2>=total,
-            List.copyOf(sourceNames),List.copyOf(standardNames),!source.isEmpty() ? "SOURCE" : !defaults.isEmpty() ? "STANDARD" : "MISSING",suggestedStandards(event,genres));
+            List.copyOf(sourceNames),List.copyOf(standardNames),!defaults.isEmpty() ? "STANDARD" : !source.isEmpty() ? "SOURCE" : "MISSING",suggestedStandards(event,genres));
     }
     /** Only explicit source declarations suggest defaults; title/text matches remain coverage evidence. */
     private static List<@NonNull String> suggestedStandards(EventExtractor.Event event,List<@NonNull Genre> genres) {

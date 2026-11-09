@@ -54,7 +54,7 @@ public class DiscoveryResetService {
                 var geo=geography.assess(evaluator.event(row));
                 geographical.add(new GeographicItem((String)row.get("id"),geo.status(),geo.reason(),geo.venueId()));
                 revisions.add("geo|"+row.get("id")+"|"+row.get("updated_at")+"|"+row.get("raw_event"));
-                if(!geo.inside() && keywords.match(evaluator.event(row))==null && !"KEYWORD_FILTER".equals(row.get("filter_origin"))){if(!"AUTOMATIC".equals(row.get("decision_origin")))preserved++;if(manualRejection)protectedRejections++;continue;}
+                if(!geo.inside() && !geo.status().equals("OUTSIDE") && keywords.match(evaluator.event(row))==null && !"KEYWORD_FILTER".equals(row.get("filter_origin"))){if(!"AUTOMATIC".equals(row.get("decision_origin")))preserved++;if(manualRejection)protectedRejections++;continue;}
             }
             // An editor's decision on a registered venue is not an automatic suggestion.
             // In particular, reset/re-evaluation must not discard a manually edited date,

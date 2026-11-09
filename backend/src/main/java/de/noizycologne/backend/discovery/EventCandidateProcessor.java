@@ -32,7 +32,7 @@ public class EventCandidateProcessor {
         store.jdbc().execute("SELECT pg_advisory_xact_lock(73624602)");
         if (!Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM discovery_sources WHERE id=? AND venue_id IS NULL AND enabled AND deleted_at IS NULL)",Boolean.class,sourceId))) return;
         var finding=geography.record(sourceId,sourceEvent);
-        if(!finding.result().inside() && keywords.match(finding.event())==null) return;
+        if (finding.result().status().equals("UNRESOLVED") && keywords.match(finding.event())==null && !PartyOnlyPolicy.concert(finding.event())) return;
         var event=finding.event();
         String identity=EventChangeMonitor.identity(event),fingerprint=EventChangeMonitor.fingerprint(event);
         var previous=store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE (source_id=? AND identity_key=?) OR id=?",sourceId,identity,finding.candidateId());
@@ -47,8 +47,7 @@ public class EventCandidateProcessor {
             if(!matching.isEmpty()) previous=matching;
             var prior=Objects.requireNonNull(previous.getFirst());
             if(prior.get("event_date") instanceof java.sql.Date date && !date.toLocalDate().equals(day)
-                && List.of("REJECTED","IGNORED").contains(prior.get("status")) && EventLifecycle.signal(event).equals("ACTIVE")
-                && EventVerification.assess(event,"").sufficient()) {
+                && prior.get("calendar_entry_id")==null && ("AUTOMATIC".equals(prior.get("decision_origin")) || List.of("REJECTED","IGNORED").contains(prior.get("status"))) && EventLifecycle.signal(event).equals("ACTIVE")) {
                 identity=EventNormalizer.hash("edition|"+EventChangeMonitor.identity(event)+"|"+day);
                 previous=store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE source_id=? AND identity_key=?",sourceId,identity);
             }
@@ -108,7 +107,6 @@ public class EventCandidateProcessor {
             return;
         }
         if (old!=null && (old.get("venue_id")!=null || old.get("calendar_entry_id")!=null)) return;
-        if (PartyOnlyPolicy.concert(event) && old==null && keywords.match(event)==null) return;
         if (old!=null && fingerprint.equals(old.get("fingerprint")) && EventMatcher.VERSION.equals(old.get("matcher_version")) && result.reason().equals(old.get("reason"))) return;
         var days=event.starts().stream().map(EventNormalizer::date).distinct().toList();
         var times=event.starts().stream().map(EventNormalizer::time).distinct().toList();
@@ -134,8 +132,12 @@ public class EventCandidateProcessor {
     private static boolean sameUnassignedOccurrence(EventExtractor.Event before,EventExtractor.Event event) {
         if(EventNormalizer.distinctTimedOccurrences(before,event) || !EventNormalizer.text(before.title()).equals(EventNormalizer.text(event.title()))) return false;
         if(event.identity().startsWith("https://") && event.identity().equals(before.identity())) return true;
+        // Same title, day and reported place across portals identify one occurrence.
+        // Confirmed places must agree; different start times were rejected above.
         return !event.location().isBlank() && EventNormalizer.text(event.location()).equals(EventNormalizer.text(before.location()))
-            && CanonicalSourceUrl.reference(before.url()).equals(CanonicalSourceUrl.reference(event.url()));
+            && !event.place().conflicting() && !before.place().conflicting()
+            && (CologneGeography.keys(event.place()).stream().anyMatch(CologneGeography.keys(before.place())::contains)
+                || !event.place().city().isBlank() && CologneGeography.name(event.place().city()).equals(CologneGeography.name(before.place().city())));
     }
     private static boolean compatibleFallback(EventExtractor.Event before,EventExtractor.Event current,String venue) {
         if (!EventNormalizer.text(before.title()).equals(EventNormalizer.text(current.title()))
@@ -193,9 +195,9 @@ public class EventCandidateProcessor {
         }
         if(!previous.isEmpty() && date!=null) {
             var prior=Objects.requireNonNull(previous.getFirst());
-            var priorDay=EventChangeMonitor.date(evaluator.event(prior));
-            if(priorDay!=null && !priorDay.equals(date) && ("REJECTED".equals(prior.get("status")) || "IGNORED".equals(prior.get("status")))
-                && EventLifecycle.signal(event).equals("ACTIVE") && evaluator.verification(event,venue.getId(),venue.getName()).sufficient()) {
+            var priorDay=prior.get("event_date") instanceof java.sql.Date storedDay ? storedDay.toLocalDate() : EventChangeMonitor.date(evaluator.event(prior));
+            if(priorDay!=null && !priorDay.equals(date) && prior.get("calendar_entry_id")==null
+                && ("AUTOMATIC".equals(prior.get("decision_origin")) || List.of("REJECTED","IGNORED").contains(prior.get("status"))) && EventLifecycle.signal(event).equals("ACTIVE")) {
                 identity=EventNormalizer.hash("edition|"+EventChangeMonitor.identity(event)+"|"+date);
                 previous=store.jdbc().queryForList("SELECT * FROM discovery_candidates WHERE venue_id=? AND identity_key=?",venue.getId(),identity);
             }
@@ -238,7 +240,6 @@ public class EventCandidateProcessor {
                 evaluator.raw(event),fingerprint,event.evidence(),url,old.get("id"));
             return;
         }
-        if (PartyOnlyPolicy.concert(event) && old==null && keywords.match(event)==null) return;
         if (old!=null && fingerprint.equals(old.get("fingerprint")) && old.get("calendar_entry_id")!=null) return;
         var match=evaluator.evaluate(event,venue.getId(),venue.getName(),approved,new DiscoveryEvaluationService.Rules(known,aliases,genres));
         // Alias/source/calendar changes can alter the result without changing the event bytes.

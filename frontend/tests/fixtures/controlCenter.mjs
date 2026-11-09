@@ -23,7 +23,7 @@ export async function mockControlCenterApi(context, data, {onRequest, state = 'p
     let response;
     if (url.pathname === '/api/v1/discovery') {
       const filter = url.searchParams.get('filter');
-      response = {...data.discovery, candidates: ['NEEDS_REVIEW', 'READY', 'NEEDS_INQUIRY'].includes(filter) ? data.discovery.candidates.filter(item => item.status === filter) : data.discovery.history.filter(item => filter === 'IMPORTED' ? item.status === 'IMPORTED' : filter === 'AUTOMATIC_IGNORED' ? item.status === 'IGNORED' : true)};
+      response = {...data.discovery, candidates: ['RELEVANT', 'UNCLEAR', 'NEEDS_REVIEW', 'READY', 'NEEDS_INQUIRY'].includes(filter) ? data.discovery.candidates.filter(item => (filter === 'RELEVANT' ? item.matching_class !== 'UNCLASSIFIABLE' : filter === 'UNCLEAR' ? item.matching_class === 'UNCLASSIFIABLE' : item.status === filter)) : data.discovery.history.filter(item => filter === 'IMPORTED' ? item.status === 'IMPORTED' : filter === 'AUTOMATIC_IGNORED' ? item.status === 'IGNORED' : true)};
     } else if (url.pathname === '/api/v1/discovery/changes') response = {changes: [], cancellations: []};
     else if (/\/discovery\/candidates\/[^/]+$/.test(url.pathname)) response = data.discovery.candidates.find(item => item.id === url.pathname.split('/').at(-1));
     else if (url.pathname.endsWith('/sources')) response = data.discovery.sources;

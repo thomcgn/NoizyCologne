@@ -4,6 +4,11 @@ export function isOpen(candidate: Candidate) {
   return !(candidate.special_source && candidate.geo_status && candidate.geo_status!=="INSIDE") && !candidate.calendar_entry_id && !["IMPORTED", "REJECTED", "DUPLICATE", "IGNORED"].includes(candidate.status);
 }
 
+export function isUnclear(candidate: Candidate) {
+  return isOpen(candidate) && candidate.matching_class === "UNCLASSIFIABLE" && candidate.decision_origin === "AUTOMATIC" &&
+    !candidate.party_id && !["PREPARED", "SENT"].includes(candidate.inquiry_status);
+}
+
 export function canApprovePortfolio(candidate: Candidate) {
   const assessment = candidate.assessment;
   return isOpen(candidate) && !candidate.party_id && candidate.title.length <= 200 &&
@@ -11,12 +16,13 @@ export function canApprovePortfolio(candidate: Candidate) {
 }
 
 export function isNewSeries(candidate: Candidate) {
-  return !candidate.keywordWarning && canApprovePortfolio(candidate) && !!candidate.genreCoverage?.eligible && !candidate.assessment?.importBlockers.length && candidate.decision_origin === "AUTOMATIC" &&
+  return !isUnclear(candidate) && !candidate.keywordWarning && canApprovePortfolio(candidate) && !!candidate.genreCoverage?.eligible && !candidate.assessment?.importBlockers.length && candidate.decision_origin === "AUTOMATIC" &&
     !["PREPARED", "SENT"].includes(candidate.inquiry_status) &&
     candidate.assessment?.verification.status === "VERIFIED" && !!candidate.event_date;
 }
 
 export function reviewReason(candidate: Candidate) {
+  if (isUnclear(candidate)) return candidate.reason;
   if(candidate.keywordWarning) return candidate.keywordWarning;
   const assessment = candidate.assessment;
   if (["PREPARED", "SENT"].includes(candidate.inquiry_status)) return "Eine Rückfrage ist noch offen. Die Antwort bitte hier ergänzen.";

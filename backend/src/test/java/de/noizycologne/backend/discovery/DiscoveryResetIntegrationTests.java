@@ -85,7 +85,7 @@ class DiscoveryResetIntegrationTests {
         var preview=resets.preview(new DiscoveryResetService.Selection(DiscoveryResetService.Mode.ALL,false));
         assertThat(preview.missingRaw()).isEqualTo(1);
         resets.apply(request(DiscoveryResetService.Mode.ALL,false));
-        assertThat(store.candidate(id)).containsEntry("matching_class","UNVERIFIED").containsEntry("status","NEEDS_INQUIRY");
+        assertThat(store.candidate(id)).containsEntry("matching_class","UNCLASSIFIABLE").containsEntry("status","NEEDS_INQUIRY");
         assertThat(store.candidate(id).get("reason").toString()).contains("Rohdaten");
     }
     @Test void importedCalendarEntryAndSourcesAreUnchangedByReset() {
