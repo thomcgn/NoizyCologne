@@ -15,7 +15,9 @@ const {token, contextOptions} = await visualSession(origin);
 const browser = await chromium.launch({executablePath: process.env.CHROME_PATH ?? '/usr/bin/google-chrome-stable', headless: true});
 const results = [];
 try {
-  const scenarios = phase === 11
+  const scenarios = phase === 12
+    ? ['graphite', 'midnight', 'light'].flatMap(theme => ['compact', 'comfortable'].flatMap(density => [390, 768, 1280].map(width => [theme, density, width, 'populated'])))
+    : phase === 11
     ? ['graphite', 'midnight', 'light'].flatMap(theme => ['compact', 'comfortable'].flatMap(density => [375, 390, 768, 1280].map(width => [theme, density, width, 'populated'])))
     : [6, 7, 8, 9, 10].includes(phase)
     ? ['graphite', 'midnight', 'light'].flatMap(theme => ['compact', 'comfortable'].flatMap(density => [1440, 390].map(width => [theme, density, width, 'populated'])))
@@ -25,20 +27,21 @@ try {
     ['graphite', 'compact', 1440, 'empty'], ['light', 'compact', 1440, 'error'], ['midnight', 'compact', 320, 'populated'],
   ];
   for (const [theme, density, width, state] of scenarios) {
-    const context = await browser.newContext({...contextOptions, viewport: {width, height: 1000}, hasTouch: width < 1024, isMobile: width < 768});
+    const context = await browser.newContext({...contextOptions, viewport: {width, height: 1000}, reducedMotion: phase === 12 ? 'reduce' : 'no-preference', hasTouch: width < 1024, isMobile: width < 768});
     await context.addCookies([{name: 'noizy_team_session', value: token, url: origin}]);
     await context.addInitScript(({theme, density}) => {localStorage.setItem('noizy-theme', theme); localStorage.setItem('noizy-density', density);}, {theme, density});
     const errors = [];
     const calls = [];
     const data = controlCenterFixture(state);
+    if (phase === 12) data.genres = Array.from({length: 105}, (_, index) => ({id: `compact-${index}`, canonicalName: `canonical-${index}`, displayName: index === 0 ? 'Genre 000 – langer Anzeigename mit mehreren Wörtern' : `Genre ${String(index).padStart(3, '0')}`, active: index !== 0, aliases: index === 0 ? Array.from({length: 20}, (_, n) => ({id: `alias-${n}`, value: `Synonym ${n} – zusätzliche Beschreibung`})) : []}));
     await mockControlCenterApi(context, data, {state, onRequest: request => calls.push(request)});
     const saveFixture = phase === 7 ? await mockSaveResults(context, data, calls) : null;
     const importFixture = phase === 8 ? await mockImportRefresh(context, data, calls) : null;
-    const genreImportFixture = [9, 11].includes(phase) ? await mockGenreImport(context, data) : null;
+    const genreImportFixture = [9, 11, 12].includes(phase) ? await mockGenreImport(context, data) : null;
     const resetFixture = phase === 10 ? await mockFactoryReset(context) : null;
     const nativeDialogs = [];
     const page = await context.newPage();
-    if ([7, 8, 9, 11].includes(phase)) page.on('dialog', dialog => {nativeDialogs.push(dialog.type()); void dialog.dismiss().catch(error => errors.push(error.message));});
+    if ([7, 8, 9, 11, 12].includes(phase)) page.on('dialog', dialog => {nativeDialogs.push(dialog.type()); void dialog.dismiss().catch(error => errors.push(error.message));});
     page.setDefaultTimeout(15000);
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(`${origin}/dashboard`);
@@ -91,8 +94,8 @@ try {
       if (phase === 10 && route !== '/dashboard/settings') continue;
       if (phase === 8 && route !== '/dashboard/vorschlaege') continue;
       if (phase === 7 && !['/dashboard/partys', '/dashboard/locations'].includes(route)) continue;
-      if ([6, 9, 11].includes(phase) && route !== '/dashboard/settings/genres') continue;
-      if (![6, 9, 11].includes(phase) && route === '/dashboard/settings/genres') continue;
+      if ([6, 9, 11, 12].includes(phase) && route !== '/dashboard/settings/genres') continue;
+      if (![6, 9, 11, 12].includes(phase) && route === '/dashboard/settings/genres') continue;
       if (phase === 5 && route !== '/dashboard/redaktion') continue;
       if (phase === 1 && !['/dashboard/settings', '/dashboard/automatisierung'].includes(route)) continue;
       if (phase === 2 && route !== '/dashboard/vorschlaege') continue;
@@ -116,8 +119,8 @@ try {
         assert.equal(await page.getByRole('button', {name: 'Alle Genres löschen', exact: true}).count(), 0, 'No missing deletion API is presented as available');
         const toolbar = page.getByRole('group', {name: 'Genre-Aktionen', exact: true});
         assert.equal(await toolbar.locator('.cc-button-primary').count(), 1);
-        assert.equal(await toolbar.locator('.cc-button-primary').innerText(), 'Genres importieren');
-        assert.equal(await page.getByRole('region', {name: 'Basisgenres wiederherstellen', exact: true}).getByRole('button', {name: 'Basisgenres wiederherstellen', exact: true}).count(), 1);
+        assert.equal(await toolbar.locator('.cc-button-primary').innerText(), '+ Genre anlegen');
+        assert.equal(await toolbar.locator('details').getByRole('button', {name: 'Basisgenres wiederherstellen', exact: true, includeHidden: true}).count(), 1);
         if (width < 768) for (const action of await toolbar.getByRole('button').all()) {
           const bounds = await action.boundingBox(); assert.ok(bounds && bounds.height >= 44, `${name}: mobile action target`);
         }
@@ -135,15 +138,20 @@ try {
         await editor.waitFor({state: 'detached'});
         assert.equal(await create.evaluate(element => element === document.activeElement), true);
       }
-      if ([9, 11].includes(phase)) await checkGenreImport(page, genreImportFixture, name);
+      if (phase === 12) await checkGenreRedesign(page, data, name);
+      if ([9, 11, 12].includes(phase)) await checkGenreImport(page, genreImportFixture, name);
       if (phase === 6) {
         await page.locator('[data-record-id]').first().waitFor();
+        await page.locator('[data-record-id]').first().getByRole('button', {name: 'Bearbeiten', exact: true}).click();
+        await page.getByRole('button', {name: '+ Alias hinzufügen', exact: true}).click();
         const aliasInput = page.getByRole('textbox', {name: 'Neuer Alias für Emo', exact: true});
         const aliasBounds = await aliasInput.boundingBox();
         assert.ok(aliasBounds && aliasBounds.width >= 120 && aliasBounds.height >= 40, `${name}: alias field must remain usable`);
         await aliasInput.fill('Fixture Alias');
         assert.equal(await aliasInput.inputValue(), 'Fixture Alias');
         await page.screenshot({path: `${out}/${name}-genres.png`, fullPage: true});
+        await page.getByRole('button', {name: 'Aliaseingabe abbrechen', exact: true}).click();
+        await page.keyboard.press('Escape');
         const opener = page.getByRole('button', {name: '+ Genre anlegen', exact: true});
         await opener.click();
         const editor = page.getByRole('dialog');
@@ -151,7 +159,7 @@ try {
         assert.equal(await editor.evaluate(element => element.contains(document.activeElement)), true);
         await editor.getByLabel('Kanonischer Name', {exact: true}).fill('fixture-wave');
         await editor.getByLabel('Anzeigename', {exact: true}).fill('Fixture Wave');
-        await editor.getByRole('button', {name: 'Speichern und schließen', exact: true}).waitFor();
+        await editor.getByRole('button', {name: 'Speichern', exact: true}).waitFor();
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name}: genre editor overflow`);
         await page.screenshot({path: `${out}/${name}-genre-editor.png`, fullPage: true});
         page.once('dialog', dialog => dialog.dismiss());
@@ -579,7 +587,7 @@ async function checkGenreImport(page, fixture, name) {
   await page.getByRole('status').filter({hasText: '104 Genres geprüft · 104 neu angelegt · 85 Aliase übernommen'}).waitFor();
   assert.equal(fixture.applies, 2); assert.equal(fixture.previews, 2);
   await page.getByRole('searchbox', {name: 'Genres und Aliase durchsuchen'}).fill('Shoegaze');
-  await page.getByText('Shoegaze', {exact: true}).waitFor();
+  await page.getByRole('region', {name: 'Genre-Katalog', exact: true}).locator('strong').filter({hasText: /^Shoegaze$/}).waitFor();
   await page.screenshot({path: `${out}/${name}-genre-import-success.png`});
 }
 
@@ -657,4 +665,68 @@ async function checkFactoryReset(page, fixture, name) {
   await page.screenshot({path: `${out}/${name}-reset-unknown.png`});
   await page.keyboard.press('Escape');
   await modal.waitFor({state: 'detached'});
+}
+
+
+async function checkGenreRedesign(page, data, name) {
+  const overview = page.getByRole('region', {name: 'Genre-Katalog', exact: true});
+  await overview.locator('[data-record-id]').first().waitFor();
+  assert.equal(await overview.locator('[data-record-id]').count(), 25);
+  assert.equal(await overview.locator('form, input:not([type="search"])').count(), 0);
+  const first = overview.locator('[data-record-id="compact-0"]');
+  assert.equal(await first.locator('li').count(), 4);
+  assert.equal(await first.getByRole('button').count(), 2); // Expand and the only editing entrance.
+  const expand = first.getByRole('button', {name: /^16 weitere Aliase/});
+  await expand.click(); assert.equal(await first.locator('li').count(), 20);
+  assert.equal(await first.locator('[aria-expanded]').getAttribute('aria-expanded'), 'true');
+  await first.getByRole('button', {name: /^Weniger Aliase/}).click();
+  const search = overview.getByRole('searchbox');
+  await search.fill('Synonym 19'); assert.equal(await overview.locator('[data-record-id]').count(), 1);
+  await search.fill('canonical-0'); assert.equal(await overview.locator('[data-record-id]').count(), 1);
+  await search.fill('');
+  await overview.getByRole('button', {name: 'Weiter', exact: true}).click();
+  assert.equal(await overview.locator('[data-record-id="compact-25"]').count(), 1);
+  await overview.getByRole('button', {name: 'Zurück', exact: true}).click();
+  await page.screenshot({path: `${out}/${name}-genres-overview.png`, fullPage: true});
+  const edit = first.getByRole('button', {name: 'Bearbeiten', exact: true});
+  await edit.click();
+  const drawer = page.getByRole('dialog');
+  assert.equal(await drawer.evaluate(element => element.classList.contains('cc-drawer')), true);
+  assert.equal(await drawer.getByRole('textbox').count(), 2);
+  assert.equal(await drawer.getByRole('checkbox').count(), 0);
+  assert.equal(await drawer.locator('#genre-aliases li').count(), 20);
+  const save = drawer.getByRole('button', {name: 'Speichern', exact: true});
+  const footer = await save.boundingBox();
+  assert.ok(footer && footer.y >= 0 && footer.y + footer.height <= page.viewportSize().height, `${name}: drawer footer stays visible`);
+  assert.equal(await drawer.evaluate(element => element.scrollWidth > element.clientWidth), false, `${name}: drawer overflow`);
+  await page.screenshot({path: `${out}/${name}-genres-drawer.png`});
+  await drawer.getByRole('button', {name: '+ Alias hinzufügen', exact: true}).click();
+  const alias = drawer.getByRole('textbox', {name: /^Neuer Alias für/});
+  assert.equal(await alias.evaluate(element => element === document.activeElement), true);
+  await alias.fill('Ungespeicherter Alias');
+  await page.keyboard.press('Escape'); assert.equal(await drawer.isVisible(), true);
+  await drawer.getByRole('button', {name: 'Aliaseingabe abbrechen', exact: true}).click();
+  await page.keyboard.press('Escape'); await drawer.waitFor({state: 'detached'});
+  assert.equal(await edit.evaluate(element => element === document.activeElement), true);
+  if (page.viewportSize().width < 640) {
+    for (const action of await overview.getByRole('button').all()) {
+      if (!await action.isVisible()) continue;
+      const box = await action.boundingBox(); assert.ok(box.height >= 44, `${name}: touch target ${await action.innerText()}`);
+    }
+  }
+  // The same real page must also distinguish one record and a genuinely empty catalogue.
+  const original = data.genres;
+  for (const size of [1, 0]) {
+    data.genres = original.slice(0, size);
+    await page.reload();
+    await page.waitForFunction(() => document.querySelector('[aria-label="Genre-Katalog"]')?.getAttribute('aria-busy') === 'false');
+    assert.equal(await overview.locator('[data-record-id]').count(), size);
+    if (!size) {
+      assert.match(await overview.innerText(), /Noch keine Genres erfasst/);
+      assert.equal(await overview.getByRole('button', {name: '+ Genre anlegen', exact: true}).isEnabled(), true);
+      assert.equal(await overview.getByRole('button', {name: 'Genres importieren', exact: true}).isEnabled(), true);
+    }
+  }
+  assert.equal(await page.getByRole('button', {name: /Genres löschen/}).count(), 0);
+  data.genres = original;
 }

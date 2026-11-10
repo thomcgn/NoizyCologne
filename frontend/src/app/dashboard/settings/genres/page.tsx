@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import {
   CAPTION_PRETEXT_STORAGE_KEY,
   DEFAULT_CAPTION_PRETEXT,
@@ -29,6 +29,19 @@ function isGenre(value: unknown): value is Genre {
   return typeof item.id === "string" && !!item.id.trim() && typeof item.canonicalName === "string"
     && typeof item.displayName === "string" && typeof item.active === "boolean"
     && Array.isArray(item.aliases) && item.aliases.every(isAlias);
+}
+
+function AliasChips({ aliases, name }: { aliases: GenreAlias[]; name: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const id = useId();
+  const shown = expanded ? aliases : aliases.slice(0, 4);
+  return <div className="flex flex-wrap items-center gap-1.5">
+    <ul id={id} aria-label={`Aliase für ${name}`} className="flex min-w-0 flex-wrap gap-1.5">
+      {shown.map(alias => <li key={alias.id} className="genre-alias-chip">{alias.value}</li>)}
+    </ul>
+    {!aliases.length && <span className="text-xs text-neutral-500">Keine Aliase</span>}
+    {aliases.length > 4 && <button type="button" className="cc-button" aria-expanded={expanded} aria-controls={id} aria-label={expanded ? `Weniger Aliase für ${name}` : `${aliases.length - 4} weitere Aliase für ${name}`} onClick={() => setExpanded(value => !value)}>{expanded ? "Weniger" : `+${aliases.length - 4} weitere`}</button>}
+  </div>;
 }
 
 const inputStyle = "w-full rounded-lg border border-white/15 bg-neutral-900 px-3 py-2.5 text-sm text-white outline-none focus:border-white/60";
@@ -61,8 +74,11 @@ export default function GenresPage() {
   const [aliasDrafts, setAliasDrafts] = useState<Record<string, string>>({});
   const [aliasErrors, setAliasErrors] = useState<Record<string, string>>({});
   const [aliasEditor, setAliasEditor] = useState<{ genreId: string; aliasId: string; value: string } | null>(null);
+  const [addingAlias, setAddingAlias] = useState(false);
   const [aliasToDelete, setAliasToDelete] = useState<{ genreId: string; aliasId: string } | null>(null);
-  const dirty = canonicalName !== baseline.canonicalName || displayName !== baseline.displayName || active !== baseline.active;
+  const selectedGenre = genres.find(genre => genre.id === editingId);
+  const aliasDirty = !!editingId && (!!aliasDrafts[editingId]?.trim() || (!!aliasEditor && aliasEditor.value !== selectedGenre?.aliases.find(alias => alias.id === aliasEditor.aliasId)?.value));
+  const dirty = aliasDirty || canonicalName !== baseline.canonicalName || displayName !== baseline.displayName || active !== baseline.active;
 
   useEffect(() => {
     if (!editorOpen || !dirty) return;
@@ -76,8 +92,18 @@ export default function GenresPage() {
     document.getElementById("genre-editor-error")?.focus();
   }, [editorError]);
 
+  useEffect(() => {
+    if (editingId && aliasErrors[editingId]) document.getElementById("genre-alias-error")?.focus();
+  }, [editingId, aliasErrors]);
+
+  useEffect(() => {
+    if (editorOpen && (addingAlias || aliasEditor?.aliasId)) document.querySelector<HTMLInputElement>("#genre-aliases input")?.focus();
+  }, [editorOpen, addingAlias, aliasEditor?.aliasId]);
+
   function closeEditor() {
     if (mutationInFlight.current || (dirty && !window.confirm("Ungespeicherte Änderungen verwerfen?"))) return;
+    if (editingId) setAliasDrafts(current => ({ ...current, [editingId]: "" }));
+    setAliasEditor(null); setAliasToDelete(null); setAddingAlias(false);
     setEditorOpen(false);
   }
   const [captionPreText, setCaptionPreText] = useState(() => {
@@ -118,18 +144,21 @@ export default function GenresPage() {
   function newGenre() {
     setBaseline({ canonicalName: "", displayName: "", active: true });
     setEditingId(null); setCanonicalName(""); setDisplayName(""); setActive(true);
+    setAliasEditor(null); setAliasToDelete(null); setAddingAlias(false); setAliasErrors({});
     setEditorError(""); setNotice(""); setEditorOpen(true);
   }
 
   function editGenre(genre: Genre) {
     setBaseline({ canonicalName: genre.canonicalName, displayName: genre.displayName, active: genre.active });
     setEditingId(genre.id); setCanonicalName(genre.canonicalName); setDisplayName(genre.displayName); setActive(genre.active);
+    setAliasEditor(null); setAliasToDelete(null); setAddingAlias(false); setAliasErrors({});
     setEditorError(""); setNotice(""); setEditorOpen(true);
   }
 
   async function saveGenre(event: FormEvent) {
     event.preventDefault();
     if (mutationInFlight.current) return;
+    if (aliasDirty) { setEditorError("Bitte den offenen Alias zuerst speichern oder seine Eingabe abbrechen. Bereits gespeicherte Aliase bleiben erhalten."); return; }
     if (!canonicalName.trim() || !displayName.trim()) { setEditorError("Bitte kanonischen Namen und Anzeigenamen eingeben."); return; }
     mutationInFlight.current = true;
     setSaving(true); setEditorError("");
@@ -167,6 +196,7 @@ export default function GenresPage() {
       if (!isAlias(alias)) throw new Error("Der Alias wurde nicht vollständig bestätigt. Bitte den Katalog neu laden.");
       setGenres((current) => current.map((item) => item.id === genre.id ? { ...item, aliases: [...item.aliases, alias] } : item));
       setAliasDrafts(current => ({ ...current, [genre.id]: "" }));
+      setAddingAlias(false);
       setNotice(`Alias „${alias.value}“ für „${genre.displayName}“ gespeichert.`);
     } catch (cause) { setAliasErrors(current => ({ ...current, [genre.id]: cause instanceof Error ? cause.message : "Alias konnte nicht gespeichert werden." })); }
     finally { mutationInFlight.current = false; setSaving(false); }
@@ -214,26 +244,27 @@ export default function GenresPage() {
             <label className="min-w-0 basis-full sm:basis-auto sm:flex-1"><span className="sr-only">Alias {alias.value} für {genre.displayName} bearbeiten</span><input className={inputStyle} value={aliasEditor.value} disabled={saving} maxLength={100} onChange={event => setAliasEditor({ genreId: genre.id, aliasId: alias.id, value: event.target.value })} /></label>
             <button type="submit" disabled={saving} className="cc-button">Alias speichern</button>
             <button type="button" disabled={saving} className="cc-button" onClick={() => setAliasEditor(null)}>Abbrechen</button>
-          </form> : <div className="flex flex-wrap items-center gap-2"><span>{alias.value}</span>
-            <button type="button" disabled={saving} className="cc-button" aria-label={`Alias ${alias.value} für ${genre.displayName} bearbeiten`} onClick={() => { setAliasEditor({ genreId: genre.id, aliasId: alias.id, value: alias.value }); setAliasToDelete(null); }}>Bearbeiten</button>
-            <button type="button" disabled={saving} className="cc-button" aria-label={`Alias ${alias.value} für ${genre.displayName} entfernen`} onClick={() => { setAliasToDelete({ genreId: genre.id, aliasId: alias.id }); setAliasEditor(null); }}>Entfernen</button>
+          </form> : <div className="flex flex-wrap items-center gap-2"><span className="genre-alias-chip">{alias.value}</span>
+            <button type="button" disabled={saving || addingAlias || !!aliasEditor} className="cc-button" aria-label={`Alias ${alias.value} für ${genre.displayName} bearbeiten`} onClick={() => { setAliasEditor({ genreId: genre.id, aliasId: alias.id, value: alias.value }); setAliasToDelete(null); }}>Bearbeiten</button>
+            <button type="button" disabled={saving || addingAlias || !!aliasEditor} className="cc-button" aria-label={`Alias ${alias.value} für ${genre.displayName} entfernen`} onClick={() => { setAliasToDelete({ genreId: genre.id, aliasId: alias.id }); setAliasEditor(null); }}>Entfernen</button>
           </div>}
         {aliasToDelete?.genreId === genre.id && aliasToDelete.aliasId === alias.id && <div role="group" aria-label={`Alias ${alias.value} entfernen`} className="mt-2 space-y-2">
           <p>Alias „{alias.value}“ entfernen? Das Genre bleibt erhalten. Dieser Begriff wird nicht mehr als Alias erkannt.</p>
           <div className="flex flex-wrap gap-2"><button type="button" disabled={saving} className="cc-button cc-button-danger" onClick={() => void deleteAlias(genre, alias)}>Alias endgültig entfernen</button><button type="button" disabled={saving} className="cc-button" onClick={() => setAliasToDelete(null)}>Abbrechen</button></div>
         </div>}
       </li>)}</ul>
-      <form onSubmit={event => void addAlias(event, genre)} className="flex flex-wrap gap-2">
+      {addingAlias ? <form onSubmit={event => void addAlias(event, genre)} className="flex flex-wrap gap-2">
         <label className="min-w-0 basis-full sm:basis-auto sm:flex-1"><span className="sr-only">Neuer Alias für {genre.displayName}</span><input className={inputStyle} value={aliasDrafts[genre.id] ?? ""} disabled={saving} maxLength={100} onChange={event => setAliasDrafts(current => ({ ...current, [genre.id]: event.target.value }))} placeholder="Neuer Alias" /></label>
-        <button type="submit" disabled={saving} className="cc-button" aria-label={`Alias für ${genre.displayName} hinzufügen`}>Alias hinzufügen</button>
-      </form>
-      {aliasErrors[genre.id] && <p role="alert" className="text-sm text-red-400">{aliasErrors[genre.id]}</p>}
+        <button type="submit" disabled={saving} className="cc-button" aria-label={`Alias für ${genre.displayName} hinzufügen`}>Alias speichern</button>
+        <button type="button" disabled={saving} className="cc-button" onClick={() => { setAliasDrafts(current => ({ ...current, [genre.id]: "" })); setAddingAlias(false); }}>Aliaseingabe abbrechen</button>
+      </form> : <button type="button" disabled={saving || !!aliasEditor || !!aliasToDelete} className="cc-button" onClick={() => setAddingAlias(true)}>+ Alias hinzufügen</button>}
+      {aliasErrors[genre.id] && <p id="genre-alias-error" tabIndex={-1} role="alert" className="cc-status-danger rounded-lg border p-3 text-sm">{aliasErrors[genre.id]}</p>}
     </div>;
   }
 
   const columns: CollectionColumn<Genre>[] = [
-    { key: "name", label: "Genre", sortValue: genre => genre.displayName, render: genre => <div><strong>{genre.displayName}</strong><p className="mt-1 text-xs text-neutral-500">Kanonisch: {genre.canonicalName}</p></div> },
-    { key: "aliases", label: "Aliase", className: "col-span-full", render: renderAliases },
+    { key: "name", label: "Genre", sortValue: genre => genre.displayName, render: genre => <div><strong>{genre.displayName}</strong><p className="mt-1 break-words text-xs text-neutral-500">{genre.canonicalName}</p>{!genre.active && <span className="text-xs text-neutral-500">Inaktiv (Bestandsdaten)</span>}</div> },
+    { key: "aliases", label: "Aliase", className: "col-span-full", render: genre => <AliasChips aliases={genre.aliases} name={genre.displayName} /> },
   ];
 
   return <main className="app-page min-h-dvh bg-black px-4 py-6 text-white sm:py-8 md:px-10">
@@ -257,35 +288,46 @@ export default function GenresPage() {
         </div>
         <p className="mt-3 text-xs text-neutral-500">Beispiel: {captionPreText.trim() || DEFAULT_CAPTION_PRETEXT} Samstag 31.10.26 Garage, Punk, Doom mit @dj im @location</p>
       </section>
-      <DashboardModal open={editorOpen} busy={saving} onClose={closeEditor} title={editingId ? "Genre bearbeiten" : "Neues Genre"} description="Genres und Aliase für Genreerkennung und Discovery verwalten.">
-        <form onSubmit={saveGenre} className="space-y-4" aria-busy={saving}>
-          {editorError && <p id="genre-editor-error" tabIndex={-1} role="alert" className="rounded-lg border border-red-400/40 p-3 text-sm text-red-400">{editorError}</p>}
-          <fieldset disabled={saving} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label><span className="mb-2 block text-sm text-neutral-300">Kanonischer Name</span><input className={inputStyle} value={canonicalName} onChange={event => setCanonicalName(event.target.value)} maxLength={100} required /></label>
-              <label><span className="mb-2 block text-sm text-neutral-300">Anzeigename</span><input className={inputStyle} value={displayName} onChange={event => setDisplayName(event.target.value)} maxLength={100} required /></label>
-            </div>
-            <div className="flex flex-wrap gap-3"><button type="submit" className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black disabled:opacity-60">{saving ? "Speichern ..." : "Speichern und schließen"}</button><button type="button" onClick={closeEditor} className="rounded-lg border border-white/15 px-5 py-3 text-sm">Abbrechen</button></div>
-          </fieldset>
-        </form>
-      </DashboardModal>
-      <GenreImport disabled={saving || loading} onImported={async message => { setNotice(message); await loadGenres(); }} renderActions={({ importAction, restoreAction }) => <>
-        <div className="mt-8 flex flex-wrap gap-3" role="group" aria-label="Genre-Aktionen">
-          {importAction}
-          <button type="button" disabled={saving} onClick={newGenre} className="cc-button">+ Genre anlegen</button>
-          <button type="button" disabled={saving || loading} onClick={() => void loadGenres()} className="cc-button">Neu laden</button>
+      <DashboardModal variant="drawer" open={editorOpen} busy={saving} onClose={closeEditor} title={editingId ? "Genre bearbeiten" : "Genre anlegen"} description="Namen bearbeiten. Aliasänderungen werden einzeln sofort gespeichert.">
+        <div className="genre-editor" aria-busy={saving}>
+          {editorError && <p id="genre-editor-error" tabIndex={-1} role="alert" className="cc-status-danger rounded-lg border p-3 text-sm">{editorError}</p>}
+          {notice && <p role="status" className="rounded-lg border border-white/15 p-3 text-sm">{notice}</p>}
+          <form id="genre-names" onSubmit={saveGenre} aria-busy={saving}>
+            <fieldset disabled={saving} className="space-y-4">
+              <label className="block"><span className="mb-2 block text-sm text-neutral-300">Anzeigename</span><input className={inputStyle} value={displayName} onChange={event => setDisplayName(event.target.value)} maxLength={100} required /></label>
+              <label className="block"><span className="mb-2 block text-sm text-neutral-300">Kanonischer Name</span><input className={inputStyle} value={canonicalName} onChange={event => setCanonicalName(event.target.value)} maxLength={100} required /></label>
+            </fieldset>
+          </form>
+          <section id="genre-aliases" aria-label="Aliase bearbeiten" className="min-w-0 space-y-3 border-t border-white/15 pt-4">
+            <h3 className="font-semibold">Aliase{selectedGenre ? ` (${selectedGenre.aliases.length})` : ""}</h3>
+            {selectedGenre ? renderAliases(selectedGenre) : <p className="text-sm text-neutral-400">Zuerst das Genre speichern. Danach können Aliase ergänzt werden.</p>}
+          </section>
+          <footer className="genre-editor-footer">
+            <button type="submit" form="genre-names" disabled={saving} className="cc-button cc-button-primary bg-white text-black">{saving ? "Speichern …" : "Speichern"}</button>
+            <button type="button" disabled={saving} onClick={closeEditor} className="cc-button">Abbrechen</button>
+          </footer>
         </div>
-        {error && <p role="alert" className="cc-status-danger mt-4 rounded-lg border p-3 text-sm">{error}</p>}
-        {notice && <p role="status" className="mt-4 rounded-lg border border-white/15 p-3 text-sm">{notice}</p>}
-        <section className="cc-panel mt-6" aria-label="Genre-Katalog">
-          {loading ? <p role="status" className="py-8 text-center text-sm">Genres werden geladen ...</p> : error && !genres.length ? <p>Der Katalog konnte nicht geladen werden. Bitte „Neu laden“ versuchen.</p> : <DataCollection items={genres} columns={columns} label="Genres" storageKey="noizy-view-genres" getName={genre => genre.displayName} searchLabel="Genres und Aliase durchsuchen" searchText={genre => [genre.canonicalName, genre.displayName, ...genre.aliases.map(alias => alias.value)].join(" ")} empty={genres.length ? "Keine passenden Genres oder Aliase gefunden. Bitte den Suchbegriff ändern." : "Noch keine Genres erfasst. Über „Genres importieren“ einen Katalog übernehmen oder mit „+ Genre anlegen“ beginnen. Die Basisgenres können unten separat wiederhergestellt werden."} actions={genre => <button type="button" disabled={saving} onClick={() => editGenre(genre)} className="cc-button">Bearbeiten</button>} />}
-        </section>
-        <section className="cc-panel mt-8" aria-labelledby="genre-restore-title">
-          <h2 id="genre-restore-title">Basisgenres wiederherstellen</h2>
-          <p>Die 38 Basisgenres separat prüfen und ausdrücklich übernehmen. Vor der Übernahme wird eine Vorschau angezeigt.</p>
-          {restoreAction}
-        </section>
-      </>} />
+      </DashboardModal>
+      <GenreImport importPrimary={false} disabled={saving || loading} onImported={async message => { setNotice(message); await loadGenres(); }} renderActions={({ importAction, restoreAction }) => {
+        const actions = <div className="genre-toolbar-actions" role="group" aria-label="Genre-Aktionen">
+          <button type="button" disabled={saving} onClick={newGenre} className="cc-button cc-button-primary">+ Genre anlegen</button>
+          {importAction}
+          <details className="genre-management">
+            <summary className="cc-button">Verwaltung</summary>
+            <div className="genre-management-actions">
+              {restoreAction}
+              <button type="button" disabled={saving || loading} onClick={() => void loadGenres()} className="cc-button">Neu laden</button>
+            </div>
+          </details>
+        </div>;
+        return <>
+          {error && <p role="alert" className="cc-status-danger mt-4 rounded-lg border p-3 text-sm">{error}</p>}
+          {notice && !editorOpen && <p role="status" className="mt-4 rounded-lg border border-white/15 p-3 text-sm">{notice}</p>}
+          <section className="genre-catalog mt-8" aria-label="Genre-Katalog" aria-busy={loading}>
+            <DataCollection items={genres} columns={columns} label="Genres" storageKey="noizy-view-genres" getName={genre => genre.displayName} searchLabel="Genres und Aliase durchsuchen" searchText={genre => [genre.canonicalName, genre.displayName, ...genre.aliases.map(alias => alias.value)].join(" ")} toolbar={actions} empty={loading ? "Genres werden geladen …" : error && !genres.length ? "Der Katalog konnte nicht geladen werden. Bitte „Neu laden“ unter „Verwaltung“ versuchen." : genres.length ? "Keine passenden Genres oder Aliase gefunden. Bitte den Suchbegriff ändern." : "Noch keine Genres erfasst. Über „Genres importieren“ einen Katalog übernehmen oder mit „+ Genre anlegen“ beginnen. Die Basisgenres können unter „Verwaltung“ separat wiederhergestellt werden."} actions={genre => <button type="button" disabled={saving} onClick={() => editGenre(genre)} className="cc-button">Bearbeiten</button>} />
+          </section>
+        </>;
+      }} />
     </div>
   </main>;
 }
