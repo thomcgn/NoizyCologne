@@ -20,9 +20,7 @@ const { act, createElement: h, StrictMode } = React;
 const { createRoot } = require('react-dom/client');
 const originalFetch = globalThis.fetch;
 let poll;
-// Tests drive polling explicitly via poll(); a real 10s timer otherwise fires
-// between slow jsdom clicks and adds unrelated API calls to the batch assertion.
-window.setInterval = callback => { poll = callback; return 0; };
+window.setInterval = callback => { poll = callback; return globalThis.setInterval(callback, 10000); };
 window.clearInterval = globalThis.clearInterval;
 let root;
 const calls = [];
