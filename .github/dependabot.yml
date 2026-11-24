@@ -1,0 +1,70 @@
+# Dependency update baseline. All pull requests need normal review and the
+# existing Full quality gate; this file never enables automatic merging.
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:17"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 5
+    groups:
+      maven-minor-patch:
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: "deps(backend)"
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:17"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-patch:
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: "deps(frontend)"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:17"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 5
+    groups:
+      actions-all-updates:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "deps(actions)"
+
+  - package-ecosystem: docker
+    directories:
+      - /backend
+      - /frontend
+      - /deploy/landing
+      - /deploy/smoke
+      - /browser-worker
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:17"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 5
+    groups:
+      docker-all-updates:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "deps(docker)"

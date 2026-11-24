@@ -204,6 +204,33 @@ class WorkflowTests(WorkflowFixture, unittest.TestCase):
         self.assertEqual(sorted(self.git('show', '--format=', '--name-only', 'HEAD').stdout.splitlines()), ['change.txt', 'new-task.txt'])
 
 
+class SupplyChainContractTests(unittest.TestCase):
+    """Static contract checks; no network access and no real CVE scan."""
+
+    def test_dependabot_config_covers_all_ecosystems_without_auto_merge(self):
+        config = (ROOT / '.github/dependabot.yml').read_text()
+        self.assertIn('version: 2', config)
+        for ecosystem in ('maven', 'npm', 'github-actions', 'docker'):
+            self.assertIn(f'package-ecosystem: {ecosystem}', config)
+        self.assertIn('interval: weekly', config)
+        self.assertIn('groups:', config)
+        self.assertNotIn('auto-merge', config)
+
+    def test_security_workflow_is_independent_and_fails_on_findings(self):
+        workflow = (ROOT / '.github/workflows/security.yml').read_text()
+        self.assertIn('workflow_dispatch:', workflow)
+        self.assertIn('schedule:', workflow)
+        self.assertNotIn('\n  push:', workflow)
+        self.assertNotIn('\n  pull_request:', workflow)
+        self.assertNotIn('workflow_run:', workflow)
+        self.assertIn('npm audit --omit=dev', workflow)
+        self.assertIn('osv-scanner-action@v2.7.1', workflow)
+        self.assertIn('--lockfile=backend/pom.xml', workflow)
+        self.assertNotIn('continue-on-error', workflow)
+        self.assertNotIn('secrets.', workflow)
+        self.assertNotIn('upload-artifact', workflow)
+
+
 class EnvironmentIsolationTests(unittest.TestCase):
     def test_foreign_hook_environment_cannot_redirect_fixture_repositories(self):
         with tempfile.TemporaryDirectory() as directory:
