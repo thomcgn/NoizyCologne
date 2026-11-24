@@ -66,5 +66,10 @@ updates:
       docker-all-updates:
         patterns:
           - "*"
+    # Die npm-Abhängigkeit "playwright" in browser-worker/package.json und das
+    # Image müssen im selben PR gemeinsam aktualisiert werden. Ein Image-PR
+    # allein lässt Chromium nicht starten; andere Docker-Updates bleiben aktiv.
+    ignore:
+      - dependency-name: mcr.microsoft.com/playwright
     commit-message:
       prefix: "deps(docker)"
