@@ -56,8 +56,12 @@ GHCR und Serverdeployment starten automatisch erst nach erfolgreicher vollständ
 CI-Prüfung der exakten main-SHA. Ein manueller Aufruf benötigt denselben Nachweis
 oder führt FULL selbst aus. Smoke-Tests und Rollback bleiben erhalten.
 Der erforderliche Check **Full quality gate** muss zusätzlich durch
-[Branch Protection](docs/QUALITY.md#erforderlicher-schutz-für-main) erzwungen werden;
-die vorbereitete Konfiguration ist noch nicht auf GitHub aktiviert.
+[Branch Protection](docs/QUALITY.md#erforderlicher-schutz-für-main) erzwungen werden.
+Die versionierte Vorlage, der vorbereitete lesende Prüfer und das auditierte
+Ruleset (ID 26688192; `Full quality gate` erforderlich, aber `strict=false` und
+Review-Count 0) divergieren; die Vorlage ist strenger. Der Live-Stand ist
+**nicht verifiziert** und muss lesend gegen einen geprüften Commit-SHA neu
+geprüft werden. Das ist kein Sicherheitsclaim.
 Arbeitsbranches können ohne automatische Produktionsauslieferung gepusht werden.
 Eine technische Auslieferung aktiviert kein Instagram-Publishing.
 
