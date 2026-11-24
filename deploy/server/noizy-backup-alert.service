@@ -1,0 +1,18 @@
+[Unit]
+# Template: read-only check, no Docker/DB access. Enable after the alarm hook exists.
+Description=NoizyCologne backup/restore alarm check
+ConditionPathExists=/etc/noizycologne/backup-alert.conf
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/noizycologne/backup-alert.conf
+WorkingDirectory=/opt/noizycologne/deploy/server
+ExecStart=/usr/bin/python3 /opt/noizycologne/deploy/server/backup-alert.py --output ${NOIZY_BACKUP_OUTPUT} --restore-state ${NOIZY_RESTORE_STATE} --hook ${NOIZY_BACKUP_ALARM_HOOK}
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/opt/noizycologne/deploy/server
+
+[Install]
+WantedBy=multi-user.target

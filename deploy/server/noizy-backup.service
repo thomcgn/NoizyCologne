@@ -1,0 +1,22 @@
+[Unit]
+# Template: copy to /etc/systemd/system/ and adapt paths only after approval.
+# The wrapper performs a brief maintenance window (api/frontend stop/start).
+Description=NoizyCologne encrypted backup (fail-closed maintenance wrapper)
+After=docker.service
+Requires=docker.service
+ConditionPathExists=/etc/noizycologne/backup.conf
+
+[Service]
+Type=oneshot
+# Non-secret backup configuration only. NEVER point EnvironmentFile at the
+# persistent .env; Docker Compose reads that file via --env-file inside the tool.
+EnvironmentFile=/etc/noizycologne/backup.conf
+WorkingDirectory=/opt/noizycologne/deploy/server
+ExecStart=/opt/noizycologne/deploy/server/backup-wrapper.sh
+User=root
+TimeoutStartSec=3600
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -19,6 +19,9 @@ import uuid
 
 PAYLOADS = ('database.dump', 'media.tar.gz', 'configuration.tar.gz')
 MAX_ARCHIVE_BYTES = 32 * 1024**3
+OFFSITE_VERIFIED = 'VERIFIED_COPY'
+OFFSITE_RETENTION_DAYS = 14
+LOCAL_RETENTION_DAYS = 3
 
 
 class BackupError(Exception):
@@ -46,6 +49,14 @@ def private_directory(path):
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
     if path.stat().st_mode & 0o077:
         raise BackupError('Directory must have permissions 0700')
+
+
+def require_private_directory(path):
+    """An offsite target must already exist; a typo must never create a fake target."""
+    if path.is_symlink() or not path.is_dir():
+        raise BackupError('An existing private offsite directory (0700) is required')
+    if path.stat().st_mode & 0o077:
+        raise BackupError('Offsite directory must have permissions 0700')
 
 
 def json_command(args):
@@ -155,10 +166,10 @@ class Source:
                  'tar', '-C', '/media', '-czf', '-', '.'], output=output)
 
 
-def offsite_copy(archive, directory):
-    private_directory(directory)
-    target = directory / archive.name
-    if target.exists():
+def offsite_copy(archive, directory, *, name=None):
+    require_private_directory(directory)
+    target = directory / (name or archive.name)
+    if target.exists() or target.is_symlink():
         raise BackupError('Offsite destination already exists')
     with tempfile.NamedTemporaryFile(dir=directory, prefix='.upload-', delete=False) as output:
         temp = Path(output.name)
@@ -171,11 +182,26 @@ def offsite_copy(archive, directory):
         temp.unlink(missing_ok=True)
 
 
+def generation_manifest(source, work, before, inventory):
+    """The generation is published only after the mandatory verified offsite copy.
+
+    Therefore the sealed manifest records that required outcome; an unverified
+    generation is never written to the output directory at all.
+    """
+    return {'version': 1, 'created_at': dt.datetime.now(dt.timezone.utc).isoformat(),
+            'image': source.image, 'release_sha': source.release_sha, 'facts': before, 'media': inventory,
+            'payloads': {name: digest(work / name) for name in PAYLOADS}, 'offsite': OFFSITE_VERIFIED}
+
+
 def backup(args):
+    # Fail closed: no local-only generation may be created by this entry point.
+    if not getattr(args, 'offsite_dir', None):
+        raise BackupError('An explicit --offsite-dir is required; local-only backups are refused')
     if not re.fullmatch(r'[A-Fa-f0-9]{40,64}', args.recipient):
         raise BackupError('An explicit encryption key fingerprint is required')
     source = Source(args.server_dir, args.project)
     private_directory(args.output)
+    require_private_directory(args.offsite_dir)
     name = 'noizycologne-' + dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex
     archive = args.output / (name + '.tar.gpg')
     with tempfile.TemporaryDirectory(prefix='.backup-', dir=args.output) as directory:
@@ -205,9 +231,7 @@ def backup(args):
                     raise BackupError('Required release configuration missing or unsafe')
                 if path.is_file() and not path.is_symlink():
                     config.add(path, arcname=filename, recursive=False)
-        manifest = {'version': 1, 'created_at': dt.datetime.now(dt.timezone.utc).isoformat(),
-                    'image': source.image, 'release_sha': source.release_sha, 'facts': before, 'media': inventory,
-                    'payloads': {name: digest(work / name) for name in PAYLOADS}}
+        manifest = generation_manifest(source, work, before, inventory)
         (work / 'manifest.json').write_text(json.dumps(manifest, sort_keys=True))
         with tarfile.open(work / 'bundle.tar', 'w') as bundle:
             for filename in (*PAYLOADS, 'manifest.json'):
@@ -216,14 +240,13 @@ def backup(args):
              '--recipient', args.recipient, '--output', str(work / 'sealed.gpg'), '--encrypt', str(work / 'bundle.tar')])
         source.assert_quiescent()
         os.chmod(work / 'sealed.gpg', 0o600)
+        # Verify the byte-identical offsite copy before publishing the local generation.
+        # A copy failure leaves no new .gpg/.json in the output directory.
+        offsite_copy(work / 'sealed.gpg', args.offsite_dir, name=archive.name)
         (work / 'sealed.gpg').replace(archive)
     state = {'file': archive.name, 'sha256': digest(archive), 'bytes': archive.stat().st_size,
-             'media_count': len(inventory), 'offsite': 'NOT_CONFIGURED'}
+             'media_count': len(inventory), 'offsite': OFFSITE_VERIFIED, 'created_at': manifest['created_at']}
     archive.with_suffix('.json').write_text(json.dumps(state))
-    if args.offsite_dir:
-        offsite_copy(archive, args.offsite_dir)
-        state['offsite'] = 'VERIFIED_COPY'
-        archive.with_suffix('.json').write_text(json.dumps(state))
     print(json.dumps(state))
 
 
@@ -320,22 +343,40 @@ def restore_test(args):
 
 
 def prune(args):
-    # Only verified local generations, always retain at least the newest two.
+    """Two independent rules: verified offsite generations and bounded local-only ones.
+
+    Without offsite, local generations would otherwise accumulate forever, so
+    local-only/unknown-status copies get a much shorter retention and only the
+    newest one is protected. Unverifiable files are never deleted.
+    """
+    local_days = getattr(args, 'local_retention_days', LOCAL_RETENTION_DAYS)
+    if not isinstance(local_days, int) or local_days < 1:
+        raise BackupError('Local retention days must be a positive integer')
     private_directory(args.output)
-    generations = []
+    verified, local = [], []
     for status in args.output.glob('noizycologne-*.tar.json'):
         archive = status.with_suffix('.gpg')
         if not status.is_symlink() and archive.is_file() and not archive.is_symlink():
             metadata = json.loads(status.read_text())
-            if metadata.get('sha256') == digest(archive) and metadata.get('offsite') == 'VERIFIED_COPY':
-                generations.append(archive)
-    protected = set(sorted(generations, key=lambda path: path.stat().st_mtime, reverse=True)[:2])
-    cutoff = time.time() - 14 * 86400
-    removed = 0
-    for archive in generations:
-        if archive not in protected and archive.stat().st_mtime < cutoff:
-            archive.unlink(); archive.with_suffix('.json').unlink(); removed += 1
-    print(json.dumps({'pruned': removed, 'retention_days': 14, 'protected_generations': len(protected)}))
+            if metadata.get('sha256') != digest(archive):
+                continue
+            (verified if metadata.get('offsite') == OFFSITE_VERIFIED else local).append(archive)
+
+    def newest(paths, count):
+        return set(sorted(paths, key=lambda path: path.stat().st_mtime, reverse=True)[:count])
+
+    protected = newest(verified, 2) | newest(local, 1)
+    now = time.time()
+    removed_verified = removed_local = 0
+    for archive in verified:
+        if archive not in protected and archive.stat().st_mtime < now - OFFSITE_RETENTION_DAYS * 86400:
+            archive.unlink(); archive.with_suffix('.json').unlink(); removed_verified += 1
+    for archive in local:
+        if archive not in protected and archive.stat().st_mtime < now - local_days * 86400:
+            archive.unlink(); archive.with_suffix('.json').unlink(); removed_local += 1
+    print(json.dumps({'pruned': removed_verified + removed_local, 'pruned_verified': removed_verified,
+                      'pruned_local': removed_local, 'retention_days': OFFSITE_RETENTION_DAYS,
+                      'local_retention_days': local_days, 'protected_generations': len(protected)}))
 
 
 def main():
@@ -355,11 +396,12 @@ def main():
     save.add_argument('--output', type=Path, required=True)
     save.add_argument('--recipient', required=True)
     save.add_argument('--allow-empty-media', action='store_true')
-    save.add_argument('--offsite-dir', type=Path)
+    save.add_argument('--offsite-dir', type=Path, required=True)
     restore = commands.add_parser('restore-test')
     restore.add_argument('archive', type=Path)
     retention = commands.add_parser('prune')
     retention.add_argument('--output', type=Path, required=True)
+    retention.add_argument('--local-retention-days', type=int, default=LOCAL_RETENTION_DAYS)
     args = parser.parse_args()
     try:
         {'backup': backup, 'restore-test': restore_test, 'prune': prune}[args.command](args)

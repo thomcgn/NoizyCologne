@@ -28,6 +28,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='noizy-backup-fixture-') as directory:
         work = Path(directory)
         (work / 'keys').mkdir(mode=0o700)
+        (work / 'offsite').mkdir(mode=0o700)
         env = {key: value for key, value in os.environ.items() if not key.startswith(('POSTGRES_', 'DB_', 'SPRING_', 'COMPOSE_', 'TEAM_', 'NOIZY_', 'MEDIA_'))}
         env['GNUPGHOME'] = str(work / 'keys')
         (work / '.env').write_text('POSTGRES_PASSWORD=' + secrets.token_urlsafe(32) + '\nTEAM_USER=fixture\nTEAM_SESSION_SECRET=isolated-fixture\n')

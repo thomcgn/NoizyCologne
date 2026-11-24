@@ -1,0 +1,13 @@
+[Unit]
+# Independent of the backup timer: a missed backup must still raise an alarm.
+Description=Daily NoizyCologne backup/restore alarm check
+
+[Timer]
+OnCalendar=*-*-* 05:10:00
+RandomizedDelaySec=10m
+AccuracySec=5m
+Persistent=true
+Unit=noizy-backup-alert.service
+
+[Install]
+WantedBy=timers.target

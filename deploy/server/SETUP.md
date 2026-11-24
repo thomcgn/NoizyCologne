@@ -72,7 +72,26 @@ Der normale GitHub-Actions-Weg ist vorzuziehen. Der Compose-Projektname bleibt `
 
 ## 5. Backups und Abnahme
 
-Einen Cronjob für `backup.sh` einrichten und das erzeugte Verzeichnis außerhalb des Docker-Volumes regelmäßig auf ein unabhängiges Ziel kopieren. Vor der Freigabe prüfen:
+Backupwerkzeug bleibt `backup.py` / `backup.sh`; der fail-closed Wrapper
+`backup-wrapper.sh` stellt die von `backup.py` zwingend verlangte Ruhe her: Er
+stoppt nur die vorher laufenden Dienste (`api`, `frontend`) und startet sie über
+einen `EXIT`-`trap` auch bei Fehlern wieder. `--offsite-dir` ist Pflicht und muss
+auf ein bereits eingerichtetes Verzeichnis mit Modus `0700` zeigen; ohne
+verifizierte Offsite-Kopie entsteht keine Generation. `prune` trennt die
+Aufbewahrung (14 Tage verifiziert, 3 Tage lokale-only). Kein `source .env`: Die
+nichtgeheimen Einstellungen stehen in `/etc/noizycologne/backup.conf`
+(`NOIZY_SERVER_DIR`, `NOIZY_BACKUP_OUTPUT`, `NOIZY_OFFSITE_DIR`,
+`NOIZY_BACKUP_RECIPIENT`, optional `NOIZY_COMPOSE_PROJECT` und
+`NOIZY_BACKUP_ALARM_HOOK`), die persistente `.env` bleibt bei 0600 und wird nur
+von Docker Compose gelesen. Die systemd-Vorlagen `noizy-backup.service/.timer`
+und `noizy-backup-alert.service/.timer` werden erst nach einem beobachteten
+manuellen Lauf installiert und aktiviert; der Wartungsfenster-Vorschlag ist
+täglich 03:20 Uhr. Details, read-only Checkliste, Alarm-Hook-Schema und der
+monatliche Restore-Test auf separatem Host: [BACKUP-RESTORE.md](../../docs/BACKUP-RESTORE.md).
+**Produktiv NICHT VERIFIZIERT:** Offsiteziel, Schlüssel, Timer, Alarmierung und
+Wiederanlauf wurden in diesem Paket nicht live geprüft.
+
+Vor der Freigabe prüfen:
 
 ```bash
 docker compose ps
