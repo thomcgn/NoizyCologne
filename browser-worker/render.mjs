@@ -1,9 +1,10 @@
 import { chromium } from 'playwright';
-import { BOT, publicUrl } from './security.mjs';
+import { BOT, publicUrl, egressTier } from './security.mjs';
 
 const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 export async function render(url, { proxy, permit, timeout = 20000, launch = {}, prepare = async () => {} } = {}) {
   publicUrl(url);
+  const primaryHost = new URL(url).hostname.toLowerCase();
   const warnings = new Set(), diagnostics = [], snapshots = [], seen = new Set();
   let browser, requests = 0, bytes = 0, active = 0;
   const waiting = [];
@@ -23,6 +24,9 @@ export async function render(url, { proxy, permit, timeout = 20000, launch = {},
       try {
         publicUrl(request.url());
         if (!['GET', 'HEAD'].includes(request.method())) throw new Error('REQUEST_METHOD_BLOCKED');
+        // Telemetry/beacon traffic is discarded before it can occupy a tunnel.
+        if (egressTier(request.url(), primaryHost) === 'background' || ['ping', 'beacon'].includes(request.resourceType()))
+          throw new Error('EGRESS_DEPRIORITIZED');
         if (++requests > 160) throw new Error('REQUEST_LIMIT');
         await acquire(); acquired=true;
         if (!await permit(request.url())) throw new Error('ROBOTS_BLOCKED');
@@ -36,7 +40,7 @@ export async function render(url, { proxy, permit, timeout = 20000, launch = {},
         delete headers['content-encoding']; delete headers['content-length'];
         await route.fulfill({ status: response.status(), headers, body }); await response.dispose();
       } catch (error) {
-        const code = ['UNSAFE_URL','REQUEST_METHOD_BLOCKED','REQUEST_LIMIT','ROBOTS_BLOCKED','REDIRECT_REQUIRES_REVIEW','BLOCKED','RESPONSE_TOO_LARGE'].includes(error.message) ? error.message : 'BROWSER_NETWORK_ERROR';
+        const code = ['UNSAFE_URL','REQUEST_METHOD_BLOCKED','REQUEST_LIMIT','EGRESS_DEPRIORITIZED','ROBOTS_BLOCKED','REDIRECT_REQUIRES_REVIEW','BLOCKED','RESPONSE_TOO_LARGE'].includes(error.message) ? error.message : 'BROWSER_NETWORK_ERROR';
         warnings.add(code);
         // Keep bounded, actionable evidence without query credentials or arbitrary error bodies.
         if (warnings.size < 24) {
@@ -64,11 +68,30 @@ export async function render(url, { proxy, permit, timeout = 20000, launch = {},
         if (frame.url() === 'about:blank') continue;
         try {
           publicUrl(frame.url());
-          // Store event DOM, not repeated executable bundles/CSS. JSON-LD and hidden
-          // panels remain intact; the live page and its security policy are unchanged.
+          // Store event DOM, not repeated executable bundles/CSS. JSON-LD, other
+          // inert embedded data and hidden panels remain intact; the live page and
+          // its security policy are unchanged.
           const body = await frame.evaluate(() => {
             const copy=document.documentElement.cloneNode(true);
-            copy.querySelectorAll('script:not([type="application/ld+json"]),style,svg').forEach(node=>node.remove());
+            // Retain only inert data already present in this DOM: JSON-LD,
+            // application/json blocks and literal JSON assignments to state
+            // globals. All executable scripts are removed; no code is run here.
+            for (const script of Array.from(copy.querySelectorAll('script'))) {
+              const type=(script.getAttribute('type')||'').toLowerCase();
+              const text=script.textContent||'';
+              if (script.hasAttribute('src') || text.length>200000) { script.remove(); continue; }
+              let payload='', marker='';
+              if (type==='application/ld+json' || type==='application/json') { payload=text; marker=type; }
+              else {
+                const match=text.match(/^\s*(?:(?:window|self|globalThis)\s*\.\s*|(?:var|let|const)\s+)?((?:[A-Za-z_$][\w$]*\s*\.\s*)*[A-Za-z_$][\w$]*)\s*=\s*(\{[\s\S]*\}|\[[\s\S]*\])\s*;?\s*$/);
+                if (match) { try { JSON.parse(match[2]); payload=match[2]; marker='assignment:'+match[1]; } catch { /* Not a literal JSON assignment. */ } }
+              }
+              if (!payload) { script.remove(); continue; }
+              script.setAttribute('type','application/json');
+              script.setAttribute('data-noizy-embedded',marker);
+              script.textContent=payload;
+            }
+            copy.querySelectorAll('style,svg').forEach(node=>node.remove());
             return '<!doctype html>'+copy.outerHTML;
           }), key = frame.url() + body;
           if (seen.has(key)) continue;

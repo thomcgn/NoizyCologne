@@ -15,7 +15,7 @@ public class DiscoveryGeographyController {
     public DiscoveryGeographyController(DiscoveryGeographyService geography,EventCandidateProcessor processor,DiscoveryStore store){this.geography=geography;this.processor=processor;this.store=store;}
     @GetMapping public Map<String,Object> list(){return geography.list();}
     public record Confirmation(@Size(max=100) String venueId,@Size(max=200) String venueName,@NotBlank @Size(max=200) String city,
-                               @NotBlank @Size(max=300) String street,@NotBlank @Size(max=2048) String proofUrl,boolean confirmed) { }
+                               @NotBlank @Size(max=300) String street,@NotBlank @Size(max=SafeUrls.MAX_URL_LENGTH) String proofUrl,boolean confirmed) { }
     @Transactional
     @PostMapping("/{id}/confirm") public void confirm(@PathVariable String id,@Valid @RequestBody Confirmation request){
         var finding=geography.confirm(id,request.venueId(),request.venueName(),request.city(),request.street(),request.proofUrl(),request.confirmed());

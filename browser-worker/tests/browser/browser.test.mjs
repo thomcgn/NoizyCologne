@@ -54,6 +54,35 @@ test('request diagnostics preserve blocked method and source without leaking que
   assert.ok(result.warnings.every(warning=>!warning.includes('private-fixture-value')));
 });
 
+test('inert embedded JSON survives snapshots while executable scripts do not',async()=>{
+  const result=await render('https://fixture.example/embedded',{permit:async()=>true,prepare:async context=>{
+    await context.route('https://fixture.example/embedded',route=>route.fulfill({status:200,contentType:'text/html',body:`<title>Embedded</title><div id="root"></div>
+      <script type="application/ld+json">{"@type":"Event","name":"Structured Night","startDate":"2027-01-09"}</script>
+      <script>window.__INITIAL_STATE__ = {"events":[{"title":"State Night","date":"2027-01-10T23:00"}]};</script>
+      <script>window.dangerousFixtureMarker = true;</script>`}));
+  }});
+  const dom=result.pages.map(page=>page.body).join('');
+  assert.match(dom,/data-noizy-embedded="application\/ld\+json"/);
+  assert.match(dom,/data-noizy-embedded="assignment:__INITIAL_STATE__"/);
+  assert.match(dom,/State Night/);
+  assert.doesNotMatch(dom,/dangerousFixtureMarker/);
+  assert.equal(result.complete,false);
+});
+
+test('telemetry GETs are discarded before a fetch while robots still gates real subrequests',async()=>{
+  const inspected=[];
+  const result=await render('https://fixture.example/telemetry',{permit:async url=>{inspected.push(url);return true;},prepare:async context=>{
+    await context.route('https://fixture.example/telemetry',route=>route.fulfill({status:200,contentType:'text/html',body:
+      '<title>Telemetry</title><article><h2>Party</h2><time datetime="2026-11-14T23:00"></time></article><script>fetch("https://frog.wix.com/pixel?utm_source=x").catch(()=>{});fetch("https://other.example/data").catch(()=>{});</script>'}));
+  }});
+  assert.ok(result.warnings.includes('EGRESS_DEPRIORITIZED'),JSON.stringify(result.warnings));
+  // The real subrequest still reaches the robots gate; the discarded one never does.
+  assert.ok(inspected.some(url=>url.includes('other.example/data')));
+  assert.ok(inspected.every(url=>!url.includes('frog.wix.com')));
+  assert.match(result.pages.map(page=>page.body).join(''),/Party/);
+  assert.equal(result.complete,false);
+});
+
 test('accordion data is read before clicking; only missing event panels are expanded',async()=>{
   const result=await render('https://fixture.example/accordion',{permit:async()=>true,prepare:async context=>{
     await context.route('https://fixture.example/accordion',route=>route.fulfill({status:200,contentType:'text/html',body:`<title>Events</title>

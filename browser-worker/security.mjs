@@ -3,12 +3,55 @@ import { isIP } from 'node:net';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 export const BOT = 'NoizyCologneDiscovery/1.0';
-export function publicUrl(value) {
-  if (typeof value !== 'string' || value.length > 2048) throw new Error('UNSAFE_URL');
+// A bounded, canonicalized GET target. Every safety check below remains unchanged.
+export const MAX_URL_LENGTH = 4096;
+// Generic tracking/telemetry query keys, not venue- or club-specific selectors.
+const TRACKING_KEYS = new Set(['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+  'fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'mc_cid', 'mc_eid', '_ga', '_gl', 'igshid', 'yclid']);
+// Platform-level CDN/telemetry hosts. No venue names, paths or content selectors.
+const ASSET_HOSTS = ['wixstatic.com', 'parastorage.com', 'wixpress.com'];
+const TELEMETRY_HOSTS = ['sentry-cdn.com', 'frog.wix.com', 'panorama.wixapps.net', 'google-analytics.com',
+  'googletagmanager.com', 'googletagservices.com', 'doubleclick.net', 'hotjar.com', 'segment.com', 'segment.io',
+  'mixpanel.com', 'amplitude.com'];
+const hostIn = (host, suffixes) => suffixes.some(suffix => host === suffix || host.endsWith('.' + suffix));
+
+/** Drop tracking/empty/duplicate query pairs. Same origin, path and method; no new request. */
+export function canonicalUrl(value) {
   const url = new URL(value);
-  if (url.protocol !== 'https:' || url.username || url.password || url.hash || url.port ||
+  const raw = url.search.replace(/^\?/, '');
+  if (!raw) return url.href;
+  const seen = new Set();
+  const kept = [];
+  for (const pair of raw.split('&')) {
+    if (!pair) continue;
+    const eq = pair.indexOf('=');
+    const rawKey = eq < 0 ? pair : pair.slice(0, eq);
+    let key;
+    try { key = decodeURIComponent(rawKey.replace(/\+/g, ' ')).trim().toLowerCase(); }
+    catch { key = rawKey.trim().toLowerCase(); }
+    if (!key || TRACKING_KEYS.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    kept.push(pair);
+  }
+  url.search = kept.join('&');
+  return url.href;
+}
+export function publicUrl(value) {
+  if (typeof value !== 'string' || value.length > MAX_URL_LENGTH) throw new Error('UNSAFE_URL');
+  const url = new URL(canonicalUrl(value));
+  if (url.href.length > MAX_URL_LENGTH || url.protocol !== 'https:' || url.username || url.password || url.hash || url.port ||
       !url.hostname.includes('.') || url.hostname.endsWith('.') || isIP(url.hostname) || /[\[\]:]/.test(url.hostname)) throw new Error('UNSAFE_URL');
   return url;
+}
+/** Egress priority for subrequests; 'background' never consumes a protected tunnel. */
+export function egressTier(value, primaryHost = '') {
+  let host;
+  try { host = new URL(canonicalUrl(value)).hostname.toLowerCase(); }
+  catch { return 'background'; }
+  if (hostIn(host, TELEMETRY_HOSTS)) return 'background';
+  if (primaryHost && host === primaryHost.toLowerCase()) return 'primary';
+  if (hostIn(host, ASSET_HOSTS)) return 'asset';
+  return 'normal';
 }
 export function publicAddress(address) {
   const family = isIP(address);

@@ -82,7 +82,7 @@ public class DiscoveryController {
     @PostMapping("/onboard/{venueId}/sources") public void saveSources(@PathVariable String venueId,@Valid @RequestBody SourcePreview request) {
         onboarding.saveSources(venueId,request.previewToken());
     }
-    public record Probe(@NotBlank @Size(max=2048) String url) { }
+    public record Probe(@NotBlank @Size(max=SafeUrls.MAX_URL_LENGTH) String url) { }
     private final java.util.concurrent.Semaphore probeLock=new java.util.concurrent.Semaphore(1);
     @PostMapping("/probe") public List<VenueSourceDiscoveryService.@NonNull Found> probe(@Valid @RequestBody Probe request) throws java.io.IOException {
         if (!probeLock.tryAcquire()) throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,"Quellenprüfung läuft bereits");
@@ -137,7 +137,7 @@ public class DiscoveryController {
     @GetMapping("/candidates/{id}/sources") public List<Map<String,Object>> origins(@PathVariable String id) {
         store.candidate(id);return store.origins(id);
     }
-    public record Source(@NotBlank String venueId,@NotBlank @Size(max=2048) String url,boolean approved,
+    public record Source(@NotBlank String venueId,@NotBlank @Size(max=SafeUrls.MAX_URL_LENGTH) String url,boolean approved,
                          @Size(max=300) String itemSelector,@Size(max=300) String titleSelector,@Size(max=300) String dateSelector,
                          @jakarta.validation.constraints.Pattern(regexp="WEBSITE|OFFICIAL_ORGANIZER|OFFICIAL_TICKETS|PLATFORM|CUSTOM") String sourceKind,
                          Boolean enabled,@Min(0) @Max(999) Integer priority) {
