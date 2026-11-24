@@ -102,18 +102,37 @@ curl --fail --silent https://api.noizycologne.de/ | grep -q 'Not found'
 
 Der Team-Host muss ohne Basic-Auth mit `401` antworten; `/api/v1/*` ist nur über denselben authentifizierten Team-Host erreichbar. Backend und PostgreSQL dürfen in `docker compose ps` keine veröffentlichten Host-Ports besitzen.
 
-## Optionaler JavaScript-Crawler (noch nicht im Deployment aktiviert)
+## JavaScript-Crawler (Overlay im Deployment, Aktivierung ausdrücklich)
 
-Der neue Browser-Fallback bleibt standardmäßig deaktiviert. Er benötigt zwei
-zusätzliche geprüfte Images (Worker und Egress-Gateway) und das optionale
-`compose.browser.yaml`-Overlay. Die normale GHCR-/SSH-Auslieferung veröffentlicht
-und startet diese Images bislang nicht. Keine einzelnen Workerports ins Internet
-freigeben; der Renderer darf nur das isolierte interne Browsernetz erreichen.
-Token, absolutes Seccomp-Profil, Ressourcenreserve, aktive Sandbox und
-Profil-/Scheduler-/Authentifizierungskonfiguration müssen auf dem Zielhost vor
-Aktivierung geprüft werden. Keine Schutzmechanismen bei Kernel-/AppArmor-
-Problemen abschalten. Ausführliche Konfiguration, Netztopologie, Tests und
-Ressourcenbudgets: [Browser-Crawler](../../docs/BROWSER-CRAWLER.md).
+Der Browser-Fallback ist Bestandteil des qualifizierten Deploymentwegs, nicht
+mehr nur eine spätere Option: `.github/workflows/ghcr.yml` baut und veröffentlicht
+Worker und Egress-Gateway als Images mit derselben geprüften Commit-SHA wie
+Backend und Frontend (keine `latest`-Freigabe) und überträgt
+`compose.browser.yaml`, `seccomp_profile.json` und `deploy.sh` unter
+`/opt/noizycologne/deploy/server/releases/<SHA>/`. `deploy.sh` ergänzt den
+Compose-Aufruf bei ausdrücklich in der persistenten `.env` gesetztem
+`DISCOVERY_BROWSER_ENABLED=true` um das Overlay, startet beide Dienste mit
+demselben Release und prüft nach dem Rollout per
+`deploy.sh --browser-smoke` den internen Gateway-/Worker-Pfad; bei Fehlern wird
+auf das vorherige Manifest und die vorherige Browserwahl zurückgerollt.
+
+Die Auslieferung ist nicht gleichbedeutend mit Aktivierung: Ohne ausdrücklich
+gesetztes `DISCOVERY_BROWSER_ENABLED=true` in der persistenten `.env` bleiben die
+Browserdienste aus. Vor dem Start erzwingt `deploy.sh` ein separates
+`BROWSER_WORKER_TOKEN` (mindestens 32 Zeichen, bei Bedarf einmalig erzeugt, Wert
+wird nicht ausgegeben), ein absolutes, inhaltlich mit dem qualifizierten Release
+identisches `BROWSER_SECCOMP_PROFILE`, mindestens 1 GiB verfügbaren RAM und eine
+Wegwerf-Sandboxprüfung mit echtem Profil und Containerlimits. Kein
+`--no-sandbox`, kein privilegierter Container, kein Docker-Socket und keine
+veröffentlichten Workerports: Der Renderer erreicht nur das isolierte interne
+Browsernetz, das Gateway hat kontrolliert Egress. Schutzmechanismen bei
+Kernel-/AppArmor-Problemen nicht abschalten.
+
+**Produktiv NICHT VERIFIZIERT:** Diese Anleitung beschreibt nur den im Repo
+belegten Ablauf; hier wurden keine Live-Dienste geprüft, keine Browsercontainer
+gestartet und keine Produktions-Smoke-Ergebnisse vorweggenommen. Konfiguration,
+Netztopologie, Ressourcenbudgets, lokale Sandbox-Fixtures und die Grenzen der
+bestehenden Inventur: [Browser-Crawler](../../docs/BROWSER-CRAWLER.md).
 
 ## Werkseinstellungen (vollständiger Datenreset)
 
