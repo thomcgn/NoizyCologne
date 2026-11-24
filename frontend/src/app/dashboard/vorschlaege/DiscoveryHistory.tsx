@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { calendarEntryHref } from "../kalender/calendarNavigation";
 import { discoveryApi } from "./discoveryApi";
@@ -7,6 +7,7 @@ import type { Candidate, Overview } from "./discoveryTypes";
 import { displayDate, sourceLink } from "./discoveryPresentation";
 import { discoveryStatusLabel } from "../discoveryLabels";
 import EventChangesPanel from "./EventChangesPanel";
+import { isDocumentVisible, useDiscoveryPolling } from "./useDiscoveryPolling";
 
 const filters: Record<string, string> = { IMPORTED: "Übernommene Termine", AUTOMATIC_IGNORED: "Durch Filter ausgefiltert", KEYWORD_FILTER: "Durch Schlagwortfilter ausgefiltert", OTHER_IGNORED: "Sonstige ignorierte Veranstaltungen", DUPLICATE: "Dubletten", ARCHIVE: "Archiv", MANUAL_REJECTED: "Manuell abgelehnt", REEVALUATED: "Neu bewertet" };
 export default function DiscoveryHistory({ data, onReview, onReviewId, onChanged }: {
@@ -18,12 +19,33 @@ export default function DiscoveryHistory({ data, onReview, onReviewId, onChanged
   const [capped, setCapped] = useState(false);
   const [error, setError] = useState("");
   const [limit, setLimit] = useState(20);
+  // The overview is re-fetched on every poll, but its object identity alone is
+  // not a reason to reload the history. Only the values shown here matter.
+  const dataVersion = useMemo(
+    () => `${data.automaticallyImported}|${data.runs.map(run => `${run.id}:${run.status}:${run.report}`).join("|")}`,
+    [data]
+  );
+  const loadedKey = useRef<string | null>(null);
+  const controllerRef = useRef<AbortController | null>(null);
+  const mounted = useRef(false);
   useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  const load = useCallback(() => {
+    if (!isDocumentVisible()) return;
+    const key = `${filter}|${dataVersion}`;
+    if (loadedKey.current === key) return;
+    controllerRef.current?.abort();
     const controller = new AbortController();
+    controllerRef.current = controller;
+    loadedKey.current = key;
     discoveryApi<Overview>(`?filter=${filter}`, "GET", undefined, controller.signal)
-      .then(result => { if (controller.signal.aborted) return; setError(""); setCapped(result.candidates.length >= 500); setHistory(result.candidates); }).catch(error => { if (!controller.signal.aborted) setError(error instanceof Error ? error.message : "Verlauf konnte nicht geladen werden."); });
-    return () => controller.abort();
-  }, [filter, data]);
+      .then(result => { if (controller.signal.aborted || !mounted.current) return; setError(""); setCapped(result.candidates.length >= 500); setHistory(result.candidates); })
+      .catch(cause => { if (controller.signal.aborted || !mounted.current) return; loadedKey.current = null; setError(cause instanceof Error ? cause.message : "Verlauf konnte nicht geladen werden."); });
+  }, [filter, dataVersion]);
+  useEffect(() => { load(); }, [load]);
+  useDiscoveryPolling(load);
   return <div className="discovery-history-content">
     <div className="discovery-history-filters" aria-label="Verlauf filtern">{Object.entries(filters).map(([value, label]) => <button key={value} className="discovery-button" aria-pressed={filter === value} onClick={() => {if (filter === value) return; setHistory(null); setError(""); setLimit(20); setFilter(value);}}>{label}</button>)}</div>
     {error && <p role="alert">{error}</p>}

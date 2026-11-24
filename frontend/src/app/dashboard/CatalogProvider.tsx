@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useCallback,
+  useMemo,
   useState,
   type ReactNode,
 } from "react";
@@ -53,7 +54,10 @@ export type GenreSuggestion = {
   uncertain: boolean;
 };
 
-function fallbackApiError(status: number, resource: string, maxFileSizeMb = 8): string {
+// Must match FlyerSizeLimit.MAX_BYTES in the backend (10 MB).
+const FLYER_MAX_FILE_SIZE_MB = 10;
+
+function fallbackApiError(status: number, resource: string, maxFileSizeMb = FLYER_MAX_FILE_SIZE_MB): string {
   if (status === 401) return "Die Anmeldung ist abgelaufen. Bitte erneut anmelden.";
   if (status === 403) return "Diese Aktion ist für dein Team-Konto nicht freigegeben.";
   if (status === 404) return `${resource} wurde nicht gefunden. Bitte aktualisieren und erneut versuchen.`;
@@ -227,7 +231,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   const [partiesLoading, setPartiesLoading] = useState(true);
   const [partiesError, setPartiesError] = useState<string | null>(null);
 
-  async function readPartyError(response: Response): Promise<string> {
+  const readPartyError = useCallback(async (response: Response): Promise<string> => {
     try {
       const body: unknown = await response.json();
       if (typeof body === "object" && body !== null) {
@@ -242,8 +246,8 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       // Die Statusmeldung darunter bleibt verständlich, auch wenn kein JSON vorliegt.
     }
 
-    return fallbackApiError(response.status, "Die Partyreihenverwaltung", 10);
-  }
+    return fallbackApiError(response.status, "Die Partyreihenverwaltung", FLYER_MAX_FILE_SIZE_MB);
+  }, []);
 
   const parsePartyFlyer = useCallback((body: unknown): PartyFlyer => {
     if (typeof body !== "object" || body === null) {
@@ -388,7 +392,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     } finally {
       setPartiesLoading(false);
     }
-  }, [parsePartyResponse]);
+  }, [parsePartyResponse, readPartyError]);
 
   useEffect(() => {
     const loadTimer = window.setTimeout(() => {
@@ -460,14 +464,14 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     } finally {
       setDraftsLoading(false);
     }
-  }, [parseDraftResponse]);
+  }, [parseDraftResponse, readPartyError]);
 
   useEffect(() => {
     const loadTimer = window.setTimeout(() => { void reloadDrafts(); }, 0);
     return () => window.clearTimeout(loadTimer);
   }, [reloadDrafts]);
 
-  async function createDraft(calendarEntryId: string, draft: Omit<EditorialPostDraft, "id" | "calendarEntryId">) {
+  const createDraft = useCallback(async (calendarEntryId: string, draft: Omit<EditorialPostDraft, "id" | "calendarEntryId">) => {
     const response = await fetch(`/api/v1/calendar-entries/${encodeURIComponent(calendarEntryId)}/editorial-drafts`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -478,9 +482,9 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     const created = parseDraftResponse(await response.json());
     setDrafts((current) => [...current, created]);
     return created;
-  }
+  }, [parseDraftResponse, readPartyError]);
 
-  async function updateDraft(draft: EditorialPostDraft) {
+  const updateDraft = useCallback(async (draft: EditorialPostDraft) => {
     const response = await fetch(`/api/v1/editorial-drafts/${encodeURIComponent(draft.id)}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -498,7 +502,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     const updated = parseDraftResponse(await response.json());
     setDrafts((current) => current.map((item) => item.id === updated.id ? updated : item));
     return updated;
-  }
+  }, [parseDraftResponse, readPartyError]);
 
   const parseMusicTrack = useCallback((body: unknown): MusicTrack => {
     if (typeof body !== "object" || body === null) throw new Error("Die Musik-API lieferte ein unerwartetes Antwortformat.");
@@ -543,9 +547,9 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     } finally {
       setMusicTracksLoading(false);
     }
-  }, [parseMusicTrack]);
+  }, [parseMusicTrack, readPartyError]);
 
-  async function createMusicTrack(track: MusicTrackInput) {
+  const createMusicTrack = useCallback(async (track: MusicTrackInput) => {
     const response = await fetch("/api/v1/music/tracks", {
       method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
       body: JSON.stringify(track),
@@ -554,9 +558,9 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     const created = parseMusicTrack(await response.json());
     setMusicTracks((current) => [created, ...current]);
     return created;
-  }
+  }, [parseMusicTrack, readPartyError]);
 
-  async function updateMusicTrack(track: MusicTrack) {
+  const updateMusicTrack = useCallback(async (track: MusicTrack) => {
     const response = await fetch(`/api/v1/music/tracks/${encodeURIComponent(track.id)}`, {
       method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
       body: JSON.stringify(track),
@@ -565,9 +569,9 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     const updated = parseMusicTrack(await response.json());
     setMusicTracks((current) => current.map((item) => item.id === updated.id ? updated : item));
     return updated;
-  }
+  }, [parseMusicTrack, readPartyError]);
 
-  async function createParty(party: Omit<PartySeries, "id">) {
+  const createParty = useCallback(async (party: Omit<PartySeries, "id">) => {
     const response = await fetch("/api/v1/parties", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -582,9 +586,9 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     const created = parsePartyResponse(await response.json());
     setParties((current) => [...current, created]);
     return created;
-  }
+  }, [parsePartyResponse, readPartyError]);
 
-  async function updateParty(party: PartySeries) {
+  const updateParty = useCallback(async (party: PartySeries) => {
     const response = await fetch(
       `/api/v1/parties/${encodeURIComponent(party.id)}`,
       {
@@ -616,18 +620,18 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       current.map((item) => (item.id === updated.id ? updated : item))
     );
     return updated;
-  }
+  }, [parsePartyResponse, readPartyError]);
 
-  async function deleteParty(id: string) {
+  const deleteParty = useCallback(async (id: string) => {
     const response = await fetch(`/api/v1/parties/${encodeURIComponent(id)}`, {
       method: "DELETE",
       credentials: "same-origin",
     });
     if (!response.ok) throw new Error(await readPartyError(response));
     setParties((current) => current.filter((party) => party.id !== id));
-  }
+  }, [readPartyError]);
 
-  async function uploadPartyFlyer(partyId: string, file: File) {
+  const uploadPartyFlyer = useCallback(async (partyId: string, file: File) => {
     const formData = new FormData();
     formData.append("file", file);
     const response = await fetch(
@@ -646,9 +650,9 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       party.id === partyId ? { ...party, defaultFlyer: updated } : party
     ));
     return updated;
-  }
+  }, [parsePartyFlyer, readPartyError]);
 
-  async function deletePartyFlyer(partyId: string) {
+  const deletePartyFlyer = useCallback(async (partyId: string) => {
     const response = await fetch(
       `/api/v1/parties/${encodeURIComponent(partyId)}/default-flyer`,
       { method: "DELETE", credentials: "same-origin" }
@@ -659,13 +663,13 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     setParties((current) => current.map((party) =>
       party.id === partyId ? { ...party, defaultFlyer: null } : party
     ));
-  }
+  }, [readPartyError]);
 
   const [venues, setVenues] = useState<CatalogItem[]>([]);
   const [venuesLoading, setVenuesLoading] = useState(true);
   const [venuesError, setVenuesError] = useState<string | null>(null);
 
-  async function readVenueError(response: Response): Promise<string> {
+  const readVenueError = useCallback(async (response: Response): Promise<string> => {
     try {
       const body: unknown = await response.json();
       if (
@@ -682,9 +686,9 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     }
 
     return fallbackApiError(response.status, "Die Locationverwaltung");
-  }
+  }, []);
 
-  function parseVenueResponse(body: unknown): CatalogItem {
+  const parseVenueResponse = useCallback((body: unknown): CatalogItem => {
     if (
       typeof body !== "object" ||
       body === null
@@ -711,7 +715,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       name: venue.name,
       instagram: venue.instagram,
     };
-  }
+  }, []);
 
   const reloadVenues = useCallback(async () => {
     setVenuesLoading(true);
@@ -739,7 +743,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     } finally {
       setVenuesLoading(false);
     }
-  }, []);
+  }, [parseVenueResponse, readVenueError]);
 
   useEffect(() => {
     const loadTimer = window.setTimeout(() => {
@@ -749,7 +753,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(loadTimer);
   }, [reloadVenues]);
 
-  async function createVenue(venue: Omit<CatalogItem, "id">) {
+  const createVenue = useCallback(async (venue: Omit<CatalogItem, "id">) => {
     const response = await fetch("/api/v1/venues", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -763,9 +767,9 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     const created = parseVenueResponse(await response.json());
     setVenues((current) => [...current, created]);
     return created;
-  }
+  }, [parseVenueResponse, readVenueError]);
 
-  async function updateVenue(venue: CatalogItem) {
+  const updateVenue = useCallback(async (venue: CatalogItem) => {
     const response = await fetch(
       `/api/v1/venues/${encodeURIComponent(venue.id)}`,
       {
@@ -784,22 +788,22 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       current.map((item) => (item.id === updated.id ? updated : item))
     );
     return updated;
-  }
+  }, [parseVenueResponse, readVenueError]);
 
-  async function deleteVenue(id: string) {
+  const deleteVenue = useCallback(async (id: string) => {
     const response = await fetch(`/api/v1/venues/${encodeURIComponent(id)}`, {
       method: "DELETE",
       credentials: "same-origin",
     });
     if (!response.ok) throw new Error(await readVenueError(response));
     setVenues((current) => current.filter((venue) => venue.id !== id));
-  }
+  }, [readVenueError]);
 
   const [actors, setActors] = useState<Actor[]>([]);
   const [actorsLoading, setActorsLoading] = useState(true);
   const [actorsError, setActorsError] = useState<string | null>(null);
 
-  async function readActorError(response: Response): Promise<string> {
+  const readActorError = useCallback(async (response: Response): Promise<string> => {
     try {
       const body: unknown = await response.json();
       if (typeof body === "object" && body !== null) {
@@ -815,9 +819,9 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     }
 
     return fallbackApiError(response.status, "Die Akteurverwaltung");
-  }
+  }, []);
 
-  function parseActorResponse(body: unknown): Actor {
+  const parseActorResponse = useCallback((body: unknown): Actor => {
     if (typeof body !== "object" || body === null) {
       throw new Error("Die Akteur-API lieferte ein unerwartetes Antwortformat.");
     }
@@ -844,7 +848,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       instagram: actor.instagram,
       collectiveIds: actor.collectiveIds,
     };
-  }
+  }, []);
 
   const reloadActors = useCallback(async () => {
     setActorsLoading(true);
@@ -875,7 +879,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     } finally {
       setActorsLoading(false);
     }
-  }, []);
+  }, [parseActorResponse, readActorError]);
 
   useEffect(() => {
     const loadTimer = window.setTimeout(() => {
@@ -885,7 +889,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(loadTimer);
   }, [reloadActors]);
 
-  async function createActor(actor: Omit<Actor, "id">) {
+  const createActor = useCallback(async (actor: Omit<Actor, "id">) => {
     const response = await fetch("/api/v1/actors", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -900,9 +904,9 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     const created = parseActorResponse(await response.json());
     setActors((current) => [...current, created]);
     return created;
-  }
+  }, [parseActorResponse, readActorError]);
 
-  async function updateActor(actor: Actor) {
+  const updateActor = useCallback(async (actor: Actor) => {
     const response = await fetch(
       `/api/v1/actors/${encodeURIComponent(actor.id)}`,
       {
@@ -928,22 +932,22 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       current.map((item) => (item.id === updated.id ? updated : item))
     );
     return updated;
-  }
+  }, [parseActorResponse, readActorError]);
 
-  async function deleteActor(id: string) {
+  const deleteActor = useCallback(async (id: string) => {
     const response = await fetch(`/api/v1/actors/${encodeURIComponent(id)}`, {
       method: "DELETE",
       credentials: "same-origin",
     });
     if (!response.ok) throw new Error(await readActorError(response));
     setActors((current) => current.filter((actor) => actor.id !== id));
-  }
+  }, [readActorError]);
 
   const [entries, setEntries] = useState<CalendarEntry[]>([]);
   const [entriesLoading, setEntriesLoading] = useState(true);
   const [entriesError, setEntriesError] = useState<string | null>(null);
 
-  async function readCalendarError(response: Response): Promise<string> {
+  const readCalendarError = useCallback(async (response: Response): Promise<string> => {
     try {
       const body: unknown = await response.json();
       if (typeof body === "object" && body !== null) {
@@ -958,8 +962,8 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       // Die Statusmeldung darunter bleibt verständlich, auch wenn kein JSON vorliegt.
     }
 
-    return fallbackApiError(response.status, "Die Kalenderverwaltung");
-  }
+    return fallbackApiError(response.status, "Die Kalenderverwaltung", FLYER_MAX_FILE_SIZE_MB);
+  }, []);
 
   const parseCalendarEntry = useCallback((body: unknown): CalendarEntry => {
     if (typeof body !== "object" || body === null) {
@@ -1054,7 +1058,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     } finally {
       setEntriesLoading(false);
     }
-  }, [parseCalendarEntry]);
+  }, [parseCalendarEntry, readCalendarError]);
 
   useEffect(() => {
     const loadTimer = window.setTimeout(() => {
@@ -1064,7 +1068,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(loadTimer);
   }, [reloadEntries]);
 
-  async function createEntry(entry: CalendarEntryPayload) {
+  const createEntry = useCallback(async (entry: CalendarEntryPayload) => {
     const response = await fetch("/api/v1/calendar-entries", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1079,9 +1083,9 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     const created = parseCalendarEntry(await response.json());
     setEntries((current) => [...current, created]);
     return created;
-  }
+  }, [parseCalendarEntry, readCalendarError]);
 
-  async function updateEntry(entry: CalendarEntryPayload & { id: string }) {
+  const updateEntry = useCallback(async (entry: CalendarEntryPayload & { id: string }) => {
     const { id, ...payload } = entry;
     const response = await fetch(
       `/api/v1/calendar-entries/${encodeURIComponent(id)}`,
@@ -1102,9 +1106,9 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       current.map((item) => (item.id === updated.id ? updated : item))
     );
     return updated;
-  }
+  }, [parseCalendarEntry, readCalendarError]);
 
-  async function deleteEntry(id: string) {
+  const deleteEntry = useCallback(async (id: string) => {
     const response = await fetch(
       `/api/v1/calendar-entries/${encodeURIComponent(id)}`,
       {
@@ -1118,9 +1122,9 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     }
 
     setEntries((current) => current.filter((item) => item.id !== id));
-  }
+  }, [readCalendarError]);
 
-  async function uploadEventFlyer(entryId: string, file: File) {
+  const uploadEventFlyer = useCallback(async (entryId: string, file: File) => {
     const formData = new FormData();
     formData.append("file", file);
     const response = await fetch(
@@ -1133,9 +1137,9 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       entry.id === entryId && entry.type === "event" ? { ...entry, eventFlyer: flyer } : entry
     ));
     return flyer;
-  }
+  }, [parsePartyFlyer, readCalendarError]);
 
-  async function analyzeEventFlyerGenres(entryId: string) {
+  const analyzeEventFlyerGenres = useCallback(async (entryId: string) => {
     const response = await fetch(
       `/api/v1/calendar-entries/${encodeURIComponent(entryId)}/flyer/analysis`,
       { method: "POST", credentials: "same-origin" }
@@ -1158,9 +1162,9 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       throw new Error("Die Flyer-Analyse lieferte ungültige Genre-Vorschläge.");
     }
     return genres as GenreSuggestion[];
-  }
+  }, [readCalendarError]);
 
-  async function deleteEventFlyer(entryId: string) {
+  const deleteEventFlyer = useCallback(async (entryId: string) => {
     const response = await fetch(
       `/api/v1/calendar-entries/${encodeURIComponent(entryId)}/flyer`,
       { method: "DELETE", credentials: "same-origin" }
@@ -1169,58 +1173,105 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     setEntries((current) => current.map((entry) =>
       entry.id === entryId && entry.type === "event" ? { ...entry, eventFlyer: null } : entry
     ));
-  }
+  }, [readCalendarError]);
+
+  // Consumers only re-render when catalog data or loading/error state changes.
+  const value = useMemo<CatalogContextValue>(() => ({
+    parties,
+    partiesLoading,
+    partiesError,
+    reloadParties,
+    createParty,
+    updateParty,
+    deleteParty,
+    uploadPartyFlyer,
+    deletePartyFlyer,
+    uploadEventFlyer,
+    analyzeEventFlyerGenres,
+    deleteEventFlyer,
+    drafts,
+    draftsLoading,
+    draftsError,
+    reloadDrafts,
+    createDraft,
+    updateDraft,
+    musicTracks,
+    musicTracksLoading,
+    musicTracksError,
+    reloadMusicTracks,
+    createMusicTrack,
+    updateMusicTrack,
+    venues,
+    venuesLoading,
+    venuesError,
+    reloadVenues,
+    createVenue,
+    updateVenue,
+    deleteVenue,
+    actors,
+    actorsLoading,
+    actorsError,
+    reloadActors,
+    createActor,
+    updateActor,
+    deleteActor,
+    entries,
+    entriesLoading,
+    entriesError,
+    reloadEntries,
+    createEntry,
+    updateEntry,
+    deleteEntry,
+  }), [
+    parties,
+    partiesLoading,
+    partiesError,
+    reloadParties,
+    createParty,
+    updateParty,
+    deleteParty,
+    uploadPartyFlyer,
+    deletePartyFlyer,
+    uploadEventFlyer,
+    analyzeEventFlyerGenres,
+    deleteEventFlyer,
+    drafts,
+    draftsLoading,
+    draftsError,
+    reloadDrafts,
+    createDraft,
+    updateDraft,
+    musicTracks,
+    musicTracksLoading,
+    musicTracksError,
+    reloadMusicTracks,
+    createMusicTrack,
+    updateMusicTrack,
+    venues,
+    venuesLoading,
+    venuesError,
+    reloadVenues,
+    createVenue,
+    updateVenue,
+    deleteVenue,
+    actors,
+    actorsLoading,
+    actorsError,
+    reloadActors,
+    createActor,
+    updateActor,
+    deleteActor,
+    entries,
+    entriesLoading,
+    entriesError,
+    reloadEntries,
+    createEntry,
+    updateEntry,
+    deleteEntry,
+  ]);
 
   return (
-    <CatalogContext.Provider
-      value={{
-        parties,
-        partiesLoading,
-        partiesError,
-        reloadParties,
-        createParty,
-        updateParty,
-        deleteParty,
-        uploadPartyFlyer,
-        deletePartyFlyer,
-        uploadEventFlyer,
-        analyzeEventFlyerGenres,
-        deleteEventFlyer,
-        drafts,
-        draftsLoading,
-        draftsError,
-        reloadDrafts,
-        createDraft,
-        updateDraft,
-        musicTracks,
-        musicTracksLoading,
-        musicTracksError,
-        reloadMusicTracks,
-        createMusicTrack,
-        updateMusicTrack,
-        venues,
-        venuesLoading,
-        venuesError,
-        reloadVenues,
-        createVenue,
-        updateVenue,
-        deleteVenue,
-        actors,
-        actorsLoading,
-        actorsError,
-        reloadActors,
-        createActor,
-        updateActor,
-        deleteActor,
-        entries,
-        entriesLoading,
-        entriesError,
-        reloadEntries,
-        createEntry,
-        updateEntry,
-        deleteEntry,
-      }}
-    >
+    <CatalogContext.Provider value={value}>
       {children}
     </CatalogContext.Provider>
   );

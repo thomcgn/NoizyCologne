@@ -16,6 +16,7 @@ import DiscoveryGeography,{type GeographyData} from "./DiscoveryGeography";
 import { discoveryApi as api } from "./discoveryApi";
 import { useWorkspaceAction } from "../workspaceActions";
 import { isNewSeries, isOpen, isUnclear } from "./discoveryPresentation";
+import { useDiscoveryPolling } from "./useDiscoveryPolling";
 import type { Candidate, Source, Overview } from "./discoveryTypes";
 
 export default function DiscoveryPage() {
@@ -49,9 +50,9 @@ export default function DiscoveryPage() {
   useEffect(() => {
     const requests = generation;
     const timer = window.setTimeout(() => void reload(), 0);
-    const poll = window.setInterval(() => void reload(), 10000);
-    return () => { clearTimeout(timer); clearInterval(poll); requests.current++; };
+    return () => { clearTimeout(timer); requests.current++; };
   }, [reload]);
+  useDiscoveryPolling(() => { void reload(); });
   useEffect(() => {
     if (!data) return;
     if (imported.current !== null && imported.current !== data.automaticallyImported) {
