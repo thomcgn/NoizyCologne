@@ -1,5 +1,6 @@
 package de.noizycologne.backend.api;
 
+import de.noizycologne.backend.media.FlyerSizeLimit;
 import org.jspecify.annotations.NonNull;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DataAccessException;
@@ -7,6 +8,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -17,6 +20,8 @@ import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
     @ExceptionHandler(ResponseStatusException.class)
     ResponseEntity<@NonNull ApiErrorResponse> handleResponseStatus(ResponseStatusException exception) {
@@ -49,7 +54,7 @@ public class ApiExceptionHandler {
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     ResponseEntity<@NonNull ApiErrorResponse> handleUploadTooLarge() {
         return error(HttpStatus.CONTENT_TOO_LARGE, "FILE_TOO_LARGE",
-                "Die Bilddatei ist zu groß. Erlaubt sind höchstens 8 MB.", false);
+                FlyerSizeLimit.tooLargeMessage(), false);
     }
 
     @ExceptionHandler(DataAccessException.class)
@@ -64,7 +69,10 @@ public class ApiExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    ResponseEntity<@NonNull ApiErrorResponse> handleUnexpectedFailure() {
+    ResponseEntity<@NonNull ApiErrorResponse> handleUnexpectedFailure(Exception exception) {
+        // Only the generic message and the exception with its stack trace are logged:
+        // never request headers, tokens, bodies or uploaded image data.
+        log.error("Unhandled exception while processing API request", exception);
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR",
                 "Der Server konnte die Anfrage nicht verarbeiten. Bitte versuche es erneut.", true);
     }

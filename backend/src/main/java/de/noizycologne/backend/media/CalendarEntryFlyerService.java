@@ -28,7 +28,6 @@ import java.util.Iterator;
 @Service
 public class CalendarEntryFlyerService {
 
-    private static final long MAX_FILE_SIZE = 8 * 1024 * 1024;
     private static final int MAX_PIXELS = 8_000_000;
 
     private final de.noizycologne.backend.discovery.DiscoveryStore store;
@@ -132,7 +131,7 @@ public class CalendarEntryFlyerService {
 
     private ValidatedImage validateImage(MultipartFile file) {
         if (file == null || file.isEmpty()) throw badRequest("Bitte eine Bilddatei auswählen");
-        if (file.getSize() > MAX_FILE_SIZE) throw badRequest("Der Flyer darf höchstens 8 MB groß sein");
+        if (file.getSize() > FlyerSizeLimit.MAX_BYTES) throw badRequest(FlyerSizeLimit.tooLargeMessage());
         try (ImageInputStream input = ImageIO.createImageInputStream(file.getInputStream())) {
             if (input == null) throw badRequest("Die Datei ist kein gültiges Bild");
             Iterator<ImageReader> readers = ImageIO.getImageReaders(input);
