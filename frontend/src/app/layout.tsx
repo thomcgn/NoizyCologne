@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+// CSS order is significant: globals.css is the single authoritative theme
+// token source; control-center.css only maps existing Tailwind classes onto
+// those tokens and must therefore load afterwards (Next.js CSS ordering).
 import "./globals.css";
 import "./control-center.css";
 import { preferenceBootstrap } from "./uiPreferences";
