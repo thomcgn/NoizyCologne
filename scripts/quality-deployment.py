@@ -24,6 +24,11 @@ FULL_JOB = 'Full validation / Full validation'
 REQUIRED_CHECK = 'Full quality gate'
 FULL_STEPS = ('Verify checked out commit', 'Full quality gate', 'Validate Caddy configuration')
 
+# The guard job translates only this exact exit code into a clean skip. Every
+# other error stays blocking and must never authorize or silently skip a deploy.
+STALE_EXIT = 2
+STALE_TRIGGER = 'STALE_TRIGGER: the triggering commit is no longer the current main head'
+
 
 class Unqualified(RuntimeError):
     """The selected commit has no suitable successful FULL proof."""
@@ -147,6 +152,19 @@ class DeploymentGuard:
         require(reference.get('object', {}).get('sha') == sha,
                 'A newer main commit exists; refusing an automatic rollback')
 
+    def is_current_main(self, sha):
+        """Read-only staleness check for the guard job; it produces no proof.
+
+        Malformed event data or API answers raise Unqualified and are treated as
+        hard errors. The strict plan/verify authorization is unchanged and is
+        still rechecked before publish and deploy.
+        """
+        sha = commit_sha(sha)
+        reference = self.client.get('git/ref/heads/main')
+        require(isinstance(reference, dict) and isinstance(reference.get('object'), dict),
+                'Malformed main ref response')
+        return commit_sha(reference['object'].get('sha')) == sha
+
     def verify_ci(self, sha, run_id, attempt, automatic):
         latest = self.latest_ci_run(sha)
         require(latest is not None and latest.get('id') == run_id
@@ -209,12 +227,26 @@ class DeploymentGuard:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('plan', 'verify'))
+    parser.add_argument('command', choices=('plan', 'verify', 'check-current'))
     args = parser.parse_args()
     try:
         client = GitHub(os.environ['GITHUB_REPOSITORY'], os.environ['GITHUB_TOKEN'],
                         os.environ.get('GITHUB_API_URL', 'https://api.github.com'))
         guard = DeploymentGuard(client, int(os.environ['GITHUB_RUN_ID']), int(os.environ['GITHUB_RUN_ATTEMPT']))
+        if args.command == 'check-current':
+            event_name = os.environ['GITHUB_EVENT_NAME']
+            if event_name == 'workflow_dispatch':
+                print('Manual trigger: staleness guard not applicable; plan/verify remain authoritative')
+                return 0
+            require(event_name == 'workflow_run', 'Unsupported staleness check trigger')
+            event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
+            trigger = event.get('workflow_run')
+            require(isinstance(trigger, dict), 'Malformed workflow_run event')
+            if guard.is_current_main(trigger.get('head_sha')):
+                print('CURRENT_TRIGGER: the triggering commit is still the current main head')
+                return 0
+            print(STALE_TRIGGER)
+            return STALE_EXIT
         if args.command == 'plan':
             event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
             proof = guard.plan(os.environ['GITHUB_EVENT_NAME'], event, os.environ['GITHUB_SHA'])
