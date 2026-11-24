@@ -45,7 +45,7 @@ public class EditorialPostDraft {
     @Column(name = "music_track_id", length = 100)
     private String musicTrackId;
 
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(
             name = "editorial_post_draft_mentions",
             joinColumns = @JoinColumn(name = "draft_id")
@@ -53,7 +53,7 @@ public class EditorialPostDraft {
     @Column(name = "actor_id", nullable = false, length = 100)
     private Set<String> mentionActorIds = new LinkedHashSet<>();
 
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(
             name = "editorial_post_draft_genres",
             joinColumns = @JoinColumn(name = "draft_id")

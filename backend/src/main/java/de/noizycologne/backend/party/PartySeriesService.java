@@ -4,6 +4,7 @@ import org.jspecify.annotations.NonNull;
 import de.noizycologne.backend.actor.Actor;
 import de.noizycologne.backend.actor.ActorRepository;
 import de.noizycologne.backend.calendar.CalendarEntryRepository;
+import de.noizycologne.backend.media.MediaAsset;
 import de.noizycologne.backend.media.MediaAssetRepository;
 import de.noizycologne.backend.media.PartyFlyerResponse;
 import de.noizycologne.backend.genre.GenreRepository;
@@ -13,9 +14,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -48,8 +52,17 @@ public class PartySeriesService {
 
     @Transactional(readOnly = true)
     public List<PartySeriesResponse> getParties() {
-        return partySeriesRepository.findAll().stream()
-                .map(party -> toResponse(party))
+        var parties = partySeriesRepository.findAll();
+        List<String> mediaIds = new ArrayList<>();
+        for (PartySeries party : parties) {
+            var mediaId = party.getDefaultFlyerMediaId();
+            if (mediaId != null) {
+                mediaIds.add(mediaId);
+            }
+        }
+        var flyers = loadFlyers(mediaIds);
+        return parties.stream()
+                .map(party -> toResponse(party, flyers))
                 .toList();
     }
 
@@ -127,12 +140,27 @@ public class PartySeriesService {
     }
 
     private PartySeriesResponse toResponse(PartySeries party) {
+        var mediaId = party.getDefaultFlyerMediaId();
+        return toResponse(party, loadFlyers(mediaId == null ? Set.of() : Set.of(mediaId)));
+    }
+
+    private Map<String, MediaAsset> loadFlyers(Collection<String> mediaIds) {
+        Map<String, MediaAsset> flyers = new HashMap<>();
+        if (mediaIds.isEmpty()) {
+            return flyers;
+        }
+        for (MediaAsset media : mediaAssetRepository.findAllById(mediaIds)) {
+            flyers.put(media.getId(), media);
+        }
+        return flyers;
+    }
+
+    private PartySeriesResponse toResponse(PartySeries party, Map<String, MediaAsset> flyers) {
         PartyFlyerResponse flyer = null;
         var mediaId = party.getDefaultFlyerMediaId();
         if (mediaId != null) {
-            var asset = mediaAssetRepository.findById(mediaId);
-            if (asset.isPresent()) {
-                var media = asset.get();
+            var media = flyers.get(mediaId);
+            if (media != null) {
                 flyer = new PartyFlyerResponse(media.getId(), media.getOriginalFilename(),
                         media.getMediaType(), media.getFileSize(),
                         "/api/v1/parties/" + party.getId() + "/default-flyer");
