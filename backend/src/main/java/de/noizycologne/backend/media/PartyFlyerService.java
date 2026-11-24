@@ -29,7 +29,6 @@ import java.util.UUID;
 @Service
 public class PartyFlyerService {
 
-    private static final long MAX_FILE_SIZE = 10 * 1024 * 1024;
     private static final int MAX_PIXELS = 40_000_000;
 
     private final PartySeriesRepository partySeriesRepository;
@@ -136,8 +135,8 @@ public class PartyFlyerService {
         if (file == null || file.isEmpty()) {
             throw badRequest("Bitte eine Bilddatei auswählen");
         }
-        if (file.getSize() > MAX_FILE_SIZE) {
-            throw badRequest("Der Flyer darf höchstens 10 MB groß sein");
+        if (file.getSize() > FlyerSizeLimit.MAX_BYTES) {
+            throw badRequest(FlyerSizeLimit.tooLargeMessage());
         }
 
         try (ImageInputStream input = ImageIO.createImageInputStream(file.getInputStream())) {
