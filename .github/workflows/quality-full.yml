@@ -67,3 +67,6 @@ jobs:
             -e API_TRUST_SECRET=isolated-ci-caddy-api-key-at-least-32-characters \
             -v "$PWD/deploy/server/Caddyfile:/etc/caddy/Caddyfile:ro" \
             caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+      - name: Validate Caddy security headers
+        run: python3 scripts/test-caddy-headers.py

@@ -24,8 +24,10 @@ def main():
         work = Path(directory)
         env = {key: value for key, value in os.environ.items() if not key.startswith(('COMPOSE_', 'API_TRUST_', 'AUTH_SERVICE_', 'TEAM_'))}
         production = (ROOT / 'deploy/server/Caddyfile').read_text()
+        snippet = production.split('(security_headers) {', 1)[1].split('\n}\n', 1)[0]
         team = production.split('tsa.noizycologne.de {', 1)[1].split('\n}\n', 1)[0]
-        (work / 'Caddyfile').write_text('http://fixture.test {' + team.replace('frontend:3000', 'fixture:3000').replace('api:8080', 'fixture:3000') + '\n}\n')
+        config = '(security_headers) {\n' + snippet + '\n}\n\nhttp://fixture.test {' + team.replace('frontend:3000', 'fixture:3000').replace('api:8080', 'fixture:3000') + '\n}\n'
+        (work / 'Caddyfile').write_text(config)
         (work / 'server.mjs').write_text('''import http from 'node:http';
 import os from 'node:os';
 const address = Object.values(os.networkInterfaces()).flat().find(item => item?.family==='IPv4' && !item.internal)?.address;
@@ -82,7 +84,7 @@ networks:
                     headers['X-Noizy-Client-IP'] = '203.0.113.17'
                     headers['X-Real-IP'] = '198.51.100.23'
                     headers['X-Forwarded-For'] = '192.0.2.66'
-                script = "const response=await fetch(" + json.dumps('http://fixture.test' + path) + ",{headers:" + json.dumps(headers) + ",signal:AbortSignal.timeout(1500)});console.log(JSON.stringify([response.status,await response.text()]));"
+                script = "const response=await fetch(" + json.dumps('http://fixture.test' + path) + ",{headers:" + json.dumps(headers) + ",signal:AbortSignal.timeout(1500)});console.log(JSON.stringify([response.status,await response.text(),Object.fromEntries(response.headers)]));"
                 return json.loads(run([*compose, 'exec', '-T', 'fixture', 'node', '--input-type=module', '-e', script], env=env))
             for _ in range(50):
                 try:
@@ -95,17 +97,28 @@ networks:
                 raise RuntimeError('Caddy fixture did not become ready')
             if request('/api/v1/fixtures', forged=True)[0] != 401:
                 raise RuntimeError('Forged service header bypassed session authentication')
-            status, body = request('/api/v1/fixtures', cookie=True, forged=True)
+            status, body, _ = request('/api/v1/fixtures', cookie=True, forged=True)
             if status != 200 or not json.loads(body)['trusted']:
                 raise RuntimeError('Client header was not replaced with trusted internal identity')
-            frontend_status, frontend_body = request('/fixture-proxy-check', forged=True)
+            frontend_status, frontend_body, _ = request('/fixture-proxy-check', forged=True)
             if frontend_status != 200 or not json.loads(frontend_body)['trusted']:
                 raise RuntimeError('Frontend proxy did not overwrite auth key and derive client IP')
+            required = {'strict-transport-security': 'max-age=31536000',
+                        'x-content-type-options': 'nosniff',
+                        'referrer-policy': 'strict-origin-when-cross-origin',
+                        'x-frame-options': 'DENY'}
+            for path in ('/api/v1/fixtures', '/fixture-proxy-check'):
+                _, _, actual = request(path, forged=True)
+                for name, value in required.items():
+                    if actual.get(name) != value:
+                        raise RuntimeError(f'Security header missing on {path}: {name}')
+                if 'permissions-policy' not in actual or 'content-security-policy-report-only' not in actual:
+                    raise RuntimeError(f'Policy headers missing on {path}')
             if request('/internal/auth/validate', cookie=True, forged=True)[0] != 404:
                 raise RuntimeError('Private authentication store was exposed')
             if request('/internal/maintenance/factory-reset', cookie=True)[0] != 404:
                 raise RuntimeError('Private reset route was exposed')
-            print('PASS: real Caddy requires session, overwrites API/auth headers and client IP, keeps reset and auth store private')
+            print('PASS: real Caddy requires session, overwrites API/auth headers and client IP, keeps reset and auth store private, emits security headers')
         finally:
             run([*compose, 'rm', '-sf'], env=env)
             networks = run(['docker', 'network', 'ls', '-q', '--filter', 'label=com.docker.compose.project=' + project], env=env).decode().split()

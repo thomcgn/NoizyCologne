@@ -2,16 +2,39 @@
 	email {$ACME_EMAIL}
 }
 
+# Security response headers for every public HTTPS vhost.
+# No routing, authentication or API trust boundary is changed here.
+(security_headers) {
+	header {
+		# One year on the exact hosts. Deliberately without includeSubDomains
+		# and preload until all subdomains are confirmed HTTPS-only on the VPS.
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# The editor/PWA is not framed anywhere; DENY is stricter than SAMEORIGIN.
+		X-Frame-Options "DENY"
+		# Web Push, clipboard and first-party media must keep working, so they
+		# are not restricted here.
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), accelerometer=(), gyroscope=(), magnetometer=(), fullscreen=(self)"
+		# REPORT ONLY: Next.js inline bootstrap, protected media and the service
+		# worker must be checked in a browser before any blocking CSP is enabled.
+		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+	}
+}
+
 noizycologne.de {
+	import security_headers
 	encode zstd gzip
 	reverse_proxy landing:80
 }
 
 www.noizycologne.de {
+	import security_headers
 	redir https://noizycologne.de{uri} permanent
 }
 
 tsa.noizycologne.de {
+	import security_headers
 	encode zstd gzip
 
 	@api path /api/v1/*
@@ -38,5 +61,6 @@ tsa.noizycologne.de {
 
 # Do not expose the backend on its former public hostname.
 api.noizycologne.de {
+	import security_headers
 	respond "Not found" 404
 }
