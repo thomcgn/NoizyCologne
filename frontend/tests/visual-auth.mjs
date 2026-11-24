@@ -69,7 +69,7 @@ try {
   origin = `https://127.0.0.1:${nextPort}`;
   const ca = await readFile(cert);
   const passwordHash = bcrypt.hashSync(password, 4);
-  const environment = {...process.env, TEAM_USER: username, TEAM_PASSWORD_HASH: passwordHash.replaceAll('$', '\\$'), TEAM_SESSION_SECRET: 'disposable-auth-browser-signing-secret-no-production-value', AUTH_SERVICE_SECRET: serviceKey, NOIZY_PUBLIC_ORIGIN: origin, NOIZY_INTERNAL_API_URL: `http://127.0.0.1:${port(store)}`, LOCAL_BACKEND_URL: 'http://127.0.0.1:9'};
+  const environment = {...process.env, TEAM_USER: username, TEAM_PASSWORD_HASH: passwordHash, TEAM_SESSION_SECRET: 'disposable-auth-browser-signing-secret-no-production-value', AUTH_SERVICE_SECRET: serviceKey, NOIZY_PUBLIC_ORIGIN: origin, NOIZY_INTERNAL_API_URL: `http://127.0.0.1:${port(store)}`, LOCAL_BACKEND_URL: 'http://127.0.0.1:9'};
   async function startNext() {
     child = spawn(process.execPath, [resolve(root, 'node_modules/next/dist/bin/next'), 'dev', '--hostname', '127.0.0.1', '--port', String(nextPort), '--experimental-https', '--experimental-https-key', key, '--experimental-https-cert', cert], {cwd: root, env: environment, stdio: ['ignore', 'pipe', 'pipe']});
     child.stdout.on('data', chunk => {childOutput = (childOutput + chunk).slice(-16000);});
@@ -85,7 +85,7 @@ try {
   await startNext();
   if (process.env.AUTH_VISUAL_SCRIPT) {
     const name = process.env.AUTH_VISUAL_SCRIPT;
-    assert.ok(['visual-control-center.mjs', 'visual-discovery.mjs', 'visual-discovery-confirmation.mjs', 'visual-discovery-geography.mjs', 'visual-preferences.mjs', 'visual-special-sources.mjs'].includes(name), 'Unknown existing visual fixture');
+    assert.ok(['visual-control-center.mjs', 'visual-discovery.mjs', 'visual-discovery-confirmation.mjs', 'visual-discovery-geography.mjs', 'visual-preferences.mjs', 'visual-special-sources.mjs', 'visual-design-tokens.mjs'].includes(name), 'Unknown existing visual fixture');
     const fixture = spawn(process.execPath, [resolve(root, 'tests', name)], {cwd: process.cwd(), stdio: 'inherit', env: {...process.env, DISCOVERY_VISUAL_URL: origin, DISCOVERY_VISUAL_SECRET: environment.TEAM_SESSION_SECRET, DISCOVERY_VISUAL_USER: username, DISCOVERY_VISUAL_PASSWORD_HASH: passwordHash, DISCOVERY_VISUAL_AUTH_KEY: serviceKey, DISCOVERY_VISUAL_STORE_URL: environment.NOIZY_INTERNAL_API_URL}});
     const [code] = await once(fixture, 'exit');
     assert.equal(code, 0, 'Existing visual fixture failed against registered sessions');

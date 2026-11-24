@@ -1,22 +1,7 @@
-/* Control Center tokens. Existing feature classes inherit these values. */
-html[data-theme="graphite"] {
-  --background: #11151c; --surface: #1b222c; --surface-raised: #252e3b; --surface-muted: #293443;
-  --foreground: #eff3f7; --muted: #abb8c9; --muted-strong: #ced8e4;
-  --line: #354050; --line-strong: #596b82; --accent: #53b4d8; --accent-ink: #091820;
-  --focus: #53b4d8; --danger: #ffa5a5; color-scheme: dark;
-}
-html[data-theme="midnight"], html[data-theme="dark"] {
-  --background: #0b1020; --surface: #17213a; --surface-raised: #202e4c; --surface-muted: #283957;
-  --foreground: #f2f2ff; --muted: #b2bcda; --muted-strong: #d7dcf1;
-  --line: #344569; --line-strong: #6076a5; --accent: #a5a6ff; --accent-ink: #11152b;
-  --focus: #babbff; --danger: #ffa5b1; color-scheme: dark;
-}
-html[data-theme="light"] {
-  --background: #f4f6f8; --surface: #ffffff; --surface-raised: #f0f3f7; --surface-muted: #e7edf3;
-  --foreground: #182433; --muted: #536477; --muted-strong: #35475b;
-  --line: #d4dbe4; --line-strong: #8291a4; --accent: #126ba0; --accent-ink: #ffffff;
-  --focus: #126ba0; --danger: #a5223e; color-scheme: light;
-}
+/* Control Center consumes the single token source in globals.css. Keep the
+   import order in layout.tsx: globals.css first, this file second. Do not
+   redeclare theme values here; the mappings below only bridge existing
+   Tailwind class names to those tokens. */
 html[data-theme] body, html[data-theme] .dashboard-shell, html[data-theme] .app-page,
 html[data-theme] [class~="bg-black"], html[data-theme] [class~="bg-[#050505]"], html[data-theme] [class~="bg-[#070707]"] { background-color: var(--background); color: var(--foreground); }
 html[data-theme] :is([class~="bg-neutral-950"], [class~="bg-neutral-900"]) { background-color: var(--surface); }
