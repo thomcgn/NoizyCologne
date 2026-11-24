@@ -3,6 +3,7 @@ package de.noizycologne.backend.calendar;
 import de.noizycologne.backend.actor.Actor;
 import de.noizycologne.backend.actor.ActorRepository;
 import de.noizycologne.backend.discovery.DiscoveryStore;
+import de.noizycologne.backend.media.MediaAsset;
 import de.noizycologne.backend.media.MediaAssetRepository;
 import de.noizycologne.backend.media.PartyFlyerResponse;
 import de.noizycologne.backend.party.PartySeriesRepository;
@@ -17,9 +18,12 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.format.ResolverStyle;
+import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -55,7 +59,16 @@ public class CalendarEntryService {
 
     @Transactional(readOnly = true)
     public List<CalendarEntryResponse> getEntries() {
-        return calendarEntryRepository.findAll().stream()
+        var entries = calendarEntryRepository.findAll();
+        List<String> mediaIds = new java.util.ArrayList<>();
+        for (CalendarEntry entry : entries) {
+            var mediaId = entry.getEventFlyerMediaId();
+            if (mediaId != null) {
+                mediaIds.add(mediaId);
+            }
+        }
+        var flyers = loadFlyers(mediaIds);
+        return entries.stream()
                 .sorted((left, right) -> {
                     int dateComparison = left.getEventDate().compareTo(right.getEventDate());
                     if (dateComparison != 0) return dateComparison;
@@ -64,7 +77,7 @@ public class CalendarEntryService {
                     if (timeComparison != 0) return timeComparison;
                     return left.getId().compareTo(right.getId());
                 })
-                .map(entry -> toResponse(entry))
+                .map(entry -> toResponse(entry, flyers))
                 .toList();
     }
 
@@ -241,12 +254,27 @@ public class CalendarEntryService {
     }
 
     private CalendarEntryResponse toResponse(CalendarEntry entry) {
+        var mediaId = entry.getEventFlyerMediaId();
+        return toResponse(entry, loadFlyers(mediaId == null ? Set.of() : Set.of(mediaId)));
+    }
+
+    private Map<String, MediaAsset> loadFlyers(Collection<String> mediaIds) {
+        Map<String, MediaAsset> flyers = new HashMap<>();
+        if (mediaIds.isEmpty()) {
+            return flyers;
+        }
+        for (MediaAsset media : mediaAssetRepository.findAllById(mediaIds)) {
+            flyers.put(media.getId(), media);
+        }
+        return flyers;
+    }
+
+    private CalendarEntryResponse toResponse(CalendarEntry entry, Map<String, MediaAsset> flyers) {
         PartyFlyerResponse flyer = null;
         var mediaId = entry.getEventFlyerMediaId();
         if (mediaId != null) {
-            var asset = mediaAssetRepository.findById(mediaId);
-            if (asset.isPresent()) {
-                var media = asset.get();
+            var media = flyers.get(mediaId);
+            if (media != null) {
                 flyer = new PartyFlyerResponse(media.getId(), media.getOriginalFilename(),
                         media.getMediaType(), media.getFileSize(),
                         "/api/v1/calendar-entries/" + entry.getId() + "/flyer");

@@ -45,12 +45,12 @@ public class MusicTrack {
     @Column(name = "last_used_at")
     private OffsetDateTime lastUsedAt;
 
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "music_track_genres", joinColumns = @JoinColumn(name = "track_id"))
     @Column(name = "genre", nullable = false, length = 100)
     private Set<String> genres = new LinkedHashSet<>();
 
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "music_track_party_series", joinColumns = @JoinColumn(name = "track_id"))
     @Column(name = "party_series_id", nullable = false, length = 100)
     private Set<String> partySeriesIds = new LinkedHashSet<>();

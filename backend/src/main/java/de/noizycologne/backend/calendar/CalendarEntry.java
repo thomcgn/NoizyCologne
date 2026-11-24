@@ -59,7 +59,7 @@ public class CalendarEntry {
     @Column(name = "event_flyer_media_id", length = 100)
     private String eventFlyerMediaId;
 
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(
             name = "calendar_entry_mentions",
             joinColumns = @JoinColumn(name = "entry_id")

@@ -79,16 +79,16 @@ public class PartySeries {
         defaultEntryPrice = entryPrice;
     }
 
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "party_series_genres", joinColumns = @JoinColumn(name = "party_id"))
     @Column(name = "genre", nullable = false, length = 100)
     private Set<String> standardGenres = new LinkedHashSet<>();
 
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "party_djs", joinColumns = @JoinColumn(name = "party_id"))
     private Set<@NonNull PartyDjAssignment> djAssignments = new LinkedHashSet<>();
 
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "party_organizers", joinColumns = @JoinColumn(name = "party_id"))
     @Column(name = "actor_id", nullable = false, length = 100)
     private Set<String> organizerIds = new LinkedHashSet<>();
