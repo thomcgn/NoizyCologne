@@ -3666,10 +3666,14 @@ ausgeführt. PR-Merge-SHA und main-SHA sind getrennt zu behandeln. Smoke-Tests u
 Rollback bleiben erhalten; es gibt keinen zweiten parallelen FULL-Lauf in GHCR
 für bereits erfolgreich geprüftes main.
 
-**Noch zu aktivieren:** Bei der lesenden Bestandsaufnahme war GitHub-`main` ohne
-Branch Protection/Rulesets. Konfiguration und lesender Prüfer sind vorbereitet,
-aber im Feature-Branch-Auftrag nicht auf GitHub angewandt. Ohne diesen Schutz ist
-ein Merge ohne FULL weiterhin technisch möglich. Siehe
+**Abweichender Schutz-Nachweis:** Die versionierte Vorlage, der vorbereitete
+lesende Prüfer und das im Audit beschriebene aktive Ruleset (ID 26688192,
+`Full quality gate` erforderlich, aber `strict=false` und Review-Count 0)
+stimmen nicht überein; die Vorlage ist strenger. Der Prüfer liest klassische
+Protection und Rulesets, verändert aber nichts auf GitHub. Der aktuelle
+Live-Stand ist **nicht verifiziert** und muss lesend gegen einen geprüften
+Commit-SHA neu geprüft werden; daraus folgt kein Sicherheitsclaim. Ohne diesen
+Nachweis bleibt ein Merge ohne FULL technisch möglich. Siehe
 [QUALITY.md](QUALITY.md) für Aktivierung, Verantwortlichkeiten und Analysegrenzen,
 [QUALITY-BENCHMARK.md](QUALITY-BENCHMARK.md) für Messungen und verbliebene Kosten.
 

@@ -376,22 +376,45 @@ Aktuellen GitHub-Stand ausschließlich lesend prüfen:
 python3 scripts/check-branch-protection.py
 ```
 
-**Stand der Bestandsaufnahme am 06.11.2026:** `main` war ungeschützt, ohne Rulesets.
-Diese Feature-Branch-Änderung aktiviert keine Repository-Einstellung. Solange der
-Schutz nicht angewandt und der lesende Check erfolgreich ist, ist das
-Abnahmekriterium „kein Merge ohne FULL“ organisatorisch und technisch **noch offen**.
-Der benötigte Schutz muss im privaten Repository auch vom GitHub-Tarif unterstützt
-werden; die gelesene API lieferte keine Tarifauskunft.
+Der Prüfer liest zuerst die klassische Protection und greift bei fehlender oder
+unzureichender Protection auf Rulesets zurück
+(`gh api repos/{owner}/{repo}/rulesets` samt Detailabruf). Er akzeptiert entweder
+eine wirksame klassische Protection oder ein aktives, auf `main` anwendbares
+Ruleset ohne Bypass-Akteure, das **Full quality gate** von App 15368 und einen
+Pull Request verlangt. `strict=false` und ein Review-Count von 0 werden als
+Abweichungen sichtbar gemacht, nicht als Erfüllung der strengeren Vorlage
+ausgegeben. Ist die Ruleset-API nicht lesbar (fehlender Zugriff, fehlende
+Tarifunterstützung, beschädigte Antwort), bricht der Prüfer mit klarer Meldung
+ab; daraus wird keine Freigabe abgeleitet. Das Skript verändert nichts auf GitHub.
 
-Nach Freigabe durch einen Repository-Administrator lässt sich die vorbereitete
-Konfiguration anwenden (ersetzt vorhandene Branch-Protection-Einstellungen; zuvor
-prüfen):
+**Stand der Bestandsaufnahme:** Am 06.11.2026 war `main` laut klassischer API
+ohne Protection; der damalige Prüfer konnte ein aktives Ruleset nicht erkennen.
+Das Audit vom 09.11.2026 beschreibt ein aktives Ruleset (ID 26688192), das
+**Full quality gate** verlangt, aber
+`strict_required_status_checks_policy=false` und
+`required_approving_review_count=0` verwendet; die versionierte JSON-Vorlage ist
+in diesen Punkten strenger. Vorlage, Prüfer und auditiertes Ruleset divergieren.
+Der aktuelle Live-Stand ist **NICHT VERIFIZIERT** und muss lesend gegen einen
+geprüften SHA neu geprüft werden, bevor daraus ein wirksamer Schutz folgt.
+Solange dieser Nachweis fehlt, bleibt das Abnahmekriterium „kein Merge ohne
+FULL“ offen. Der benötigte Schutz muss im privaten Repository auch vom
+GitHub-Tarif unterstützt werden; die gelesene API lieferte keine Tarifauskunft.
+Diese Änderung aktiviert keine Repository-Einstellung.
+
+Die versionierte Datei betrifft nur die klassische Protection, nicht das
+Ruleset. Nach Freigabe durch einen Repository-Administrator lässt sie sich
+anwenden (ersetzt vorhandene klassische Einstellungen; zuvor lesend prüfen):
 
 ```sh
 gh api --method PUT repos/thomcgn/NoizyCologne/branches/main/protection \
   --input .github/branch-protection-main.json
 python3 scripts/check-branch-protection.py
 ```
+
+Diese Aufgabe führt keine Live-Änderung aus. Bei nur einem Admin-Konto darf die
+Anwendung nicht zur Selbstsperre führen; Bypass-Ausnahmen sind nicht zu
+konfigurieren. Ein bestehendes Ruleset wird durch die PUT nicht geändert und
+muss separat lesend geprüft werden.
 
 Statuschecks müssen nach dem Zusammenführen unter ihren neuen Namen verfügbar sein;
 Schutz vor dem nächsten fachlichen Merge aktivieren und kontrollieren. Änderungen
