@@ -31,6 +31,11 @@ updates:
         update-types:
           - minor
           - patch
+    # TypeScript 7 wird von typescript-eslint (über eslint-config-next) noch
+    # nicht unterstützt; Minor-/Patch-Updates bleiben weiterhin aktiv.
+    ignore:
+      - dependency-name: typescript
+        versions: ["7.*"]
     commit-message:
       prefix: "deps(frontend)"
 
