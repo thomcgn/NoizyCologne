@@ -8,6 +8,7 @@ import DiscoveryResetDialog, { type ResetMode } from "./DiscoveryResetDialog";
 import CandidateReviewDialog from "./CandidateReviewDialog";
 import SourceEditorDialog from "./SourceEditorDialog";
 import DashboardModal from "../DashboardModal";
+import ActionFeedback from "../ActionFeedback";
 import KeywordRules from "./KeywordRules";
 import DiscoveryCandidates from "./DiscoveryCandidates";
 import DiscoveryHistory from "./DiscoveryHistory";
@@ -27,6 +28,7 @@ export default function DiscoveryPage() {
   const [candidate, setCandidate] = useState<Candidate | null>(null);
   const [source, setSource] = useState<Source | null>(null);
   const [notice, setNotice] = useState("");
+  const [noticePartial, setNoticePartial] = useState(false);
   const [resetMode, setResetMode] = useState<ResetMode | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -62,7 +64,7 @@ export default function DiscoveryPage() {
   }, [data, reloadEntries, reloadParties, reloadDrafts]);
   async function action(work: () => Promise<void>) {
     if (actionLock.current) return;
-    actionLock.current = true; setBusy(true); setError(""); setNotice("");
+    actionLock.current = true; setBusy(true); setError(""); setNotice(""); setNoticePartial(false);
     try { await work(); await reload(); }
     catch (error) { setError(error instanceof Error ? error.message : "Aktion fehlgeschlagen"); }
     finally { actionLock.current = false; setBusy(false); }
@@ -83,6 +85,7 @@ export default function DiscoveryPage() {
       const successful=new Set([...result.rejectedIds,...result.alreadyRejectedIds]);
       setPending(current=>({ids:new Set([...current.ids].filter(id=>!successful.has(id))),items:new Map([...current.items].filter(([id])=>!successful.has(id)))}));
       setConfirmReject(false);
+      setNoticePartial(result.conflicts.length > 0);
       setNotice(`${result.rejected} Veranstaltungen abgelehnt; ${result.alreadyRejected} bereits abgelehnt.${result.conflicts.length ? ` ${result.conflicts.length} Konflikte: ${result.conflicts.map(item=>`${pending.items.get(item.id)?.title ?? item.id}: ${item.reason}`).join("; ")}. Vormerkung zurücknehmen und erneut prüfen.` : ""}`);
     });
   }
@@ -126,7 +129,7 @@ export default function DiscoveryPage() {
     {pending.ids.size>0 && <details className="discovery-section"><summary>{pending.ids.size} vorgemerkt · Vormerkung zurücknehmen</summary><p>Nur für diese geöffnete Discovery-Sitzung vorgemerkt; noch nicht dauerhaft abgelehnt. Maximal 500 pro Anfrage.</p><ul className="max-h-64 overflow-y-auto">{[...pending.items.values()].map(item=><li key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-2"><span>{item.title}</span><button type="button" className="discovery-button" disabled={busy} onClick={()=>unmark(item.id)}>Vormerkung zurücknehmen: {item.title}</button></li>)}</ul></details>}
     <DiscoveryProgress operation={activeOperation ?? operation} />
     {error && <div className="discovery-message" role="alert">{error}<button className="discovery-button" disabled={busy} onClick={() => void reload()}>Erneut laden</button></div>}
-    {notice && <p className="discovery-message" role="status">{notice}</p>}
+    {notice && <ActionFeedback kind={noticePartial ? "partial" : "success"} showLabel={false}>{notice}</ActionFeedback>}
     <div className="discovery-metrics" aria-label="Discovery-Kennzahlen">{[["Automatisch übernommen", data?.automaticallyImported], ["Neue Partyreihen", data ? newSeries.length : undefined], ["Prüfbedarf", data ? review.length : undefined]].map(([label, value]) => <div key={label} className="discovery-metric"><span>{label}</span><strong>{value ?? "–"}</strong></div>)}</div>
     {visibleCandidates.length >= 500 && <p className="discovery-source-notice">Die API liefert bis zu 500 Treffer je Bereich. Die Kennzahlen für neue Reihen und Prüfbedarf beziehen sich auf die geladenen Ergebnisse.</p>}
     {sourceProblems.length > 0 && <p className="discovery-source-notice">{sourceProblems.length} {sourceProblems.length === 1 ? "Quelle konnte" : "Quellen konnten"} nicht vollständig ausgewertet werden. Weitere Quellen werden unabhängig verarbeitet. <button onClick={() => {setToolsOpen(true); window.setTimeout(() => document.getElementById("discovery-tools")?.scrollIntoView({ behavior: "smooth" }), 0);}}>Quellen ansehen</button></p>}

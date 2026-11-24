@@ -13,6 +13,8 @@ import {
   type RecurrenceRule,
 } from "../CatalogProvider";
 import DashboardModal from "../DashboardModal";
+import ActionFeedback, { CompatibleActionLabel } from "../ActionFeedback";
+import { useDirtyGuard } from "../useDirtyGuard";
 import StandardGenreSelector, { useActiveGenres } from "../StandardGenreSelector";
 import DataCollection, { type CollectionColumn } from "../DataCollection";
 import { useWorkspaceAction } from "../workspaceActions";
@@ -159,6 +161,17 @@ export default function PortfolioPage({
   const [recurrenceLocationId,setRecurrenceLocationId] = useState("");
   const [recurrenceStartDate,setRecurrenceStartDate] = useState("");
 
+  const [editorSession, setEditorSession] = useState(0);
+  const editorSignature = JSON.stringify({
+    category, editingId, name, instagram, websiteUrl, eventsUrl, discoveryEnabled,
+    discoveryAliases, defaultStartTime, defaultEntryPrice, color,
+    residentDjIds, otherDjIds, organizerIds, standardGenres, djMentionDefault,
+    recurrenceKind, weekday, occurrence, recurrenceNote, recurrenceLocationId,
+    recurrenceStartDate, flyerFile: flyerFile?.name ?? null, removeFlyer,
+    sourceToken: websiteReport?.previewToken ?? null, locationSources: locationSources.length,
+  });
+  const dirtyGuard = useDirtyGuard(editorSignature, `portfolio-${editorSession}`);
+
   useEffect(() => {
     if (category !== "parties" || !editingId) return;
     // A newly persisted ID must not trigger a GET that overwrites unsaved alias edits.
@@ -197,6 +210,7 @@ export default function PortfolioPage({
 
   function resetForm() {
     saveProgress.current = null;
+    setEditorSession(value => value + 1);
     setPartialSave("");
     setDefaultStartTime(""); setDefaultEntryPrice(null);
     setRecurrenceKind("none");
@@ -613,10 +627,10 @@ export default function PortfolioPage({
           : <DataCollection key={category} items={items} columns={columns} label={category === "parties" ? "Partyreihen" : "Locations"} storageKey={`noizy-view-${category}`} getName={item => item.name} onOpen={editItem} openDisabled={saving || deletingId !== null} query={search} onQueryChange={setSearch} searchText={searchableItem} selectedId={editorOpen ? editingId : null} actions={item => <div className="cc-inline-actions"><button type="button" className="cc-button" disabled={saving || deletingId !== null} onClick={() => editItem(item)}>Bearbeiten</button><button type="button" className="cc-button cc-button-danger" disabled={deletingId !== null} onClick={() => void deleteItem(item)}>{deletingId === item.id ? "Löschen ..." : "Löschen"}</button></div>} />}
         </section>
 
-        {saveNotice && <p role="status" className="mt-4 rounded-lg border border-white/15 p-3 text-sm">{saveNotice}</p>}
+        {saveNotice && <ActionFeedback kind="success" showLabel={false}>{saveNotice}</ActionFeedback>}
 
         {/* Editor */}
-        <DashboardModal variant="drawer" protectChanges busy={saving}
+        <DashboardModal variant="drawer" protectChanges busy={saving} dirtyGuard={dirtyGuard}
           open={editorOpen}
           onClose={() => {
             if (saving) return;
@@ -1027,12 +1041,8 @@ export default function PortfolioPage({
               </>
             )}
 
-            {partialSave && <p role="status" className="mt-5 rounded-lg border border-amber-400/40 p-3 text-sm">{partialSave} Bereits erfolgreiche Schritte werden beim Fortsetzen nicht wiederholt. Geänderte Stammdaten werden zusätzlich gespeichert.</p>}
-            {error && (
-              <p role="alert" className="mt-5 text-sm cc-status-danger">
-                {error}
-              </p>
-            )}
+            {partialSave && <ActionFeedback kind="partial" showLabel={false}>{partialSave} Bereits erfolgreiche Schritte werden beim Fortsetzen nicht wiederholt. Geänderte Stammdaten werden zusätzlich gespeichert.</ActionFeedback>}
+            {error && <ActionFeedback kind="error" showLabel={false}>{error}</ActionFeedback>}
 
             <div className="mt-8 grid grid-cols-2 gap-3 sm:flex">
               <button
@@ -1040,7 +1050,7 @@ export default function PortfolioPage({
                 disabled={saving || aliasesLoading || (category === "parties" && !aliasesReady)}
                 className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black"
               >
-                {saving ? "Speichern ..." : partialSave ? "Offene Schritte fortsetzen" : "Übernehmen"}
+                {saving ? "Speichern ..." : partialSave ? "Offene Schritte fortsetzen" : <CompatibleActionLabel legacy="Übernehmen">Speichern und schließen</CompatibleActionLabel>}
               </button>
 
               <button

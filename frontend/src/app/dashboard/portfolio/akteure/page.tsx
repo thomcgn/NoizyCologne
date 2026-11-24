@@ -9,6 +9,8 @@ import {
   type ActorRole,
 } from "../../CatalogProvider";
 import DashboardModal from "../../DashboardModal";
+import ActionFeedback, { type ActionFeedbackKind } from "../../ActionFeedback";
+import { useDirtyGuard } from "../../useDirtyGuard";
 import DataCollection, { type CollectionColumn } from "../../DataCollection";
 import { useWorkspaceAction } from "../../workspaceActions";
 
@@ -41,6 +43,13 @@ export default function ActorsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState("");
   const [search, setSearch] = useState("");
+  const [saveFeedback, setSaveFeedback] = useState<{ kind: ActionFeedbackKind; message: string } | null>(null);
+
+  const editorSignature = JSON.stringify({ editingId, name, kind, roles, instagram, collectiveIds });
+  const dirtyGuard = useDirtyGuard(
+    editorSignature,
+    editorOpen ? editingId ?? "new-actor" : "actor-editor-closed",
+  );
 
   const collectives = actors.filter(
     (actor) => actor.kind === "collective"
@@ -59,6 +68,7 @@ export default function ActorsPage() {
     setInstagram("");
     setCollectiveIds([]);
     setError("");
+    setSaveFeedback(null);
     setEditorOpen(true);
   }
 
@@ -70,6 +80,7 @@ export default function ActorsPage() {
     setInstagram(actor.instagram);
     setCollectiveIds([...actor.collectiveIds]);
     setError("");
+    setSaveFeedback(null);
     setEditorOpen(true);
   }
 
@@ -151,6 +162,8 @@ export default function ActorsPage() {
     setEditorOpen(false);
     setEditingId(null);
     setError("");
+    dirtyGuard.setClean();
+    setSaveFeedback({ kind: "success", message: `Akteur „${cleanName}“ gespeichert.` });
   }
 
   async function removeActor(actor: Actor) {
@@ -206,6 +219,7 @@ export default function ActorsPage() {
             {deleteError}
           </p>
         )}
+        {saveFeedback && <ActionFeedback kind={saveFeedback.kind}>{saveFeedback.message}</ActionFeedback>}
 
         <section className="cc-catalog-list" aria-label="Akteure">
           {actorsLoading ? <p className="cc-empty" role="status">Akteure werden geladen …</p>
@@ -214,7 +228,7 @@ export default function ActorsPage() {
         </section>
 
         {/* Akteur-Editor */}
-        <DashboardModal variant="drawer" protectChanges
+        <DashboardModal variant="drawer" protectChanges dirtyGuard={dirtyGuard}
           open={editorOpen}
           onClose={() => setEditorOpen(false)}
           title={editingId ? "Akteur bearbeiten" : "Neuer Akteur"}
@@ -332,7 +346,7 @@ export default function ActorsPage() {
                 disabled={saving}
                 className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {saving ? "Speichern ..." : "Übernehmen"}
+                {saving ? "Speichern ..." : "Speichern und schließen"}
               </button>
 
               <button

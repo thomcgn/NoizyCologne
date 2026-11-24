@@ -2,6 +2,7 @@
 
 import {useState} from "react";
 import DashboardModal from "../DashboardModal";
+import {useDirtyGuard} from "../useDirtyGuard";
 import {useCatalog} from "../CatalogProvider";
 import {discoveryApi as api} from "./discoveryApi";
 import {sourceLink} from "./discoveryPresentation";
@@ -32,7 +33,8 @@ function LocationConfirmation({item,onClose,busy,error,action}:{item:GeographyIt
  const {venues,reloadVenues}=useCatalog();
  const [venue,setVenue]=useState("");const [name,setName]=useState(item.location);const [city,setCity]=useState("Köln");
  const [street,setStreet]=useState(item.place?.street??"");const [proof,setProof]=useState(item.source_url);const [confirmed,setConfirmed]=useState(false);
- return <DashboardModal open protectChanges title="Veranstaltungsort bestätigen" onClose={onClose}><form className="space-y-4" onSubmit={event=>{event.preventDefault();void action(async()=>{await api(`/geography/${encodeURIComponent(item.id)}/confirm`,"POST",{venueId:venue==="new"?null:venue,venueName:venue==="new"?name:null,city,street,proofUrl:proof,confirmed});await reloadVenues();onClose();});}}>
+ const dirtyGuard=useDirtyGuard(JSON.stringify({venue,name,city,street,proof,confirmed}),`geography-${item.id}`);
+ return <DashboardModal open protectChanges dirtyGuard={dirtyGuard} title="Veranstaltungsort bestätigen" onClose={onClose}><form className="space-y-4" onSubmit={event=>{event.preventDefault();void action(async()=>{await api(`/geography/${encodeURIComponent(item.id)}/confirm`,"POST",{venueId:venue==="new"?null:venue,venueName:venue==="new"?name:null,city,street,proofUrl:proof,confirmed});await reloadVenues();onClose();});}}>
   {error&&<p role="alert">{error}</p>}<p>{item.title}. Prüfe die tatsächliche Veranstaltungsadresse anhand des Belegs. Ein Titel oder Portalpfad mit „Köln“ reicht nicht.</p>
   <a className="underline" href={sourceLink(item.source_url)} target="_blank" rel="noreferrer">Ortsbeleg öffnen</a>
   <label className="block">Location<select className={field} required value={venue} onChange={event=>setVenue(event.target.value)}><option value="">Bitte ausdrücklich wählen</option>{venues.map(value=><option key={value.id} value={value.id}>{value.name}</option>)}<option value="new">Neue Location anlegen</option></select></label>

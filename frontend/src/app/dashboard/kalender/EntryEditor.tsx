@@ -1,20 +1,22 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   toDateKey,
   useCatalog,
   type CalendarEntry,
   type CalendarEntryPayload,
 } from "../CatalogProvider";
+import { useDirtyGuard, type DirtyGuard } from "../useDirtyGuard";
 
 type EntryType = "event" | "closure";
 
 interface EntryEditorProps {
   date: Date;
   entry?: CalendarEntry | null;
-  onSaved: () => void;
+  onSaved: (message: string) => void;
   onCancel: () => void;
+  onGuard?: (guard: DirtyGuard) => void;
 }
 
 const inputStyle =
@@ -27,6 +29,7 @@ export default function EntryEditor({
   entry = null,
   onSaved,
   onCancel,
+  onGuard,
 }: EntryEditorProps) {
   const {
     venues,
@@ -65,6 +68,13 @@ export default function EntryEditor({
       ? { partyId: entry.partyId, djIds: [...entry.mentionDjIds] }
       : null
   );
+
+  const editorSignature = JSON.stringify({
+    type, entryDate: toDateKey(entryDate), entryPrice, priceEdited, timeEdited,
+    locationId, partyId, startTime, reason, notes, mentionOverride,
+  });
+  const dirtyGuard = useDirtyGuard(editorSignature);
+  useEffect(() => {onGuard?.(dirtyGuard);}, [dirtyGuard, onGuard]);
 
   const selectedLocation = venues.find((venue) => venue.id === locationId);
   const selectedParty = parties.find((party) => party.id === partyId);
@@ -145,7 +155,8 @@ export default function EntryEditor({
       } else {
         await createEntry(updated);
       }
-      onSaved();
+      dirtyGuard.setClean();
+      onSaved(`Kalendereintrag für ${toDateKey(entryDate)} gespeichert.`);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -414,8 +425,8 @@ export default function EntryEditor({
           {saving
             ? "Speichern ..."
             : entry
-              ? "Änderungen übernehmen"
-              : "Eintrag speichern"}
+              ? "Änderungen speichern"
+              : "Speichern und schließen"}
         </button>
         <button
           type="button"
