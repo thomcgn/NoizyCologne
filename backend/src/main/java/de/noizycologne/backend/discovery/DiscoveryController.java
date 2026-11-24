@@ -36,9 +36,12 @@ public class DiscoveryController {
         if(!scheduler.startChanges()) throw new ResponseStatusException(HttpStatus.CONFLICT,"Discovery-Auftrag läuft bereits");
         return Map.of("accepted",true);
     }
-    @GetMapping public Map<String,Object> overview(@RequestParam(defaultValue="ALL") String filter) {
+    @GetMapping public Map<String,Object> overview(@RequestParam(defaultValue="ALL") String filter,
+                                                     @RequestParam(defaultValue="0") int page,
+                                                     @RequestParam(defaultValue="500") int size) {
         var rules=evaluator.rules();
-        return Map.of("candidates",store.candidates(filter).stream().map(row -> evaluator.forApi(row,rules)).toList(),"sources",store.sources(),
+        // Counts are separate SQL aggregates: they stay consistent for every page and never depend on the paged fetch.
+        return Map.of("candidates",store.candidates(filter,page,size).stream().map(row -> evaluator.forApi(row,rules)).toList(),"sources",store.sources(),
                 "counts",store.jdbc().queryForList("SELECT status,count(*) AS count FROM discovery_candidates WHERE (geo_status='INSIDE' OR source_id IN (SELECT id FROM discovery_sources WHERE venue_id IS NOT NULL)) OR calendar_entry_id IS NOT NULL OR status IN ('REJECTED','DUPLICATE','IGNORED') GROUP BY status"),
                 "automaticallyImported",store.jdbc().queryForObject("SELECT count(*) FROM discovery_candidates c JOIN calendar_entries e ON e.id=c.calendar_entry_id WHERE c.status='IMPORTED' AND c.reason='Automatisch übernommen'",Long.class),
                 "metrics",store.jdbc().queryForMap("""

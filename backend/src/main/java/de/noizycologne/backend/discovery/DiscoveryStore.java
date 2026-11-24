@@ -2,6 +2,7 @@ package de.noizycologne.backend.discovery;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
+import org.jspecify.annotations.NonNull;
 import java.util.*;
 
 @Repository
@@ -11,11 +12,20 @@ public class DiscoveryStore {
          EXISTS(SELECT 1 FROM event_changes x WHERE x.candidate_id=c.id AND x.blocks_publication) AS has_blocking_change
         FROM discovery_candidates c LEFT JOIN venues v ON v.id=c.venue_id JOIN discovery_sources s ON s.id=c.source_id
         """;
+    /** Default page size of the overview, preserving the previous single-request behavior. */
+    public static final int OVERVIEW_DEFAULT_SIZE=500;
+    /** Hard upper bound so a client can never force an unbounded overview fetch. */
+    public static final int OVERVIEW_MAX_SIZE=1000;
     private final JdbcTemplate db;
     public JdbcTemplate jdbc() { return db; }
     public DiscoveryStore(JdbcTemplate db) { this.db = db; }
+    /** 0-based page index; negative input is treated as the first page. */
+    public static int normalizedPage(int page) { return Math.max(0,page); }
+    /** Page size clamped to [0, max]; zero deliberately yields an empty page. */
+    public static int normalizedSize(int size) { return Math.max(0,Math.min(size,OVERVIEW_MAX_SIZE)); }
     public List<Map<String,Object>> candidates() { return candidates("ALL"); }
-    public List<Map<String,Object>> candidates(String filter) {
+    public List<Map<String,Object>> candidates(String filter) { return candidates(filter,0,OVERVIEW_DEFAULT_SIZE); }
+    static @NonNull String candidatesSql(String filter) {
         String where=switch(filter) {
             case "RELEVANT" -> "c.status IN ('NEEDS_REVIEW','NEEDS_INQUIRY','READY') AND NOT (c.matching_class='UNCLASSIFIABLE' AND c.decision_origin='AUTOMATIC' AND c.party_id IS NULL AND c.inquiry_status NOT IN ('PREPARED','SENT'))";
             case "UNCLEAR" -> "c.status IN ('NEEDS_REVIEW','NEEDS_INQUIRY','READY') AND c.matching_class='UNCLASSIFIABLE' AND c.decision_origin='AUTOMATIC' AND c.party_id IS NULL AND c.inquiry_status NOT IN ('PREPARED','SENT')";
@@ -32,7 +42,12 @@ public class DiscoveryStore {
             case "ALL" -> "true";
             default -> throw new IllegalArgumentException("Unbekannter Vorschlagsfilter");
         };
-        return db.queryForList(CANDIDATE_SELECT+" WHERE ("+where+") AND (s.venue_id IS NOT NULL OR c.geo_status='INSIDE' OR c.calendar_entry_id IS NOT NULL OR c.status IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED')) ORDER BY c.updated_at DESC LIMIT 500")
+        return CANDIDATE_SELECT+" WHERE ("+where+") AND (s.venue_id IS NOT NULL OR c.geo_status='INSIDE' OR c.calendar_entry_id IS NOT NULL OR c.status IN ('IMPORTED','REJECTED','DUPLICATE','IGNORED')) ORDER BY c.updated_at DESC, c.id DESC LIMIT ? OFFSET ?";
+    }
+    public List<Map<String,Object>> candidates(String filter,int page,int size) {
+        int limit=normalizedSize(size);
+        long offset=(long)normalizedPage(page)*limit;
+        return db.queryForList(candidatesSql(filter),limit,offset)
             .stream().map(DiscoveryStore::forApi).toList();
     }
     public List<Map<String,Object>> sources() {
