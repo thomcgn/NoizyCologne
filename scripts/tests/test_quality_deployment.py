@@ -7,6 +7,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -291,6 +292,39 @@ class DeploymentProofTests(unittest.TestCase):
             self.guard.plan('push', {}, SHA)
 
 
+class CurrentMainGuardTests(unittest.TestCase):
+    """The read-only pre-check must never turn into a deployment credential."""
+
+    def setUp(self):
+        self.client = GitHubFixture()
+        self.guard = deployment.DeploymentGuard(self.client, current_run_id=200, current_attempt=1)
+
+    def test_current_trigger_is_accepted_with_a_single_read_of_main(self):
+        self.assertTrue(self.guard.is_current_main(SHA))
+        self.assertEqual(self.client.calls, ['git/ref/heads/main'])
+
+    def test_stale_trigger_is_detected_without_producing_a_proof(self):
+        self.client.main_sha = OTHER_SHA
+        self.assertFalse(self.guard.is_current_main(SHA))
+        self.assertEqual(self.client.calls, ['git/ref/heads/main'])
+        # The strict dispatch path still produces exactly the same proof.
+        self.assertEqual(self.guard.plan('workflow_dispatch', {}, SHA),
+                         {'sha': SHA, 'kind': 'ci', 'run_id': '100', 'attempt': '1',
+                          'reuse': 'true', 'automatic': 'false'})
+
+    def test_malformed_trigger_or_ref_fails_closed(self):
+        for main_sha in (None, 'main', '', SHA + '\n'):
+            with self.subTest(main_sha=main_sha):
+                self.setUp()
+                self.client.main_sha = main_sha
+                with self.assertRaises(deployment.Unqualified):
+                    self.guard.is_current_main(SHA)
+        for sha in ('main', '', 'abc123', SHA + '\n'):
+            with self.subTest(sha=sha):
+                with self.assertRaises(deployment.Unqualified):
+                    self.guard.is_current_main(sha)
+
+
 class WorkflowContractTests(unittest.TestCase):
     def workflow(self, name):
         return (ROOT / '.github/workflows' / name).read_text()
@@ -361,11 +395,39 @@ class WorkflowContractTests(unittest.TestCase):
 
     def test_layer_cache_keeps_image_scopes_separate_and_pulls_current_base_images(self):
         deploy = self.workflow('ghcr.yml')
-        self.assertIn('uses: docker/setup-buildx-action@v3', deploy)
+        buildx_setup = r'uses: docker/setup-buildx-action@v\d+'
+        self.assertRegex(deploy, buildx_setup)
+        self.assertEqual(len(re.findall(buildx_setup, deploy)), 1)
         self.assertEqual(deploy.count('pull: true'), 5)
         for image in ('backend', 'frontend', 'landing','browser-worker','browser-gateway'):
             self.assertIn(f'cache-from: type=gha,scope=noizycologne-{image}', deploy)
             self.assertIn(f'cache-to: type=gha,scope=noizycologne-{image},mode=max', deploy)
+
+    def test_stale_trigger_guard_skips_all_deploy_jobs_and_keeps_strict_proof(self):
+        deploy = self.workflow('ghcr.yml')
+        self.assertLess(deploy.index('  guard:\n'), deploy.index('  resolve:\n'))
+        self.assertIn('name: Skip stale automatic triggers', deploy)
+        self.assertIn('stale: ${{ steps.check.outputs.stale }}', deploy)
+        self.assertIn('needs: guard\n', deploy)
+        self.assertIn("if: needs.guard.outputs.stale != 'true' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')", deploy)
+        self.assertEqual(deploy.count('python3 scripts/quality-deployment.py check-current'), 1)
+        self.assertIn('printf \'stale=false\\n\' >> "$GITHUB_OUTPUT"', deploy)
+        self.assertIn('if [ "$status" -eq 2 ]; then\n              printf \'stale=true\\n\' >> "$GITHUB_OUTPUT"', deploy)
+        self.assertIn('exit "$status"', deploy)
+        self.assertNotIn('continue-on-error', deploy)
+        # The guard never replaces plan/verify and never changes their chain.
+        self.assertEqual(deploy.count('python3 scripts/quality-deployment.py plan'), 1)
+        self.assertEqual(deploy.count('python3 scripts/quality-deployment.py verify'), 1)
+        self.assertEqual(deploy.count('.quality-control/scripts/quality-deployment.py verify'), 2)
+        self.assertIn('needs: [resolve, full]', deploy)
+        self.assertIn("if: always() && needs.resolve.result == 'success'", deploy)
+        self.assertIn("if: ${{ !cancelled() && needs.authorize.result == 'success' }}", deploy)
+        self.assertIn('needs: [authorize, publish]', deploy)
+        self.assertIn('group: noizycologne-production', deploy)
+        self.assertIn('cancel-in-progress: false', deploy)
+        ci = self.workflow('ci.yml')
+        self.assertIn('name: Full quality gate\n    if: always()\n    needs: full', ci)
+        self.assertIn('run: test "$FULL_RESULT" = success', ci)
 
 
 class DeploymentCommandTests(unittest.TestCase):
@@ -401,6 +463,40 @@ class DeploymentCommandTests(unittest.TestCase):
         self.assertEqual(outputs['reuse'], 'true')
         self.assertEqual(outputs['run_id'], '100')
         self.assertNotIn('fixture-test-only', self.stdout.getvalue())
+
+    def test_check_current_accepts_a_current_workflow_run_without_outputs(self):
+        self.environment['GITHUB_EVENT_NAME'] = 'workflow_run'
+        self.event.write_text(json.dumps({'action': 'completed', 'workflow_run': {'head_sha': SHA}}))
+        self.assertEqual(self.command('check-current'), 0)
+        self.assertIn('CURRENT_TRIGGER', self.stdout.getvalue())
+        self.assertEqual(self.output.read_text(), '')
+        self.assertEqual(self.client.calls, ['git/ref/heads/main'])
+
+    def test_check_current_returns_dedicated_exit_code_for_a_stale_trigger(self):
+        self.environment['GITHUB_EVENT_NAME'] = 'workflow_run'
+        self.event.write_text(json.dumps({'action': 'completed', 'workflow_run': {'head_sha': SHA}}))
+        self.client.main_sha = OTHER_SHA
+        self.assertEqual(self.command('check-current'), 2)
+        self.assertEqual(deployment.STALE_EXIT, 2)
+        self.assertIn('STALE_TRIGGER', self.stdout.getvalue())
+        self.assertEqual(self.output.read_text(), '')
+        self.assertNotIn('fixture-test-only', self.stdout.getvalue() + self.stderr.getvalue())
+
+    def test_check_current_on_dispatch_does_not_call_api_or_bypass_strict_plan(self):
+        self.assertEqual(self.command('check-current'), 0)
+        self.assertEqual(self.client.calls, [])
+        self.assertEqual(self.output.read_text(), '')
+        self.assertEqual(self.command('plan'), 0)
+        outputs = dict(line.split('=', 1) for line in self.output.read_text().splitlines())
+        self.assertEqual(outputs['sha'], SHA)
+        self.assertEqual(outputs['automatic'], 'false')
+
+    def test_check_current_malformed_event_fails_closed_without_outputs(self):
+        self.environment['GITHUB_EVENT_NAME'] = 'workflow_run'
+        self.event.write_text(json.dumps({'workflow_run': {'head_sha': 'main'}}))
+        self.assertEqual(self.command('check-current'), 1)
+        self.assertIn('BLOCKED', self.stderr.getvalue())
+        self.assertEqual(self.output.read_text(), '')
 
     def test_invalid_trigger_fails_without_leaving_authorizing_outputs(self):
         self.environment['GITHUB_EVENT_NAME'] = 'pull_request'

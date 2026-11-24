@@ -235,6 +235,17 @@ scripts/check-browser.sh --full  # zusätzlich ESLint und echter Sandbox-Chromiu
 scripts/check-quality.sh --full # Backend, Frontend, Gate, Browser, Builds
 ```
 
+### Gekoppelte Playwright-Versionen
+
+Das Image `mcr.microsoft.com/playwright:v<Version>-noble` und die npm-Abhängigkeit
+`playwright` in `browser-worker/package.json` einschließlich Lockfile müssen exakt
+dieselbe Version tragen. Ein Vertragstest in
+`scripts/tests/test_quality_workflow.py` prüft diese Gleichheit. Dependabot
+ignoriert Image-Updates für `mcr.microsoft.com/playwright` deshalb gezielt: ein
+Image-PR allein ist nicht ausreichend und lässt Chromium nicht starten. Beide
+Versionen werden gemeinsam in einem PR aktualisiert und im FULL-Lauf mit den
+Sandbox-Fixtures geprüft. Andere Docker-Updates bleiben aktiv.
+
 Chromium-Fixtures haben `--network none`: verzögerte JS-Karten, ein anders
 aufgebautes Widget mit Lazy Loading/Pagination, iframe, JS-Fehler und verweigerte/
 zeitüberschrittene Abrufe. Ein weiterer separater Container prüft den
