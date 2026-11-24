@@ -11,10 +11,8 @@ import {
   type EditorialDraftStatus,
   type GenreSuggestion,
 } from "../CatalogProvider";
-import {
-  CAPTION_PRETEXT_STORAGE_KEY,
-  DEFAULT_CAPTION_PRETEXT,
-} from "../captionSettings";
+import { DEFAULT_CAPTION_PRETEXT } from "../captionSettings";
+import { useCaptionPretext } from "../useCaptionPretext";
 import { useWorkspaceAction } from "../workspaceActions";
 import { useRecordLink } from "../useRecordLink";
 
@@ -271,10 +269,7 @@ export default function RedaktionPage() {
   const [genresLoading, setGenresLoading] = useState(true);
   const [genresError, setGenresError] = useState("");
   const [genresOpen, setGenresOpen] = useState(true);
-  const [captionPreText] = useState(() => {
-    if (typeof window === "undefined") return DEFAULT_CAPTION_PRETEXT;
-    return window.localStorage.getItem(CAPTION_PRETEXT_STORAGE_KEY)?.trim() || DEFAULT_CAPTION_PRETEXT;
-  });
+  const { pretext: captionPreText } = useCaptionPretext();
   const [feedOrder, setFeedOrder] = useState<string[]>([]);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);

@@ -195,6 +195,10 @@ class FactoryResetIntegrationTests {
             .andExpect(jsonPath("$.deletedFiles").value(2))
             .andExpect(jsonPath("$.partial").value(false));
         assertThat(jdbc.queryForObject("SELECT count(*) FROM venues",Long.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT pretext FROM editorial_caption_config WHERE singleton",String.class))
+            .isEqualTo("noizycologne");
+        assertThat(jdbc.queryForObject("SELECT revision FROM editorial_caption_config WHERE singleton",Long.class))
+            .isEqualTo(1L);
         assertThat(lexicon.findGenres(java.util.List.<de.noizycologne.backend.media.TesseractOcrService.OcrWord>of(
             new de.noizycologne.backend.media.TesseractOcrService.OcrWord("Rock",95,0,0,10,10,"fixture",11,1,1,1)))).isEmpty();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history",Long.class)).isEqualTo(migrations);
