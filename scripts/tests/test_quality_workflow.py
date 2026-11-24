@@ -1,7 +1,9 @@
 """Isolated workflow/hook tests. Tool failures here are deliberate simulations."""
 import importlib.util
+import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -202,6 +204,81 @@ class WorkflowTests(WorkflowFixture, unittest.TestCase):
         self.assertEqual(unrelated.read_bytes(), original_contents)
         self.assertEqual(self.git('diff', '--cached', '--name-only').stdout.splitlines(), ['unrelated.txt'])
         self.assertEqual(sorted(self.git('show', '--format=', '--name-only', 'HEAD').stdout.splitlines()), ['change.txt', 'new-task.txt'])
+
+
+class PlaywrightVersionAlignmentTests(unittest.TestCase):
+    """The Chromium image and the npm package must carry the exact same version."""
+
+    image_pattern = re.compile(
+        r'^FROM[ \t]+mcr\.microsoft\.com/playwright:v(?P<version>\d+\.\d+\.\d+)(?!\d)',
+        re.MULTILINE,
+    )
+
+    @classmethod
+    def image_version(cls, dockerfile):
+        match = cls.image_pattern.search(dockerfile)
+        if match is None:
+            raise AssertionError(
+                'No "FROM mcr.microsoft.com/playwright:vX.Y.Z-..." line found in browser-worker/Dockerfile.'
+            )
+        return match.group('version')
+
+    @staticmethod
+    def npm_version(package_json):
+        try:
+            version = json.loads(package_json)['dependencies']['playwright']
+        except (ValueError, KeyError, TypeError) as error:
+            raise AssertionError(f'Cannot read "playwright" from browser-worker/package.json: {error}') from error
+        if not isinstance(version, str):
+            raise AssertionError('The "playwright" dependency must be a version string.')
+        return version
+
+    def assert_aligned(self, dockerfile, package_json):
+        image = self.image_version(dockerfile)
+        npm = self.npm_version(package_json)
+        self.assertEqual(
+            image, npm,
+            f'Playwright version drift: browser-worker/Dockerfile image v{image} '
+            f'!= browser-worker/package.json npm "playwright" {npm}. '
+            'Update the image and the npm dependency together in the same PR.',
+        )
+        return image
+
+    def test_real_worker_files_are_aligned(self):
+        dockerfile = (ROOT / 'browser-worker/Dockerfile').read_text()
+        package_json = (ROOT / 'browser-worker/package.json').read_text()
+        self.assertRegex(self.assert_aligned(dockerfile, package_json), r'^\d+\.\d+\.\d+$')
+
+    def test_modified_copies_with_drift_fail(self):
+        # Work on in-memory copies only: the real worker files are read, never written.
+        dockerfile = (ROOT / 'browser-worker/Dockerfile').read_text()
+        package_json = (ROOT / 'browser-worker/package.json').read_text()
+        image = self.image_version(dockerfile)
+        npm = self.npm_version(package_json)
+
+        with self.subTest('image updated without npm'):
+            base, patch = image.rsplit('.', 1)
+            changed_image = f'{base}.{int(patch) + 1}'
+            drifted = dockerfile.replace(f'v{image}', f'v{changed_image}', 1)
+            with self.assertRaises(AssertionError) as raised:
+                self.assert_aligned(drifted, package_json)
+            message = str(raised.exception)
+            self.assertIn('Playwright version drift', message)
+            self.assertIn(f'image v{changed_image}', message)
+            self.assertIn(f'"playwright" {npm}', message)
+
+        with self.subTest('npm updated without image'):
+            data = json.loads(package_json)
+            data['dependencies']['playwright'] = f'{npm}-drift'
+            with self.assertRaises(AssertionError) as raised:
+                self.assert_aligned(dockerfile, json.dumps(data))
+            message = str(raised.exception)
+            self.assertIn('Playwright version drift', message)
+            self.assertIn(f'image v{image}', message)
+            self.assertIn(f'"playwright" {npm}-drift', message)
+
+        self.assertEqual(self.image_version(dockerfile), image)
+        self.assertEqual(self.npm_version(package_json), npm)
 
 
 class SupplyChainContractTests(unittest.TestCase):
