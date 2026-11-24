@@ -3,6 +3,8 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { calendarEntryHref } from "../kalender/calendarNavigation";
 import DashboardModal from "../DashboardModal";
+import ActionFeedback, { CompatibleActionLabel, type ActionFeedbackKind } from "../ActionFeedback";
+import { useDirtyGuard } from "../useDirtyGuard";
 import StandardGenreSelector, { useActiveGenres } from "../StandardGenreSelector";
 import { type RecurrenceRule, useCatalog } from "../CatalogProvider";
 import { SourceEvidence } from "../SourceOverview";
@@ -23,6 +25,8 @@ export default function CandidateReviewDialog({ candidate, currentCandidate, bus
  const importInFlight = useRef(false);
  const [refreshing,setRefreshing] = useState(false);
  const [refreshError,setRefreshError] = useState("");
+ const [dialogFeedback,setDialogFeedback] = useState<{kind:ActionFeedbackKind;message:string} | null>(null);
+ const [savedRevision,setSavedRevision] = useState(0);
  const calendarEntryId = importedId || currentCandidate?.calendar_entry_id || candidate.calendar_entry_id;
  const [origins,setOrigins] = useState<{url:string;source_kind:string;event_data:string}[]>([]);
  const [portfolioStartTime,setPortfolioStartTime] = useState("");
@@ -56,6 +60,10 @@ export default function CandidateReviewDialog({ candidate, currentCandidate, bus
  const [seriesAlias,setSeriesAlias] = useState(suggestedSeriesName.slice(0,200));
  const dialogParties = createdParty && !parties.some(item => item.id === createdParty.id) ? [...parties, createdParty] : parties;
  const selectedStandards=dialogParties.find(item => item.id === party)?.standardGenres ?? currentCandidate?.genreCoverage?.standardNames ?? [];
+ const reviewSignature = JSON.stringify({ party, date, status, inquiry, dm, venueId, rememberName, seriesAlias,
+   editedPortfolioName, portfolioStartTime, portfolioGenres, recurrence, createdPartyId: createdParty?.id ?? null });
+ const dirtyGuard = useDirtyGuard(reviewSignature, `${candidate.id}-${savedRevision}`);
+ const importBlockers = (currentCandidate ?? candidate).assessment?.importBlockers ?? [];
  function setCandidate(value: Candidate | null) { if (value === null) onClose(); }
  async function save() { await api(`/candidates/${candidate.id}`,"PUT",{partyId: party || null,date: date || null,status,inquiryStatus: inquiry,dmText: dm,...(needsVenue ? {venueId:venueId || null} : {})}); }
  async function refreshImportedViews() {
@@ -69,28 +77,43 @@ export default function CandidateReviewDialog({ candidate, currentCandidate, bus
      ];
      const results = await Promise.allSettled(reloads.map(item => Promise.resolve().then(item.run)));
      const failed = reloads.filter((_, index) => results[index]?.status === "rejected").map(item => item.name);
-     if (failed.length) setRefreshError(`Kalenderimport ist bestätigt. Noch nicht aktualisiert: ${failed.join(", ")}. Bitte die Ansichten erneut laden.`);
-     else setNotice("Termin bestätigt und in den Kalender übernommen. Ansichten aktualisiert.");
+     if (failed.length) {
+       const message = `Kalenderimport ist bestätigt. Noch nicht aktualisiert: ${failed.join(", ")}. Bitte die Ansichten erneut laden.`;
+       setRefreshError(message);
+       setDialogFeedback({kind: "partial", message});
+     } else {
+       const message = "Termin bestätigt und in den Kalender übernommen. Ansichten aktualisiert.";
+       setNotice(message);
+       setDialogFeedback({kind: "success", message});
+     }
    } finally {setRefreshing(false);}
  }
  async function confirmImport() {
    if (busy || importInFlight.current || confirmedImport.current || calendarEntryId) return;
+   if (importBlockers.length) {
+     setDialogFeedback({kind: "error", message: `Termin nicht übernommen: ${importBlockers.join("; ")}`});
+     return;
+   }
    importInFlight.current = true;
+   setDialogFeedback(null);
    try {
      const result = await api<{calendarEntryId:string}>(`/candidates/${candidate.id}/confirm`,"POST",{partyId:party,date,inquiryStatus:inquiry,dmText:dm,seriesAlias:rememberName ? seriesAlias.trim() : null,...(needsVenue ? {venueId:venueId || null} : {})});
      if (typeof result?.calendarEntryId !== "string" || !result.calendarEntryId.trim()) throw new Error("Kalenderimport wurde nicht bestätigt. Bitte den Vorschlag erneut prüfen.");
      // The confirmed mutation survives any later catalogue or overview refresh failure.
      confirmedImport.current = result.calendarEntryId;
      setImportedId(result.calendarEntryId);
+     setSavedRevision(value => value + 1);
      setNotice("Termin bestätigt und in den Kalender übernommen.");
+     setDialogFeedback({kind: "partial", message: "Termin bestätigt und in den Kalender übernommen. Ansichten werden aktualisiert …"});
      await refreshImportedViews();
    } finally {importInFlight.current = false;}
  }
 
  return (
-    <DashboardModal variant="drawer" protectChanges busy={busy || refreshing} open={!!candidate} onClose={() => setCandidate(null)} title={candidate?.title ?? "Discovery prüfen"}>
+    <DashboardModal variant="drawer" protectChanges dirtyGuard={dirtyGuard} busy={busy || refreshing} open={!!candidate} onClose={() => setCandidate(null)} title={candidate?.title ?? "Discovery prüfen"}>
       {candidate && <div className="space-y-4">
         {error && <p role="alert" className="text-red-400">{error}</p>}
+        {dialogFeedback && <ActionFeedback kind={dialogFeedback.kind}>{dialogFeedback.message}</ActionFeedback>}
         <p>{candidate.venue_name} · {candidate.reason}</p>
         <details><summary>Technische Bewertung</summary><p className="text-sm">Entscheidungsursprung: {candidate.decision_origin} · {candidate.matching_class}<br />Regelversion: {candidate.matcher_version} · Bewertet: {candidate.evaluated_at ?? "Noch nicht versioniert"}</p>
         {candidate.automatic_reason && <p className="text-sm">Technische Entscheidung: {candidate.automatic_reason}</p>}</details>
@@ -111,8 +134,8 @@ export default function CandidateReviewDialog({ candidate, currentCandidate, bus
             </>}
             {recurrenceKind === "other" && <label className="block">Regel beschreiben<input className={field} value={recurrenceNote} disabled={busy} onChange={event=>setRecurrenceNote(event.target.value)} /><span>Unklare Regeln erzeugen keine Termine.</span></label>}
           </fieldset>
-          <p>Die Partyreihe wird angelegt und diesem Vorschlag zugeordnet. Feste Turnusregeln erzeugen nur unbestätigte Plantermine. Die konkrete Veranstaltung wird erst über „Bestätigen &amp; übernehmen“ mit gültigem Datum und bestätigter Location bestätigt.</p>
-          <button type="button" className={`${button} discovery-button-primary`} disabled={busy || genresLoading || !!genresError || !portfolioName.trim() || !portfolioStartTime || (fixedRecurrence && (!recurrenceLocation || !recurrenceStart)) || (recurrenceKind === "other" && !recurrenceNote.trim())} onClick={()=>void action(async()=>{const result=await api<{partyId:string}>(`/candidates/${candidate.id}/portfolio`,"POST",{name:portfolioName,defaultStartTime:portfolioStartTime,standardGenres:selectedPortfolioGenres,...(recurrence ? {recurrence} : {}),seriesAlias:rememberName ? seriesAlias.trim() : null});if(!result?.partyId) throw new Error("Die Partyreihe wurde nicht bestätigt. Bitte den Vorschlag erneut prüfen.");setCreatedParty({id:result.partyId,name:portfolioName,standardGenres:selectedPortfolioGenres});setParty(result.partyId);setNotice("Partyreihe angelegt und zugeordnet. Termin bitte weiter prüfen.");await reloadParties();if(fixedRecurrence) await reloadEntries();})}>Ins Portfolio übernehmen</button></fieldset>}
+          <p>Die Partyreihe wird angelegt und diesem Vorschlag zugeordnet. Feste Turnusregeln erzeugen nur unbestätigte Plantermine. Die konkrete Veranstaltung wird erst über „Termin bestätigen &amp; eintragen“ mit gültigem Datum und bestätigter Location bestätigt.</p>
+          <button type="button" className={`${button} discovery-button-primary`} disabled={busy || genresLoading || !!genresError || !portfolioName.trim() || !portfolioStartTime || (fixedRecurrence && (!recurrenceLocation || !recurrenceStart)) || (recurrenceKind === "other" && !recurrenceNote.trim())} onClick={()=>void action(async()=>{const result=await api<{partyId:string}>(`/candidates/${candidate.id}/portfolio`,"POST",{name:portfolioName,defaultStartTime:portfolioStartTime,standardGenres:selectedPortfolioGenres,...(recurrence ? {recurrence} : {}),seriesAlias:rememberName ? seriesAlias.trim() : null});if(!result?.partyId) throw new Error("Die Partyreihe wurde nicht bestätigt. Bitte den Vorschlag erneut prüfen.");setCreatedParty({id:result.partyId,name:portfolioName,standardGenres:selectedPortfolioGenres});setParty(result.partyId);setSavedRevision(value => value + 1);setNotice("Partyreihe angelegt und zugeordnet. Termin bitte weiter prüfen.");setDialogFeedback({kind:"partial",message:"Partyreihe angelegt und zugeordnet. Termin bitte weiter prüfen."});await reloadParties();if(fixedRecurrence) await reloadEntries();})}>{<CompatibleActionLabel legacy="Ins Portfolio übernehmen">Partyreihe anlegen</CompatibleActionLabel>}</button></fieldset>}
         <details><summary>Quellen und Angaben vergleichen</summary><button type="button" className={button} disabled={busy} onClick={()=>void action(async()=>{const rows=await api(`/candidates/${candidate.id}/sources`);setOrigins(Array.isArray(rows)?rows:[]);})}>Quellenbelege laden</button><SourceEvidence origins={origins} /></details>
         <a href={sourceLink(candidate.source_url)} target="_blank" rel="noreferrer" className="underline">Quellseite öffnen</a>
         {needsVenue && <label className="block">Veranstaltungsort zuordnen<p className="text-sm">Angabe aus der Quelle: {candidate.reported_location || "Kein eindeutiger Veranstaltungsort angegeben"}. Die Plattform ist keine Location.</p><select className={field} value={venueId} onChange={e=>setVenueId(e.target.value)}><option value="">Bitte ausdrücklich wählen</option>{venues.map(venue=><option key={venue.id} value={venue.id}>{venue.name}</option>)}</select></label>}
@@ -129,7 +152,7 @@ export default function CandidateReviewDialog({ candidate, currentCandidate, bus
           <label className="block mt-3">Rückfragestatus<select className={field} value={inquiry} onChange={e => setInquiry(e.target.value)}>{["NONE","PREPARED","SENT","ANSWERED"].map(s => <option key={s} value={s}>{labels[s]}</option>)}</select></label>
           <p className="text-sm mt-2">Nachrichten werden von dir in Instagram verschickt. Den Status anschließend manuell setzen.</p>
         </details>
-        <div className="flex flex-wrap gap-2"><button disabled={busy || !!calendarEntryId} className={button} onClick={() => void action(async () => { await save(); setCandidate(null); setNotice("Bearbeitungsstand gespeichert. Kein Kalenderimport."); })}>Speichern</button><button disabled={busy || !!calendarEntryId || !party || !date || (needsVenue && !venueId) || ["REJECTED","DUPLICATE"].includes(status) || (rememberName && !seriesAlias.trim()) || !!currentCandidate?.calendar_entry_id || !!currentCandidate?.assessment?.importBlockers.length} className={`${button} discovery-button-primary`} onClick={() => void action(confirmImport)}>Bestätigen &amp; übernehmen</button></div>
+        <div className="flex flex-wrap gap-2"><button disabled={busy || !!calendarEntryId} className={button} onClick={() => void action(async () => { setDialogFeedback(null); await save(); dirtyGuard.setClean(); setCandidate(null); setNotice("Bearbeitungsstand gespeichert. Kein Kalenderimport."); })}>{<CompatibleActionLabel legacy="Speichern">Änderungen speichern</CompatibleActionLabel>}</button><button disabled={busy || !!calendarEntryId || !party || !date || (needsVenue && !venueId) || ["REJECTED","DUPLICATE"].includes(status) || (rememberName && !seriesAlias.trim()) || !!currentCandidate?.calendar_entry_id || !!importBlockers.length} className={`${button} discovery-button-primary`} onClick={() => void action(confirmImport)}>{<CompatibleActionLabel legacy="Bestätigen & übernehmen">Termin bestätigen &amp; eintragen</CompatibleActionLabel>}</button></div>
         {calendarEntryId && <section aria-label="Gespeicherter Kalendereintrag" className="space-y-3 rounded-lg border p-3">
           <p role="status">Termin ist im Kalender gespeichert.{refreshing ? " Ansichten werden aktualisiert …" : ""}</p>
           {refreshError && <p role="alert">{refreshError}</p>}

@@ -12,6 +12,7 @@ import {
 } from "../CatalogProvider";
 import EntryEditor from "./EntryEditor";
 import DashboardModal from "../DashboardModal";
+import type { DirtyGuard } from "../useDirtyGuard";
 import DataCollection, { type CollectionColumn } from "../DataCollection";
 import { useWorkspaceAction } from "../workspaceActions";
 
@@ -47,6 +48,8 @@ function CalendarContent() {
   const [infoEntryId, setInfoEntryId] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState("all");
   const [locationFilter, setLocationFilter] = useState("");
+  const [entryGuard, setEntryGuard] = useState<DirtyGuard | null>(null);
+  const [saveFeedback, setSaveFeedback] = useState("");
 
   useEffect(() => {
     void reloadEntries();
@@ -172,6 +175,7 @@ function CalendarContent() {
     setMonth(new Date(date.getFullYear(), date.getMonth(), 1));
     setSelectedDate(date);
     setEditingId(entry.id);
+    setSaveFeedback("");
     setEditorOpen(true);
   }
 
@@ -180,6 +184,7 @@ function CalendarContent() {
     setMonth(new Date(date.getFullYear(), date.getMonth(), 1));
     setSelectedDate(date);
     setEditingId(null);
+    setSaveFeedback("");
     setEditorOpen(true);
   }
 
@@ -208,6 +213,7 @@ function CalendarContent() {
   function openNewEntryForDay(date: Date) {
     selectDay(date);
     setEditingId(null);
+    setSaveFeedback("");
     setEditorOpen(true);
   }
 
@@ -302,6 +308,7 @@ function CalendarContent() {
             {actionError}
           </p>
         )}
+        {saveFeedback && <p role="status" className="cc-message"><strong>Erfolgreich: </strong>{saveFeedback}</p>}
 
         <section className="mt-8 rounded-2xl border border-white/10 bg-neutral-950 p-3 sm:p-6">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
@@ -479,8 +486,8 @@ function CalendarContent() {
           </ul>
         </DashboardModal>}
 
-        {editorOpen && selectedDate && <DashboardModal variant="drawer" protectChanges open onClose={() => {setEditorOpen(false); setEditingId(null);}} title={editingEntry ? "Kalendereintrag bearbeiten" : "Neuer Kalendereintrag"}>
-          <EntryEditor key={`${toDateKey(selectedDate)}-${editingId ?? "new"}`} date={selectedDate} entry={editingEntry} onSaved={() => {setEditorOpen(false); setEditingId(null);}} onCancel={() => {setEditorOpen(false); setEditingId(null);}} />
+        {editorOpen && selectedDate && <DashboardModal variant="drawer" protectChanges dirtyGuard={entryGuard ?? undefined} open onClose={() => {setEditorOpen(false); setEditingId(null); setEntryGuard(null);}} title={editingEntry ? "Kalendereintrag bearbeiten" : "Neuer Kalendereintrag"}>
+          <EntryEditor key={`${toDateKey(selectedDate)}-${editingId ?? "new"}`} date={selectedDate} entry={editingEntry} onSaved={message => {setSaveFeedback(message); setEditorOpen(false); setEditingId(null); setEntryGuard(null);}} onCancel={() => {setEditorOpen(false); setEditingId(null); setEntryGuard(null);}} onGuard={setEntryGuard} />
         </DashboardModal>}
 
         {infoEntry && <DashboardModal variant="drawer" open onClose={() => setInfoEntryId(null)} title={getEntryName(infoEntry)} description={dateFromKey(infoEntry.date).toLocaleDateString("de-DE", {weekday: "long", day: "2-digit", month: "long", year: "numeric"})}>
