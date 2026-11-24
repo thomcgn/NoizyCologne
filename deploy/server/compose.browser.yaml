@@ -1,5 +1,7 @@
 # Controlled production overlay, selected persistently through BROWSER_ENABLED.
 # All browser images use the same qualified IMAGE_TAG as the application.
+# The release layout has no source context; images are prebuilt and deploy.sh
+# always uses --no-build, so build: keys here would be ineffective.
 services:
   api:
     environment:
@@ -12,10 +14,7 @@ services:
     networks: [internal, browser-control]
 
   browser-gateway:
-    image: ghcr.io/thomcgn/noizycologne-browser-gateway:${IMAGE_TAG:-latest}
-    build:
-      context: ../../browser-worker
-      dockerfile: Dockerfile.gateway
+    image: ghcr.io/thomcgn/noizycologne-browser-gateway:${IMAGE_TAG:?IMAGE_TAG must be an immutable commit SHA}
     restart: unless-stopped
     init: true
     user: node
@@ -45,9 +44,7 @@ services:
         gw_priority: 1
 
   browser-worker:
-    image: ghcr.io/thomcgn/noizycologne-browser-worker:${IMAGE_TAG:-latest}
-    build:
-      context: ../../browser-worker
+    image: ghcr.io/thomcgn/noizycologne-browser-worker:${IMAGE_TAG:?IMAGE_TAG must be an immutable commit SHA}
     restart: unless-stopped
     init: true
     user: pwuser

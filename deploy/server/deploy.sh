@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# Set only when ensure_media_volume actually creates the volume. An existing
+# volume is left untouched so deploys never rewrite ownership of stored media.
+media_volume_created=false
+
 check_host_port_conflicts() {
   local conflicts
 
@@ -38,6 +42,7 @@ ensure_media_volume() {
   if ! docker volume inspect "$media_volume" >/dev/null 2>&1; then
     echo "Creating missing persistent media volume $media_volume"
     docker volume create "$media_volume" >/dev/null
+    media_volume_created=true
   fi
 }
 
@@ -84,7 +89,7 @@ prepare_media_volume_permissions() {
   fi
   media_volume="${media_volume:-noizycologne_media_data}"
 
-  echo "Preparing persistent media volume permissions"
+  echo "Preparing permissions of the newly created persistent media volume"
   docker run --rm --user 0 \
     --entrypoint /usr/bin/chown \
     -v "$media_volume:/app/uploads" \
@@ -162,6 +167,8 @@ restore_configuration() {
   local tag="$1" release="$2" browser="$3"
   local -a compose services=(db api frontend landing)
   [[ "$tag" =~ ^[0-9a-f]{40}$ && -f "$release/compose.yaml" ]] || { echo 'ROLLBACK_UNAVAILABLE: no recorded qualified release; manual recovery required' >&2; return 1; }
+  # Compose requires IMAGE_TAG even for exec/rm; the recorded qualified tag is authoritative here.
+  export IMAGE_TAG="$tag"
   compose_for "$release" "$browser"
   if [[ "$browser" == true ]]; then services+=(browser-worker browser-gateway); fi
   echo "Restoring release $tag (browser=$browser)"
@@ -185,9 +192,12 @@ rollback() {
 }
 
 browser_smoke() {
-  local release browser
+  local release browser tag
   release="$(cat .active-release)"; browser="$(cat .active-browser-enabled)"
   if [[ "$browser" != true ]]; then echo 'BROWSER_SMOKE_NOT_RUN: persistent browser setting is disabled'; return; fi
+  tag="$(cat .previous-image-tag 2>/dev/null || true)"
+  [[ "$tag" =~ ^[0-9a-f]{40}$ ]] || { echo 'BROWSER_SMOKE_UNAVAILABLE: no qualified active image tag' >&2; return 1; }
+  export IMAGE_TAG="$tag"
   local -a compose
   compose_for "$release" true
   export BROWSER_SECCOMP_PROFILE="$release/seccomp_profile.json"
@@ -203,6 +213,9 @@ main() {
   if [[ "${1:-}" == --browser-smoke ]]; then browser_smoke; return; fi
   local image_tag="${1:?qualified commit SHA is required}"
   [[ "$image_tag" =~ ^[0-9a-f]{40}$ ]] || { echo 'Deployment requires an immutable 40-character commit SHA' >&2; return 1; }
+  # Every compose command interpolates IMAGE_TAG, including exec/rm on rollback
+  # and smoke paths; fail-fast in the compose files must never see an empty tag.
+  export IMAGE_TAG="$image_tag"
   local previous_tag="$(cat .previous-image-tag 2>/dev/null || true)"
   local previous_release="$(cat .active-release 2>/dev/null || printf '%s' "$server_dir")"
   local previous_browser="$(cat .active-browser-enabled 2>/dev/null || printf false)"
@@ -225,7 +238,9 @@ main() {
     IMAGE_TAG="$image_tag" "${compose[@]}" run --rm --no-deps browser-worker node --input-type=module -e "await (await import('./sandbox-check.mjs')).verifySandbox()" || { echo 'BROWSER_SANDBOX_FAILED: preflight failed; active stack unchanged' >&2; return 1; }
   fi
   ensure_media_volume
-  prepare_media_volume_permissions "ghcr.io/thomcgn/noizycologne-backend:$image_tag"
+  if [[ "$media_volume_created" == true ]]; then
+    prepare_media_volume_permissions "ghcr.io/thomcgn/noizycologne-backend:$image_tag"
+  fi
   IMAGE_TAG="$image_tag" "${compose[@]}" run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
   check_host_port_conflicts
 

@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# Serialisiert Läufe pro Ref. Ein main-Lauf wird nicht abgebrochen: ghcr.yml
+# verlangt einen abgeschlossenen erfolgreichen CI-Lauf als Freigabe.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -22,6 +28,7 @@ jobs:
     if: always()
     needs: full
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Require successful full validation
         env:
