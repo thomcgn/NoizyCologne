@@ -1,9 +1,21 @@
 name: noizycologne
 
+# Konservative Obergrenzen, keine Reservierung: Der VPS hat nur rund 4 GiB RAM.
+# PostgreSQL und die API mit Tesseract-OCR brauchen Luft; der Browser-Overlay
+# ergänzt 768 MiB (Worker) und 128 MiB (Gateway). Die Limits liegen deutlich über
+# dem normalen Bedarf und sollen nur einen einzelnen ausreißernden Container
+# begrenzen, nicht den Regelbetrieb drosseln.
+# read_only/cap_drop bleiben bewusst ausgespart: API und DB schreiben in ihre
+# Volumes (Medien/DB), Caddy nach /data und /config, und die Images benötigen
+# beschreibbares /tmp. Diese Schreibpfade sind nicht nachweislich abgesichert.
+
 services:
   db:
     image: postgres:17-alpine
     restart: unless-stopped
+    mem_limit: 1024m
+    cpus: 1.0
+    pids_limit: 256
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
@@ -18,8 +30,11 @@ services:
     networks: [internal]
 
   api:
-    image: ghcr.io/thomcgn/noizycologne-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/thomcgn/noizycologne-backend:${IMAGE_TAG:?IMAGE_TAG must be an immutable commit SHA}
     restart: unless-stopped
+    mem_limit: 1024m
+    cpus: 1.0
+    pids_limit: 256
     environment:
       SPRING_PROFILES_ACTIVE: staging
       DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
@@ -51,8 +66,11 @@ services:
     networks: [internal]
 
   frontend:
-    image: ghcr.io/thomcgn/noizycologne-frontend:${IMAGE_TAG:-latest}
+    image: ghcr.io/thomcgn/noizycologne-frontend:${IMAGE_TAG:?IMAGE_TAG must be an immutable commit SHA}
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    pids_limit: 128
     environment:
       TEAM_USER: ${TEAM_USER:?TEAM_USER is required}
       TEAM_PASSWORD_HASH: ${TEAM_PASSWORD_HASH:?TEAM_PASSWORD_HASH is required}
@@ -71,14 +89,20 @@ services:
     networks: [internal]
 
   landing:
-    image: ghcr.io/thomcgn/noizycologne-landing:${IMAGE_TAG:-latest}
+    image: ghcr.io/thomcgn/noizycologne-landing:${IMAGE_TAG:?IMAGE_TAG must be an immutable commit SHA}
     restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.25
+    pids_limit: 64
     expose: ["80"]
     networks: [internal]
 
   caddy:
     image: caddy:2.10-alpine
     restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
     environment:
       ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required}
       AUTH_SERVICE_SECRET: ${AUTH_SERVICE_SECRET:?AUTH_SERVICE_SECRET is required}

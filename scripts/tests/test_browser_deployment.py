@@ -35,6 +35,7 @@ class BrowserDeploymentTests(unittest.TestCase):
 import json,os,sys
 args=sys.argv[1:]
 with open(os.environ['FAKE_LOG'],'a') as out:out.write(json.dumps({'args':args,'tag':os.environ.get('IMAGE_TAG'),'browser':os.environ.get('DISCOVERY_BROWSER_ENABLED')})+'\\n')
+if 'volume' in args and 'inspect' in args and os.environ.get('MISSING_MEDIA_VOLUME'):sys.exit(1)
 if 'pull' in args and os.environ.get('FAIL_PULL'):sys.exit(1)
 if 'run' in args and 'browser-worker' in args and os.environ.get('FAIL_SANDBOX'):sys.exit(1)
 if 'up' in args and os.environ.get('IMAGE_TAG')=='a'*40 and os.environ.get('FAIL_UP'):sys.exit(1)
@@ -154,5 +155,17 @@ case "$*" in *'/proc/meminfo'*) echo "${TEST_RAM_KIB:-2097152}";; *) exec /usr/b
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertFalse(any('browser-worker' in c['args'] or 'browser-gateway' in c['args'] for c in self.calls()))
         self.assertNotIn('BROWSER_WORKER_TOKEN=',(self.server/'.env').read_text())
+
+    def test_media_permissions_are_prepared_only_for_a_new_volume(self):
+        first=self.run_deploy()
+        self.assertEqual(first.returncode,0,first.stderr)
+        self.assertFalse(any('-R' in c['args'] and '10001:10001' in c['args'] for c in self.calls()))
+        self.log.write_text('')
+        result=self.run_deploy(MISSING_MEDIA_VOLUME='1')
+        self.assertEqual(result.returncode,0,result.stderr)
+        chown=[c for c in self.calls() if '-R' in c['args'] and '10001:10001' in c['args']]
+        self.assertEqual(len(chown),1)
+        self.assertIn('/app/uploads',chown[0]['args'])
+        self.assertTrue(any('volume' in c['args'] and 'create' in c['args'] for c in self.calls()))
 
 if __name__=='__main__':unittest.main()

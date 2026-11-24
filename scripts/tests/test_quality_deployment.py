@@ -317,6 +317,25 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn('run: npm ci', full)
         self.assertNotIn('continue-on-error', full)
 
+    def test_quality_workflows_bound_runtime_and_serialize_refs(self):
+        for name in ('ci.yml', 'quality-quick.yml', 'quality-full.yml'):
+            with self.subTest(workflow=name):
+                workflow = self.workflow(name)
+                self.assertIn('concurrency:', workflow)
+                self.assertIn('timeout-minutes:', workflow)
+        ci = self.workflow('ci.yml')
+        self.assertIn('group: ci-${{ github.ref }}', ci)
+        self.assertIn('cancel-in-progress: false', ci)
+        self.assertIn('timeout-minutes: 10', ci)
+        self.assertIn('name: Full quality gate\n    if: always()\n    needs: full', ci)
+        quick = self.workflow('quality-quick.yml')
+        self.assertIn('group: quick-${{ github.ref }}', quick)
+        self.assertIn('cancel-in-progress: true', quick)
+        full = self.workflow('quality-full.yml')
+        self.assertIn('group: full-${{ inputs.target-sha }}', full)
+        self.assertIn('cancel-in-progress: false', full)
+        self.assertIn('timeout-minutes: 60', full)
+
     def test_deploy_never_uses_default_branch_sha_or_duplicate_push_trigger(self):
         deploy = self.workflow('ghcr.yml')
         self.assertIn('workflow_run:', deploy)
