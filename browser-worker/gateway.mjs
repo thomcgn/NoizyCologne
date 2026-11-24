@@ -2,7 +2,7 @@ import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
 import { pathToFileURL } from 'node:url';
-import { BOT, publicUrl, resolvePublic, secret, proxySecret, authorized, readJson, send, robotsAllowed } from './security.mjs';
+import { BOT, publicUrl, resolvePublic, secret, proxySecret, authorized, readJson, send, robotsAllowed, egressTier } from './security.mjs';
 
 // Resolver results are used by the socket itself; no second, unchecked DNS lookup.
 export async function readPublic(url, { lookup, get = https.get } = {}) {
@@ -31,7 +31,7 @@ export function createGateway(token, { lookup, connect = net.createConnection, r
   workerHost = 'browser-worker', workerPort = 3000 } = {}) {
   const proxyToken = proxySecret(token);
   const cache = new Map();
-  let active = 0, interval = Date.now(), bytes = 0, connections = 0, reported = 0;
+  let active = 0, interval = Date.now(), bytes = 0, connections = 0, reported = 0, renderHost = '';
   const diagnose = code => {if(reported++<24)console.warn(code);};
   const quota = amount => {
     if (Date.now() - interval > 60000) { interval = Date.now(); bytes = 0; connections = 0; reported = 0; }
@@ -65,7 +65,7 @@ export function createGateway(token, { lookup, connect = net.createConnection, r
       if (request.method !== 'POST' || request.url !== '/render' || !authorized(request.headers.authorization, `Bearer ${token}`)) {
         send(response, 403, { status: 'BLOCKED' }); return;
       }
-      const body = await readJson(request); publicUrl(body.url);
+      const body = await readJson(request); renderHost = publicUrl(body.url).hostname;
       const relay = http.request({ hostname: workerHost, port: workerPort, path: '/render', method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }, result => {
         let size = 0; const chunks = [];
@@ -88,10 +88,13 @@ export function createGateway(token, { lookup, connect = net.createConnection, r
     try {
       const expected = `Basic ${Buffer.from(`discovery:${proxyToken}`).toString('base64')}`;
       if (!authorized(request.headers['proxy-authorization'], expected)) {reject('BROWSER_PROXY_AUTH_FAILED');return;}
-      if (active >= 32) {reject('BROWSER_PROXY_CONNECTION_LIMIT');return;}
-      if (!quota(0) || ++connections > 200) {reject('BROWSER_PROXY_RATE_LIMIT');return;}
       if (!request.url.endsWith(':443')) { reject('BROWSER_PROXY_PORT_BLOCKED'); return; }
       const host = request.url.slice(0, -4); publicUrl(`https://${host}/`);
+      // Analytics/telemetry are dropped before a tunnel is reserved. Robots remains
+      // mandatory for every subrequest that is actually fetched by the renderer.
+      if (egressTier(`https://${host}/`, renderHost) === 'background') {reject('BROWSER_PROXY_EGRESS_DEPRIORITIZED');return;}
+      if (active >= 32) {reject('BROWSER_PROXY_CONNECTION_LIMIT');return;}
+      if (!quota(0) || ++connections > 200) {reject('BROWSER_PROXY_RATE_LIMIT');return;}
       active++; counted = true;
       const [address] = await resolvePublic(host, lookup);
       if (client.destroyed) return;

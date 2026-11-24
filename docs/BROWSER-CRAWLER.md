@@ -1,6 +1,6 @@
 # JavaScript-fähige Location-Discovery
 
-Stand: 09.11.2026. Browser-Release, kontrollierte Aktivierung und Rollback sind in
+Stand: 24.11.2026 (Extraktionsbefund unverändert). Browser-Release, kontrollierte Aktivierung und Rollback sind in
 den regulären Auslieferungsweg integriert. Aktivierung bleibt eine persistente,
 ausdrückliche Betriebsentscheidung nach PR-Abnahme und erfolgreichem FULL für die
 exakte Release-SHA. Die Infrastrukturfreigabe ist kein Extraktionsnachweis für MTC.
@@ -293,7 +293,10 @@ Provider, kein Login-/Captcha-Workaround, keine Robots-Ausnahme, keine größere
 URL-/Tunnelgrenze und keine abgeschaltete Sandbox wurden als Erfolg eingesetzt.
 Der separate zulässige Abruf eines betroffenen statischen Wix-Skripts ergab HTTP
 200; die Gateway-Logs unterscheiden damit interne Verbindungsgrenzen von einer
-behaupteten generellen Sperre dieses CDN durch den Anbieter.
+behaupteten generellen Sperre dieses CDN durch den Anbieter. Eine zweite
+lesende Probe vom 24.11.2026 mit kanonisierten längeren URLs und priorisiertem
+Egress ändert diesen Befund nicht; Messwerte stehen im Abschnitt
+„Eingebettete Daten, URL-Grenze und Egress-Priorisierung“.
 
 Die Referenz **DARK UNICORN by DJ Martin Heiland**, Genres **Dark Electro, EBM,
 New Wave, Synth, Wave, Post-Punk**, Datum **14th Nov | 23:00** ist eine ausdrücklich
@@ -406,3 +409,62 @@ keine Behauptung über die tatsächlichen Genres dieser Veranstaltungen. Tests
 prüfen versteckte/dynamische Beschreibungen, Detailzuordnung ohne Übersichtsgenres,
 Pagination, Konflikte, Konzert/Aftershow sowie wiederholte Crawls mit Archivierung
 und geschützter manueller Ablehnung in einer isolierten PostgreSQL-Datenbank.
+
+## Eingebettete Daten, URL-Grenze und Egress-Priorisierung (24.11.2026)
+
+Der Snapshot bewahrt jetzt ausschließlich **inert im DOM bereits vorhandene**
+Daten: `application/ld+json`, `application/json` sowie wörtliche
+JSON-Zuweisungen an Zustandsvariablen (`window.__INITIAL_STATE__`,
+`__NEXT_DATA__`, Wix-Bootstrap-Ähnliche). Ausführbare Skripte werden weiterhin
+entfernt; es wird kein Code ausgeführt und **kein neuer Netzwerkrequest** gestellt.
+Pro Skript sind 200.000 Zeichen zugelassen, insgesamt weiterhin 1,5 MB DOM.
+Der Extraktor liest diese Blöcke generisch und ohne club-spezifische Selektoren:
+ein untypisiertes Objekt wird nur dann als Veranstaltung interpretiert, wenn es
+innerhalb eines Event-/Programm-/Kalenderkontexts liegt und sowohl einen Titel
+als auch ein explizites Datum trägt. Rekursion und Knotenzahl sind begrenzt.
+Titel, Startzeiten, Genres, Ortsbelege, Status und widersprüchliche Daten laufen
+durch die bestehenden Regeln; ein fehlendes Jahr wird nicht erfunden. Ein
+BROWSER_PARTIAL- oder UNKNOWN-Status wird durch gefundene eingebettete Daten
+**nicht** zu „vollständig“: die Pipeline überschreibt den Status weiterhin mit
+dem Renderergebnis und `complete` bleibt false.
+
+Die maximale URL-Länge wurde kontrolliert von 2.048 auf **4.096** erhöht
+(Worker, Gateway, Backend-`SafeUrls` und die Discovery-API-Eingabegrenzen).
+Die Query wird generisch kanonisiert: leere, doppelte und Tracking-Parameter
+entfallen, Origin, Pfad und Methode bleiben erhalten. HTTPS, Port 443, IP-
+Literal-, DNS-, SSRF-, Redirect- und Robots-Prüfungen sind unverändert; überlange,
+private/reservierte und gemischte DNS-Antworten werden weiterhin abgewiesen.
+Die **32-Tunnel-Grenze** des Gateways bleibt bestehen und wird unverändert
+gemeldet.
+
+Die Egress-Reihenfolge wurde priorisiert, nicht abgeschwächt: Anfragen an den
+Render-Host und an öffentliche statische Asset-Hosts der Plattform werden zuerst
+bedient; Analytics-/Telemetry-Ziele werden bereits vor dem Reservieren eines
+Tunnels beziehungsweise vor dem Fetch verworfen. Für **jede tatsächlich
+abgerufene** Subanfrage gilt weiterhin die Robots-Prüfung. POST/XHR, CAPTCHA,
+Login, Sandbox-, Seiten-, Zeit-, Tunnel- und Budgetgrenzen bleiben unverändert.
+
+Fixture: Eine ausschließlich lesende MTC-Probe am 24.11.2026 schrieb ihre
+Artefakte in den nicht eingecheckten Ordner `.quality/mtc-live/`. Daraus wurde
+ein bereinigter, secrets-freier DOM-Ausschnitt
+`backend/src/test/resources/discovery/mtc-wix-derived-fixture.html` abgeleitet.
+Die eingebetteten Veranstaltungsdaten dieser Fixture sind ausdrücklich
+**SYNTHETISCH – nicht als Live-Befund**. Die registrierte Referenz
+„DARK UNICORN by DJ Martin Heiland“, Genres Dark Electro/EBM/New Wave/Synth/
+Wave/Post-Punk, `14th Nov | 23:00`, bleibt ein aus dem Auftrag übernommenes
+Testdatum, kein behaupteter Live-Extraktionserfolg. Der echte Befund lautet
+weiterhin `BROWSER_PARTIAL`, null Events, unvollständig; eine öffentliche
+GET-Event-API wurde nicht nachgewiesen. Es gibt keine Schutzumgehung und
+keinen Vollständigkeitsclaim.
+
+Messung der zweiten, ebenfalls ausschließlich lesenden Probe am 24.11.2026 unter
+unveränderten Schutzgrenzen: `/about` meldet weiterhin `BROWSER_PARTIAL`, null
+Events und `complete=false`. Der DOM-Snapshot umfasst 72.712 statt 60.663
+Zeichen, einschließlich sechs neuer inerten JSON-Blöcke; er enthält weiterhin
+weder Eventkarten noch „DARK UNICORN“. `UNSAFE_URL` ging von vier Meldungen
+(Längen 3.065/2.372) auf null zurück, `ROBOTS_BLOCKED` von zwei auf null, dafür
+erscheinen drei `EGRESS_DEPRIORITIZED` für Sentry-Telemetrie. `BLOCKED` stieg von
+13 auf 17, das Gateway-Log meldet 24-mal `BROWSER_PROXY_CONNECTION_LIMIT`. Die
+32-Tunnel-Grenze und die unvollständige Wix-Hydrierung bleiben damit bestehen;
+aus der längeren, kanonisierten URL und der Priorisierung folgt kein
+Extraktionserfolg.

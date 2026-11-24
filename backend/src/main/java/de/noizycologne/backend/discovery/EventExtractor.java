@@ -41,12 +41,16 @@ public class EventExtractor {
         if (page.body().contains("BEGIN:VCALENDAR")) return ics(page);
         var doc = Jsoup.parse(page.body(), Objects.requireNonNull(page.url().toString()));
         boolean concertPage=!PartyOnlyPolicy.separateAftershow(doc) && (PartyOnlyPolicy.concertPage(doc) || PartyOnlyPolicy.concertLink("",page.url()));
-        for (Element script : doc.select("script[type=application/ld+json]")) {
-            try { collect(json.readTree(script.data()), events, page.url().toString(), 0); }
-            catch (RuntimeException e) { malformed = true; }
+        // Read only embedded data already present in this document. Inert JSON
+        // blocks are produced by the worker snapshot; no request is made here.
+        for (Element script : doc.select("script[type=application/ld+json], script[type=application/json], script[data-noizy-embedded]")) {
+            boolean strict = !script.attr("data-noizy-embedded").isBlank()
+                    || "application/ld+json".equalsIgnoreCase(script.attr("type"));
+            try { collect(json.readTree(script.data()), events, page.url().toString(), 0, "", new int[1]); }
+            catch (RuntimeException e) { if (strict) malformed = true; }
         }
         if (page.contentType().contains("json")) {
-            try { collect(json.readTree(page.body()), events, page.url().toString(), 0); }
+            try { collect(json.readTree(page.body()), events, page.url().toString(), 0, "", new int[1]); }
             catch (RuntimeException e) { malformed = true; }
         }
         List<@NonNull HtmlEvent> htmlEvents=new ArrayList<>();
@@ -235,9 +239,14 @@ public class EventExtractor {
         }
         return doc.selectFirst("script[src]") != null && doc.body().text().length() < 250;
     }
-    private void collect(JsonNode node, List<@org.jspecify.annotations.NonNull Event> events, String page, int depth) {
-        if (node == null || depth > 16 || events.size() >= 200) return;
-        if (node.isArray()) { for (var child : node) collect(child, events, page, depth + 1); return; }
+    private static final List<String> EVENT_START_KEYS = List.of("startDate", "startTime", "start", "startsAt", "date", "dateTime", "begin");
+    private static final List<String> EVENT_CONTEXT_KEYS = List.of("event", "program", "schedule", "calendar", "veranstaltung", "termin");
+
+    // Generic recursion over already present JSON. The node budget bounds large
+    // Wix bootstrap payloads; every extracted event uses the same rules as JSON-LD.
+    private void collect(JsonNode node, List<@org.jspecify.annotations.NonNull Event> events, String page, int depth, String context, int[] budget) {
+        if (node == null || depth > 16 || events.size() >= 200 || ++budget[0] > 20000) return;
+        if (node.isArray()) { for (var child : node) collect(child, events, page, depth + 1, context, budget); return; }
         if (!node.isObject()) return;
         String type = node.path("@type").toString();
         if (type.contains("Event")) {
@@ -253,9 +262,96 @@ public class EventExtractor {
                 events.add(new Event(node.path("@id").asString(url.equals(page) ? "" : url), clip(title, 500), url, GermanProgramText.eventStarts(starts,node.path("description").asString("")),
                         clip(node.toString(), 8000), state, node.path("location").path("name").asString(""),jsonPlace(node.path("location"),page)));
             }
+        } else if (looksLikeEvent(node, context)) {
+            addEmbeddedEvent(node, events, page);
         }
-        for (String key : List.of("@graph", "itemListElement", "item", "subEvent", "events"))
-            if (node.has(key)) collect(node.get(key), events, page, depth + 1);
+        for (String key : node.propertyNames())
+            collect(node.get(key), events, page, depth + 1, context.isEmpty() ? key : context + "/" + key, budget);
+    }
+
+    /** An untyped object needs both an event context and an explicit title/date pair. */
+    private static boolean looksLikeEvent(JsonNode node, String context) {
+        if (context.isEmpty()) return false;
+        String path = context.toLowerCase(Locale.ROOT);
+        if (EVENT_CONTEXT_KEYS.stream().noneMatch(path::contains)) return false;
+        if (firstText(node, "name", "title").isBlank()) return false;
+        for (String key : EVENT_START_KEYS) {
+            var value = node.path(key);
+            if (value.isString() && !value.asString("").isBlank()) return true;
+            if (value.isArray() && value.size() > 0) return true;
+        }
+        return false;
+    }
+
+    private static String firstText(JsonNode node, String... keys) {
+        for (String key : keys) {
+            var value = node.path(key);
+            if (value.isString()) { String text = value.asString(""); if (!text.isBlank()) return text; }
+            else if (value.isNumber() || value.isBoolean()) return value.toString();
+        }
+        return "";
+    }
+
+    private static List<@NonNull String> textList(JsonNode node, String... keys) {
+        List<@NonNull String> values = new ArrayList<>();
+        for (String key : keys) {
+            var value = node.path(key);
+            if (value.isArray()) {
+                for (var item : value) {
+                    String text = item.isObject() ? firstText(item, "name", "title") : item.asString("");
+                    if (!text.isBlank()) values.add(text);
+                }
+            } else {
+                String text = value.asString("");
+                if (!text.isBlank()) values.add(text);
+            }
+        }
+        return values.stream().distinct().toList();
+    }
+
+    private static String sameSiteUrl(String value, String page) {
+        if (value.isBlank()) return page;
+        try {
+            var origin = java.net.URI.create(page);
+            var resolved = origin.resolve(value);
+            String host = resolved.getHost();
+            return host != null && host.equalsIgnoreCase(origin.getHost()) ? resolved.toString() : page;
+        } catch (RuntimeException e) { return page; }
+    }
+
+    /** Generic state/bootstrap event; never invents a title, year, genre or place. */
+    private void addEmbeddedEvent(JsonNode node, List<@org.jspecify.annotations.NonNull Event> events, String page) {
+        String title = firstText(node, "name", "title");
+        if (title.isBlank()) return;
+        List<@NonNull String> starts = new ArrayList<>();
+        for (String key : EVENT_START_KEYS) {
+            var value = node.path(key);
+            if (value.isArray()) {
+                for (var item : value) { String text = item.asString(""); if (!text.isBlank()) starts.add(text); }
+            } else {
+                String text = value.asString("");
+                if (!text.isBlank()) starts.add(text);
+            }
+        }
+        String url = sameSiteUrl(firstText(node, "url", "link", "href"), page);
+        String identity = firstText(node, "@id", "id");
+        if (!identity.isBlank() && (identity.startsWith("http") || identity.startsWith("/"))) identity = sameSiteUrl(identity, page);
+        StringBuilder evidence = new StringBuilder(clip(node.toString(), 7000));
+        List<@NonNull String> genres = textList(node, "genre", "genres", "musicGenre", "style", "tags");
+        if (!genres.isEmpty()) evidence.append("\nGenres: ").append(String.join(", ", genres));
+        JsonNode locationNode = node.path("location");
+        if (!locationNode.isObject() && !locationNode.isString()) locationNode = node.path("venue");
+        String location = firstText(node, "locationName", "venueName");
+        if (location.isBlank() && locationNode.isObject()) location = firstText(locationNode, "name", "title");
+        if (location.isBlank() && locationNode.isString()) location = locationNode.asString("");
+        if (location.isBlank()) location = firstText(node.path("address"), "addressLocality", "city");
+        if (location.isBlank() && locationNode.isObject()) location = firstText(locationNode.path("address"), "addressLocality", "city");
+        String description = firstText(node, "description", "summary", "text");
+        String state = firstText(node, "eventStatus", "status") + " " + riskyState(title + ". " + description);
+        if (node.has("previousStartDate")) state += " RESCHEDULED " + firstText(node, "previousStartDate");
+        events.add(new Event(identity.isBlank() ? (url.equals(page) ? "" : url) : clip(identity, 500), clip(title, 500), url,
+            GermanProgramText.eventStarts(starts.stream().distinct().toList(), description), clip(evidence.toString(), 8000),
+            state, location, jsonPlace(locationNode, page)));
     }
     public @NonNull Event recoverPlace(Event event) {
         Objects.requireNonNull(event,"Eventdaten fehlen");

@@ -10,7 +10,7 @@ import java.util.*;
 public class SpecialSourceController {
     private final SpecialSourceService sources;
     public SpecialSourceController(SpecialSourceService sources) { this.sources=sources; }
-    public record Create(@NotBlank @Size(max=200) String name,@NotBlank @Size(max=2048) String url,
+    public record Create(@NotBlank @Size(max=200) String name,@NotBlank @Size(max=SafeUrls.MAX_URL_LENGTH) String url,
                          @Size(max=300) String itemSelector,@Size(max=300) String titleSelector,@Size(max=300) String dateSelector,@org.jspecify.annotations.Nullable Boolean approved) { }
     @GetMapping public List<Map<String,Object>> list() { return sources.list(); }
     @PostMapping public Map<String,String> add(@Valid @RequestBody Create request) {

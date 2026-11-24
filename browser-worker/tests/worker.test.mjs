@@ -40,6 +40,34 @@ test('CONNECT rejects private DNS before creating any upstream socket',async () 
   });
   assert.equal(connected,false);
 });
+test('gateway keeps 32 tunnels for relevant egress and drops telemetry before reserving one',async () => {
+  const {PassThrough}=await import('node:stream');
+  const connected=[], warnings=[], sockets=[], originalWarn=console.warn;
+  console.warn=(...parts)=>warnings.push(parts.join(' '));
+  const proxyAuth=`Basic ${Buffer.from(`discovery:${proxySecret(token)}`).toString('base64')}`;
+  try {
+    await listen(createGateway(token,{lookup:async () => [{address:'93.184.216.34',family:4}],
+      connect:options => {connected.push(options.host);const upstream=new PassThrough();queueMicrotask(()=>upstream.emit('connect'));return upstream;}}),async base => {
+      const port=Number(new URL(base).port);
+      const connectTo=host=>new Promise(resolve=>{
+        const client=net.createConnection({host:'127.0.0.1',port});sockets.push(client);
+        client.once('connect',()=>client.write(`CONNECT ${host}:443 HTTP/1.1\r\nHost: ${host}:443\r\nProxy-Authorization: ${proxyAuth}\r\n\r\n`));
+        client.on('data',chunk=>{const line=chunk.toString().split('\r\n')[0];if(/HTTP\/1\.1 /.test(line))resolve(line);});
+        client.on('error',()=>resolve('ERROR'));
+      });
+      const telemetry=await Promise.all(Array.from({length:6},()=>connectTo('frog.wix.com')));
+      assert.ok(telemetry.every(line=>/403/.test(line)),JSON.stringify(telemetry));
+      assert.equal(connected.length,0);
+      const assets=await Promise.all(Array.from({length:40},()=>connectTo('static.wixstatic.com')));
+      assert.equal(assets.filter(line=>/200 Connection Established/.test(line)).length,32);
+      assert.equal(assets.filter(line=>/403/.test(line)).length,8);
+      assert.equal(connected.length,32);
+      assert.ok(warnings.some(entry=>entry.includes('BROWSER_PROXY_EGRESS_DEPRIORITIZED')));
+      assert.ok(warnings.some(entry=>entry.includes('BROWSER_PROXY_CONNECTION_LIMIT')));
+      for(const socket of sockets)socket.destroy();
+    });
+  } finally {for(const socket of sockets)socket.destroy();console.warn=originalWarn;}
+});
 test('robots socket uses the checked IP rather than repeating DNS resolution',async () => {
   const {PassThrough}=await import('node:stream');const address={address:'93.184.216.34',family:4};let pinned;
   const result=await readPublic('https://club.example/robots.txt',{lookup:async () => [address],get:(_url,options,callback) => {
