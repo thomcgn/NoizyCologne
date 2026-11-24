@@ -7,6 +7,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -361,7 +362,9 @@ class WorkflowContractTests(unittest.TestCase):
 
     def test_layer_cache_keeps_image_scopes_separate_and_pulls_current_base_images(self):
         deploy = self.workflow('ghcr.yml')
-        self.assertIn('uses: docker/setup-buildx-action@v3', deploy)
+        buildx_setup = r'uses: docker/setup-buildx-action@v\d+'
+        self.assertRegex(deploy, buildx_setup)
+        self.assertEqual(len(re.findall(buildx_setup, deploy)), 1)
         self.assertEqual(deploy.count('pull: true'), 5)
         for image in ('backend', 'frontend', 'landing','browser-worker','browser-gateway'):
             self.assertIn(f'cache-from: type=gha,scope=noizycologne-{image}', deploy)
