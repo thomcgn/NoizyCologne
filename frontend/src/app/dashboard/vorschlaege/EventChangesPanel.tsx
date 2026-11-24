@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import DashboardModal from "../DashboardModal";
 import { useCatalog } from "../CatalogProvider";
+import { useDiscoveryPolling } from "./useDiscoveryPolling";
 
 export type EventData = { title: string; starts: string[]; location: string; state: string; evidence: string; url: string };
 export type EventChange = { id: string; revision: number; kind: string; state: string; venue_name: string; instagram: string; before_data: string; after_data: string; source_url: string; reason: string; blocks_publication: boolean; calendar_entry_id: string | null; calendar_party_id: string | null; calendar_party_name?: string | null; calendar_venue_name?: string | null; calendar_venue_id: string | null; calendar_date: string | null; calendar_start_time: string | null; dm_text: string; answer: string; inquiry_status: string };
@@ -49,11 +50,14 @@ export default function EventChangesPanel({ onReviewCandidate }: { onReviewCandi
     const [nextChanges, nextCancellations] = await Promise.all([request("discovery/changes"), request("cancellations")]);
     setChanges(nextChanges); setCancellations(nextCancellations);
   }, []);
-  useEffect(() => {
-    const load = () => void reload().catch(cause => setError(cause instanceof Error ? cause.message : "Laden fehlgeschlagen"));
-    const timer = window.setTimeout(load, 0); const poll = window.setInterval(load, 10000);
-    return () => { window.clearTimeout(timer); window.clearInterval(poll); };
+  const load = useCallback(() => {
+    void reload().catch(cause => setError(cause instanceof Error ? cause.message : "Laden fehlgeschlagen"));
   }, [reload]);
+  useEffect(() => {
+    const timer = window.setTimeout(load, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+  useDiscoveryPolling(load);
   async function action(work: () => Promise<void>) {
     setBusy(true); setError(""); setNotice("");
     try { await work(); await Promise.all([reload(), reloadEntries(), reloadDrafts()]); }

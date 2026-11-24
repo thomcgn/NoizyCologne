@@ -65,7 +65,7 @@ test('mouse hover opens at 400ms, persists on leave and does not reopen until th
  pointer(cell,'pointerout',{relatedTarget:document.body});assert.ok(preview());close();
  pointer(cell,'pointerover');advance(1000);assert.ok(preview()===null);
  pointer(cell,'pointerout',{relatedTarget:document.body,clientX:200});pointer(cell,'pointerover');advance(400);assert.ok(preview());
- assert.equal(loads,1,'hover must not fetch entries');
+ assert.equal(loads,0,'hover must not fetch entries');
 });
 test('leaving early, unsupported hover, empty days and unmount cancel pending previews',async()=>{
  const cell=await setup();pointer(cell,'pointerover');advance(399);pointer(cell,'pointerout',{relatedTarget:document.body});advance(1);assert.ok(preview()===null);

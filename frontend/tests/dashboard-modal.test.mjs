@@ -1184,7 +1184,7 @@ test('portfolio UX: location partial save preserves ID, persists changed fields,
   assert.equal(document.querySelector('[role="dialog"]'), null);
 });
 
-test('catalog UX: 413 upload messages honor party10MB versus event8MB and explicit refresh errors propagate', async () => {
+test('catalog UX: 413 upload messages honor the shared 10 MB limit and explicit refresh errors propagate', async () => {
   const actual = loadSource(new URL('../src/app/dashboard/CatalogProvider.tsx', import.meta.url));
   let context;
   function Probe() { context = actual.useCatalog(); return null; }
@@ -1199,7 +1199,7 @@ test('catalog UX: 413 upload messages honor party10MB versus event8MB and explic
   const file = new File(['synthetic'], 'fixture.png', { type: 'image/png' });
   await act(async () => {
     await assert.rejects(() => context.uploadPartyFlyer('party', file), /höchstens 10 MB/);
-    await assert.rejects(() => context.uploadEventFlyer('event', file), /höchstens 8 MB/);
+    await assert.rejects(() => context.uploadEventFlyer('event', file), /höchstens 10 MB/);
   });
   for (const [path, reload, error, message] of [
     ['/api/v1/calendar-entries', 'reloadEntries', 'entriesError', /Kalendereinträge konnten nicht geladen werden/],

@@ -20,8 +20,11 @@ const { act, createElement: h, StrictMode } = React;
 const { createRoot } = require('react-dom/client');
 const originalFetch = globalThis.fetch;
 let poll;
-window.setInterval = callback => { poll = callback; return globalThis.setInterval(callback, 10000); };
-window.clearInterval = globalThis.clearInterval;
+// The suite drives polling explicitly via poll(); a wall-clock interval made a
+// long batch test flaky, so registration is captured without a real timer.
+let fakeIntervalId = 0;
+window.setInterval = callback => { poll = callback; return ++fakeIntervalId; };
+window.clearInterval = () => {};
 let root;
 const calls = [];
 let candidates;

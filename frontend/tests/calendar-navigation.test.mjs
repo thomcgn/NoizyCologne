@@ -41,11 +41,11 @@ test('Berlin civil month handles midnight, summer time and year boundaries',()=>
  }
  assert.equal(calendarEntryHref('entry/a & b'),'/dashboard/kalender?entry=entry%2Fa%20%26%20b');
 });
-test('calendar starts in the current Berlin month and reloads on re-entry and explicit refresh',async()=>{
+test('calendar starts in the current Berlin month and the catalog fetch stays provider-owned',async()=>{
  await mount();const today=berlinDate();const expected=today.toLocaleDateString('de-DE',{month:'long',year:'numeric'});
- assert.equal(document.querySelector('h2').textContent,expected);assert.equal(loads,1);
- await settle(()=>[...document.querySelectorAll('button')].find(button=>button.textContent==='Aktualisieren').click());assert.equal(loads,2);
- await settle(()=>root.unmount());root=null;await mount();assert.equal(loads,3);
+ assert.equal(document.querySelector('h2').textContent,expected);assert.equal(loads,0);
+ await settle(()=>[...document.querySelectorAll('button')].find(button=>button.textContent==='Aktualisieren').click());assert.equal(loads,1);
+ await settle(()=>root.unmount());root=null;await mount();assert.equal(loads,1);
 });
 test('a linked import arriving after refresh opens its actual day, month and details',async()=>{
  query='entry=imported';await mount();assert.match(document.body.textContent,/nicht mehr vorhanden/);

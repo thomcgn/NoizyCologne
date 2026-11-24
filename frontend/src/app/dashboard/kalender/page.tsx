@@ -48,11 +48,9 @@ function CalendarContent() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [locationFilter, setLocationFilter] = useState("");
 
-  useEffect(() => {
-    void reloadEntries();
-    void reloadParties();
-  }, [reloadEntries, reloadParties]);
-
+  // The dashboard provider already loads entries and parties once at mount.
+  // Repeating that here caused duplicate requests; partial failures are still
+  // reported independently by the provider's loaders.
   useEffect(() => {
     if (!targetId || entriesLoading || openedTarget.current === targetId) return;
     const entry = entries.find(item => item.id === targetId);
