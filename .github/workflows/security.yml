@@ -1,0 +1,58 @@
+name: Dependency security audit
+
+# Independent, informational-to-blocking audit workflow. It deliberately has no
+# push or workflow_run trigger: it must never deploy or gate the quality gate.
+# Both scanners fail on any finding and on a tool error; no severity filter,
+# no ignored step errors, no secrets and no artifact uploads.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 4 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  npm-audit:
+    name: npm audit (production dependencies)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install production dependencies
+        working-directory: frontend
+        run: npm ci --omit=dev
+
+      - name: Audit production dependencies
+        working-directory: frontend
+        # --audit-level=low is the strictest setting: findings of every level fail.
+        run: npm audit --omit=dev --audit-level=low
+
+  dependency-scan:
+    name: OSV-Scanner (Maven and npm manifests)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # The action pins the OSV-Scanner image to v2.7.1. Only package names and
+      # versions are sent to the public osv.dev / deps.dev APIs; no tokens,
+      # source code or production artefacts leave the runner.
+      - name: Scan manifests with fixed OSV-Scanner version
+        uses: google/osv-scanner-action/osv-scanner-action@v2.7.1
+        with:
+          scan-args: |-
+            scan
+            source
+            --lockfile=backend/pom.xml
+            --lockfile=frontend/package-lock.json
