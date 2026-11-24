@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import {
-  CAPTION_PRETEXT_STORAGE_KEY,
-  DEFAULT_CAPTION_PRETEXT,
-} from "../../captionSettings";
+import { DEFAULT_CAPTION_PRETEXT } from "../../captionSettings";
+import { useCaptionPretext } from "../../useCaptionPretext";
 import DashboardModal from "../../DashboardModal";
 import GenreImport from "./GenreImport";
 import DataCollection, { type CollectionColumn } from "../../DataCollection";
@@ -106,11 +104,17 @@ export default function GenresPage() {
     setAliasEditor(null); setAliasToDelete(null); setAddingAlias(false);
     setEditorOpen(false);
   }
-  const [captionPreText, setCaptionPreText] = useState(() => {
-    if (typeof window === "undefined") return DEFAULT_CAPTION_PRETEXT;
-    return window.localStorage.getItem(CAPTION_PRETEXT_STORAGE_KEY)?.trim() || DEFAULT_CAPTION_PRETEXT;
-  });
-  const [captionPreTextSaved, setCaptionPreTextSaved] = useState(false);
+  const { pretext: serverPretext, revision: serverRevision, save: persistCaptionPretext } = useCaptionPretext();
+  const [captionDraft, setCaptionDraft] = useState<string | null>(null);
+  const [captionBase, setCaptionBase] = useState(DEFAULT_CAPTION_PRETEXT);
+  const [captionSaving, setCaptionSaving] = useState(false);
+  const [captionError, setCaptionError] = useState("");
+  const [captionSuccess, setCaptionSuccess] = useState<{ pretext: string; revision: number } | null>(null);
+  const captionPreText = captionDraft ?? captionBase;
+  const captionDirty = captionDraft !== null && captionDraft.trim() !== captionBase;
+  const captionPreTextSaved = captionSuccess !== null
+    && captionSuccess.pretext === captionPreText.trim()
+    && captionSuccess.revision === serverRevision;
 
   async function loadGenres() {
     setLoading(true);
@@ -133,12 +137,27 @@ export default function GenresPage() {
     return () => window.clearTimeout(loadTimer);
   }, []);
 
-  function saveCaptionPreText() {
-    const value = captionPreText.trim() || DEFAULT_CAPTION_PRETEXT;
-    window.localStorage.setItem(CAPTION_PRETEXT_STORAGE_KEY, value);
-    setCaptionPreText(value);
-    setCaptionPreTextSaved(true);
-    window.setTimeout(() => setCaptionPreTextSaved(false), 2200);
+  useEffect(() => {
+    if (captionDraft !== null) return;
+    setCaptionBase(current => current === serverPretext ? current : serverPretext);
+  }, [serverPretext, captionDraft]);
+
+  async function saveCaptionPreText() {
+    if (captionSaving) return;
+    const value = (captionDraft ?? captionBase).trim() || DEFAULT_CAPTION_PRETEXT;
+    setCaptionSaving(true);
+    setCaptionError("");
+    setCaptionSuccess(null);
+    try {
+      const saved = await persistCaptionPretext(value);
+      setCaptionDraft(null);
+      setCaptionBase(saved.pretext);
+      setCaptionSuccess({ pretext: saved.pretext, revision: saved.revision });
+    } catch (cause) {
+      setCaptionError(cause instanceof Error ? cause.message : "Der Pre-Text konnte nicht gespeichert werden.");
+    } finally {
+      setCaptionSaving(false);
+    }
   }
 
   function newGenre() {
@@ -280,12 +299,14 @@ export default function GenresPage() {
         <div className="mt-4 flex flex-col gap-3 sm:flex-row">
           <label className="flex-1">
             <span className="mb-2 block text-sm text-neutral-300">Pre-Text / Accountname</span>
-            <input className={inputStyle} value={captionPreText} onChange={(event) => setCaptionPreText(event.target.value)} maxLength={100} placeholder={DEFAULT_CAPTION_PRETEXT} />
+            <input className={inputStyle} value={captionPreText} onChange={(event) => { setCaptionDraft(event.target.value); setCaptionSuccess(null); setCaptionError(""); }} maxLength={100} placeholder={DEFAULT_CAPTION_PRETEXT} />
           </label>
-          <button type="button" onClick={saveCaptionPreText} className="min-h-11 self-end rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black">
-            {captionPreTextSaved ? "Gespeichert" : "Pre-Text speichern"}
+          <button type="button" disabled={captionSaving} onClick={() => void saveCaptionPreText()} className="min-h-11 self-end rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black">
+            {captionSaving ? "Speichern …" : captionPreTextSaved ? "Gespeichert" : "Pre-Text speichern"}
           </button>
         </div>
+        {captionDirty && <p className="mt-2 text-xs text-neutral-400">Nicht gespeicherte Änderung. „Gespeichert“ erscheint erst nach bestätigter Speicherung.</p>}
+        {captionError && <p role="alert" className="cc-status-danger mt-3 rounded-lg border p-3 text-sm">{captionError}</p>}
         <p className="mt-3 text-xs text-neutral-500">Beispiel: {captionPreText.trim() || DEFAULT_CAPTION_PRETEXT} Samstag 31.10.26 Garage, Punk, Doom mit @dj im @location</p>
       </section>
       <DashboardModal variant="drawer" open={editorOpen} busy={saving} onClose={closeEditor} title={editingId ? "Genre bearbeiten" : "Genre anlegen"} description="Namen bearbeiten. Aliasänderungen werden einzeln sofort gespeichert.">

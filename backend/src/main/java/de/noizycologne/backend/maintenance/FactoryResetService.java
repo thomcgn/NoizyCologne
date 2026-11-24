@@ -1,6 +1,7 @@
 package de.noizycologne.backend.maintenance;
 
 import de.noizycologne.backend.discovery.DiscoveryWorkLock;
+import de.noizycologne.backend.editorial.CaptionPretextConfigService;
 import de.noizycologne.backend.media.GenreLexicon;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -40,7 +41,7 @@ public class FactoryResetService {
         "discovery_geo_events", "discovery_keyword_rules", "discovery_observations",
         "discovery_operations", "discovery_place_aliases", "discovery_runs",
         "discovery_source_checks", "discovery_sources", "discovery_venue_geography",
-        "editorial_post_draft_genres", "editorial_post_draft_mentions",
+        "editorial_caption_config", "editorial_post_draft_genres", "editorial_post_draft_mentions",
         "editorial_post_drafts", "event_cancellations", "event_change_history",
         "event_changes", "genre_aliases", "genres", "media_assets",
         "music_track_genres", "music_track_party_series", "music_tracks",
@@ -117,6 +118,10 @@ public class FactoryResetService {
             String targets = ORDERED_TABLES.stream().map(name -> "public.\"" + name + "\"")
                 .collect(java.util.stream.Collectors.joining(","));
             db.execute("TRUNCATE TABLE " + targets + " RESTART IDENTITY");
+            // The shared caption config is application state too; after the reset it must exist again
+            // with its documented default so the editorial UI keeps a valid configuration.
+            db.update("INSERT INTO editorial_caption_config(singleton,pretext,revision) VALUES (true,?,1)",
+                    CaptionPretextConfigService.DEFAULT_PRETEXT);
             db.update("UPDATE maintenance_state SET pending_reset=?,pending_manifest_sha256=?,deleted_records=? WHERE singleton",
                 prepared.intent().generation(), prepared.sha256(), before.recordCount());
             return prepared;
