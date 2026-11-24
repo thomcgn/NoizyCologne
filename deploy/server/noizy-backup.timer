@@ -1,0 +1,13 @@
+[Unit]
+# Template: enable only after the read-only VPS checklist and a watched manual run.
+Description=Daily NoizyCologne backup maintenance window
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+RandomizedDelaySec=10m
+AccuracySec=1m
+Persistent=true
+Unit=noizy-backup.service
+
+[Install]
+WantedBy=timers.target
