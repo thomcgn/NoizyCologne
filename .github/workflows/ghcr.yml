@@ -26,7 +26,7 @@ jobs:
       stale: ${{ steps.check.outputs.stale }}
     steps:
       - name: Checkout trusted workflow helpers
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
