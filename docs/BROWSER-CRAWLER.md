@@ -5,6 +5,15 @@ den regulären Auslieferungsweg integriert. Aktivierung bleibt eine persistente,
 ausdrückliche Betriebsentscheidung nach PR-Abnahme und erfolgreichem FULL für die
 exakte Release-SHA. Die Infrastrukturfreigabe ist kein Extraktionsnachweis für MTC.
 
+**Ergänzung 27.11.2026:** Neben dem Browser-Fallback gibt es jetzt eine generische,
+konfigurativ freigeschaltete externe Kalenderquelle (`EXTERNAL_CALENDAR`, Migration V29)
+für öffentlich auslesbares `ICS` oder `JSON`. Sie kann JavaScript-lastige Quellen wie MTC
+ergänzen, sofern das Team eine geprüfte Feed-Adresse selbst hinterlegt und freigibt; das
+Flag `DISCOVERY_EXTERNAL_CALENDAR_ENABLED` ist standardmäßig `false`. Es wird **keine**
+MTC-URL erfunden und kein Live-Erfolg behauptet: MTC bleibt unverändert
+`BROWSER_PARTIAL` mit null auswertbaren Veranstaltungen. Siehe auch
+[MULTI-SOURCE-DISCOVERY.md](MULTI-SOURCE-DISCOVERY.md).
+
 ## Ablauf und Datenvertrag
 
 `VenueSourceDiscoveryService` verwendet weiterhin `EventPageFetcher`,

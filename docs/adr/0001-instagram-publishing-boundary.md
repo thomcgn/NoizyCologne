@@ -1,85 +1,102 @@
-# ADR 0001: Instagram-Publishing-Grenze – Konzept und sichere Code-Skizze
+# ADR 0001: Instagram-Publishing-Grenze – Infrastruktur implementiert, Aktivierung NO-GO
 
-- **Status:** Vorgeschlagen (nicht freigegeben)
-- **Datum:** 24.11.2026
-- **Grundlage:** `AGENTS.md`, `docs/QUALITY.md`, `docs/PROJECT.md` (insb. 3.2, 4.2, 5.2, 8, 17, 20.8, 23)
-- **Umfang:** Paket I – Architektur-Entscheidungsdokument + sichere, bewusst inaktive Code-Skizze
+- **Status:** Infrastruktur implementiert, Aktivierung **NO-GO** (bewusst fail-closed)
+- **Datum:** 24.11.2026 · aktualisiert 27.11.2026
+- **Grundlage:** `AGENTS.md`, `docs/QUALITY.md`, `docs/PROJECT.md` (insb. 3.2, 4.2, 5.2, 8, 17, 20.8, 23), `backend/src/main/java/de/noizycologne/backend/instagram/**`, `backend/src/main/resources/db/migration/V28__instagram_publishing.sql`, `V29__external_event_sources.sql`
+- **Umfang:** Architektur-Entscheidungsdokument zur Publishing-Grenze. Die technische Infrastruktur ist umgesetzt, aber nicht aktiviert und nicht freigegeben.
 
 ## Lesart dieser ADR
 
 Jede Aussage ist entweder
 
 - **IST (belegbar):** im aktuellen Code oder in den zitierten Projektkapiteln nachweisbar, oder
-- **SOLL / offen:** ein Ziel, eine Bedingung oder ein Entwurf, der **nicht** implementiert und
-  **nicht** freigegeben ist.
+- **SOLL / offen:** ein Ziel, eine Bedingung oder ein Schritt, der **nicht** freigegeben und/oder
+  **nicht** gegen ein echtes Meta-Konto nachgewiesen ist.
 
 SOLL/offen-Aussagen sind ausdrücklich **keine** Zusage, dass etwas funktioniert oder bereits
-existiert. Diese ADR ändert **keine** Produktivkonfiguration und aktiviert **kein** Live-Publishing.
+live genutzt wird. Diese ADR ändert **keine** Produktivkonfiguration, aktiviert **kein** Live-Publishing
+und behauptet **keine** Meta-Fähigkeit oder einen geglückten Testpost.
 
 ---
 
 ## 1. Entscheidung in Kurzform
 
-**IST (belegbar):** Es gibt keinen Instagram-Publisher, keine Publish-Queue und keinen Scheduler,
-der Beiträge sendet. `NOIZY_PUBLISH_ENABLED=false` ist als Default in der Vorlagen-`.env`
-(`docs/PROJECT.md:1144`) und im Compose-Overlay (`docs/PROJECT.md:2321`) festgehalten. Gespeicherte
-und freigegebene Redaktionsentwürfe (`DRAFT`, `READY_FOR_REVIEW`, `APPROVED`, vgl. Kapitel 23.9)
-senden nichts (Kapitel 23.8: „Kein Instagram-Publisher und keine Versandwarteschlange vorhanden“).
+**IST (belegbar):** Eine Publishing-Infrastruktur ist vorhanden: Migration V28 mit eigener
+Jobtabelle und Gate-/Versuchs-/Befundtabellen, ein serverseitiger Gate-Auswerter, ein
+idempotenter Job-Store mit Lease, ein Graph-API-Gateway-Adapter, ein opt-in Worker sowie eine
+ausschließlich lesende Reconciliation. Sie ist in mehreren Ebenen fail-closed:
 
-**Entscheidung (SOLL/offen):** Die fachliche und technische Grenze wird als `InstagramGateway`
-+ serverseitiger `PublishEligibilityPort` modelliert. Eine echte Publishing-Implementierung
-(HTTP, OAuth, Tokens) darf **erst nach separater, ausdrücklicher Freigabe der fachlichen
-Pflicht-Gates und eines bestandenen Meta-PoC** entstehen. Bis dahin bleibt
-`NOIZY_PUBLISH_ENABLED=false` und die Skizze fail-closed.
+- `NOIZY_PUBLISH_ENABLED=false` ist der Default in `application.properties`; in
+  `deploy/server/compose.yaml` steht hart `NOIZY_PUBLISH_ENABLED: "false"`.
+  Die `.env.example` hält Publishing ebenfalls deaktiviert.
+- Der Worker-Bean entsteht nur bei `noizy.instagram.worker.enabled=true` **und**
+  `noizy.publish.enabled=true`; der Gateway-Bean nur bei
+  `noizy.instagram.gateway.enabled=true` **und** vorhandenem Token. Andernfalls greifen
+  Fail-Closed-Beans, die jede Operation verweigern.
+- Alle sechs konfigurativen Review-Gate-Freigaben sind standardmäßig `false`, insbesondere
+  `noizy.instagram.gates.additional-workflow-defined`.
 
-**Nicht-Ziele dieses Pakets (hart):** kein Live-Publishing, keine echten Meta-HTTP-Calls, keine
-Tokens/Secrets, keine Account-Verbindung, kein Deployment, keine Migration, keine neue Tabelle,
-kein sendender Scheduler, keine Änderung an `application.properties`.
+Es werden **keine** Beiträge automatisch gepostet. Es gibt keinen OAuth-Flow, keine
+Tokenvergabe, keine Account-Verbindung und keinen bestandenen Meta-PoC.
+
+**Entscheidung (weiterhin NO-GO):** Die Infrastruktur darf erst nach separater, ausdrücklicher
+fachlicher Freigabe aktiviert werden. Voraussetzungen siehe Abschnitt 10. Das bloße Setzen
+eines Flags ist keine Freigabe.
+
+**Nicht-Ziele der Aktivierung (hart):** kein Live-Publishing, kein bestandener Meta-PoC, keine
+Behauptung einer Meta-Capability, keine Tokens in der Konfiguration, keine Account-Verbindung,
+kein Deployment und keine Produktivdatenänderung.
 
 ---
 
-## 2. Was in diesem Paket tatsächlich im Code liegt (IST, belegbar)
+## 2. Was tatsächlich im Code liegt (IST, belegbar)
 
 | Artefakt | Beleg | Bedeutung |
 |---|---|---|
-| `InstagramGateway` | `backend/.../instagram/InstagramGateway.java` | Reines Java-Interface mit exakt den Signaturen aus `docs/PROJECT.md:712`. Kein `RestClient`, kein HTTP. |
-| `InMemoryInstagramGateway` | `backend/src/test/java/...` | Deterministisches Mock, **ausschließlich in Testquellen**. Kein Produktiv-Bean, kein Netzwerk, keine Tokens. |
-| `PublishEligibilityPort` + `ConfiguredPublishEligibility` | `backend/.../instagram/` | Fail-closed Gate-Sketch. Liest `noizy.publish.enabled` über `@Value(..., Default false)` (entspricht Env `NOIZY_PUBLISH_ENABLED`). Nur der exakte Wert `true` aktiviert; `null`, leer oder unbekannt → `false`. |
-| `PublishCoordinator` | `backend/.../instagram/` | Plain-Java-Skizze für **einen** expliziten Versuch. Kein `@Scheduled`, kein `@Component`, kein Automatismus. |
-| `PublicationStatus`, `AudioStatus`, `PublishAttempt` | `backend/.../instagram/` | Statusmodell nach Kapitel 5.2. `PublishAttempt.audioStatus()` liefert immer `NOT_VERIFIABLE`. |
-| Tests | `backend/src/test/java/de/noizycologne/backend/instagram/` | Sechs Unit-Tests, alle ohne Datenbank und ohne Netzwerk. |
+| Migration `V28__instagram_publishing.sql` | `backend/src/main/resources/db/migration/` | Schema `publishing` mit `instagram_publish_job` (UNIQUE `idempotency_key`, `UNIQUE(draft_id, account_id)`, `lease_owner`/`lease_until`, Status-Enum, `media_id`/`permalink`, `needs_reconciliation`), `instagram_publish_gate_result` (PK `job_id` + `gate_key`), `instagram_publish_attempt` (`UNIQUE(job_id, attempt_no)`) und `instagram_remote_publication` (`media_id` als PK). Audit-Trigger greifen auf die vorhandenen V25-Funktionen zurück. Es werden keine Tokens gespeichert. |
+| `PublishEligibilityPort`, `ConfiguredPublishEligibility` | `backend/.../instagram/` | Serverseitige Entscheidung über 12 Pflicht-Gates inklusive `ADDITIONAL_WORKFLOW_DEFINED`. Ohne `noizy.publish.enabled=true` (exakt, nur `true`) wird verweigert. Kein HTTP, keine Tokens, kein Versand. |
+| `ServerSideGateEvaluator`, `PublishFactReader`, `PublishFacts`, `GateEvaluation` | `backend/.../instagram/gates/` | Ermittelt Gate-Ergebnisse aus Datenbankfakten statt aus HTTP-Parametern. |
+| `WorkflowGateApprovals`, `InstagramGateConfiguration` | `backend/.../instagram/gates/` | Sechs konfigurative Freigaben (`post-order-selected`, `weekend-day-balance-reviewed`, `posting-plan-current`, `handles-reviewed`, `caption-stale-check`, `additional-workflow-defined`), alle Default `false`. |
+| `PublishJobStore`, `PublishJob` | `backend/.../instagram/store/` | Idempotentes Enqueue, exklusives Claimen mit `FOR UPDATE SKIP LOCKED` und Lease, Statusübergänge und Versuchsprotokoll. Parallele Worker können denselben Job nicht doppelt claimen. |
+| `InstagramGateway`, `GraphApiInstagramGateway`, `FailClosedInstagramGateway` | `backend/.../instagram/gateway/` | Adapter für Container anlegen, Containerstatus lesen, `media_publish` aufrufen sowie `fetchPublication`/`recentMedia`. Der Produktiv-Bean entsteht nur bei Opt-in **und** Token; der Adapter implementiert **keinen** OAuth-Code-Flow, keine Tokenvergabe und keinen Account-Austausch. Sonst verweigert die Fail-Closed-Bean. |
+| `InstagramWorkerConfiguration`, `PublishWorker` | `backend/.../instagram/worker/` | Opt-in-Scheduler mit konfigurierbarem Intervall, Lease und Batchgröße; zusätzlich an `noizy.publish.enabled` gebunden. |
+| `PublishJobProcessor` | `backend/.../instagram/worker/` | Führt einen geclaimten Job aus: Gate-Prüfung, optional nur mit geprüfter öffentlicher HTTPS-Bild-URL, Container-Polling, höchstens **ein** `media_publish`-Aufruf pro Job/Versuch. Timeout bei `media_publish` → `UNKNOWN_REMOTE_RESULT` + read-only Reconciliation, niemals ein blindes Retry. |
+| `ReconciliationService` | `backend/.../instagram/worker/` | Klärt unbekannte Resultate ausschließlich mit `fetchPublication`/`recentMedia`; erzeugt keinen Container und ruft kein `media_publish` auf. Ohne Treffer bleibt der Status ausdrücklich unbekannt. |
+| `PublicationStatus`, `AudioStatus`, `PublishAttempt`, `RemotePublication`, `ContainerStatus`, `MediaContainerResult`, `PublishResult` | `backend/.../instagram/` | Statusmodell nach Kapitel 5.2; Audio bleibt `NOT_VERIFIABLE`. |
+| Migration `V29__external_event_sources.sql`, `ExternalCalendarSourceService`, `ExternalCalendarParser` | `backend/src/main/resources/db/migration/`, `backend/.../discovery/external/` | Generische, konfigurativ freigeschaltete externe ICS-/JSON-Kalenderquellen als Fallback für JS-lastige Quellen. Keine MTC-URL wird erfunden; kein Live-Erfolg wird behauptet. Gehört zur Discovery, nicht zum Versand. |
+| Tests | `backend/src/test/java/de/noizycologne/backend/instagram/`, `.../discovery/external/` | Unit- und Integrationstests für Flags/Gates, Job-Store/Idempotenz/Lease, Processor-Timeouts, Reconciliation und externe Kalenderquellen. Sie laufen ohne echte Meta-Konten und ohne Live-Posting. |
 
 Der vorhandene `PublishEligibilityService` in `cancellation/` prüft nur Absage-/Änderungs-Blocker;
 er ist **kein** Publisher und kennt den Publishing-Flag nicht. Er bleibt unangetastet.
 
 ---
 
-## 3. Offene Pflicht-Pre-Publish-Gates (SOLL / offen)
+## 3. Pflicht-Pre-Publish-Gates (IST implementiert, fachlich offen)
 
-Quellen: Kapitel 17.2 und 20.8. **Keines** dieser Gates ist in diesem Paket implementiert oder
-abgenommen. Die Aufzählung im Sketch (`ConfiguredPublishEligibility.REQUIRED_GATES`) ist eine
-**Absichtserklärung**, keine Erfüllung. Ein Event darf `READY_TO_PUBLISH` erst erreichen, wenn
-alle für die Workflow-Version erforderlichen Gates erfüllt sind; ein fehlendes oder falsch
-konfiguriertes Pflicht-Gate blockiert (Kapitel 17.1).
+Quellen: Kapitel 17.2 und 20.8. Die 12 Gates sind im Code als
+`ConfiguredPublishEligibility.REQUIRED_GATES` festgehalten und werden serverseitig ausgewertet;
+ein fehlendes oder nicht erfülltes Gate blockiert (Kapitel 17.1). **Erfüllt** sind sie damit nicht:
+die Review-Gates benötigen ausdrückliche fachliche Freigabe.
 
-| Gate-Key | Ziel (SOLL) | Regeltyp | Stand |
+| Gate-Key | Ziel | Regeltyp | Stand |
 |---|---|---|---|
-| `EVENT_DATA_VALIDATED` | Termin, Venue, Pflichtangaben geprüft | hart | offen |
-| `MEDIA_VALIDATED` | gültiges, freigegebenes JPEG; kein Platzhalter | hart | offen |
-| `CAPTION_APPROVED` | Text und Handles geprüft | hart | offen |
-| `POST_ORDER_SELECTED` | eindeutige Reihenfolge | hart | offen |
-| `VENUE_FEED_DIVERSITY` | keine Venue-Wiederholung im 3er-Fenster | hart | offen |
-| `WEEKEND_DAY_BALANCE_REVIEWED` | Tagesmix geprüft; begründeter Hinweis möglich | Review | offen |
-| `POSTING_PLAN_CURRENT` | Planversion und Live-Feed noch gültig | hart | offen |
-| `ADDITIONAL_WORKFLOW_DEFINED` | weitere angekündigte Vor-Publishing-Regeln vollständig spezifiziert | **BLOCKED** | offen |
-| `VENUE_RESOLVED` (20.8) | Event exakt einer geprüften `venue_id` zugeordnet | hart | offen |
-| `LINEUP_UNAMBIGUOUS` (20.8) | keine ungeklärten Performer-Kandidaten in geplanten @Mentions | hart | offen |
-| `HANDLE_REVIEWED` (20.8) | automatisch gesetzte IG-Handles aus geprüften Stammdaten | hart | offen |
-| `CAPTION_STALE_CHECK` (20.8) | Caption nach Stammdatenänderung erneut prüfen | hart | offen |
+| `EVENT_DATA_VALIDATED` | Termin, Venue, Pflichtangaben geprüft | hart | implementiert, Fachdaten zu prüfen |
+| `MEDIA_VALIDATED` | gültiges, freigegebenes JPEG; kein Platzhalter | hart | implementiert, Fachdaten zu prüfen |
+| `CAPTION_APPROVED` | Text und Handles geprüft | hart | implementiert, Fachdaten zu prüfen |
+| `POST_ORDER_SELECTED` | eindeutige Reihenfolge | hart | Freigabe-Flag Default `false` |
+| `VENUE_FEED_DIVERSITY` | keine Venue-Wiederholung im 3er-Fenster | hart | implementiert, Fachdaten zu prüfen |
+| `WEEKEND_DAY_BALANCE_REVIEWED` | Tagesmix geprüft; begründeter Hinweis möglich | Review | Freigabe-Flag Default `false` |
+| `POSTING_PLAN_CURRENT` | Planversion und Live-Feed noch gültig | hart | Freigabe-Flag Default `false` |
+| `ADDITIONAL_WORKFLOW_DEFINED` | weitere angekündigte Vor-Publishing-Regeln vollständig spezifiziert | **BLOCKED** | Default `false` |
+| `VENUE_RESOLVED` (20.8) | Event exakt einer geprüften `venue_id` zugeordnet | hart | implementiert, Fachdaten zu prüfen |
+| `LINEUP_UNAMBIGUOUS` (20.8) | keine ungeklärten Performer-Kandidaten in geplanten @Mentions | hart | implementiert, Fachdaten zu prüfen |
+| `HANDLE_REVIEWED` (20.8) | automatisch gesetzte IG-Handles aus geprüften Stammdaten | hart | Freigabe-Flag `handles-reviewed` Default `false` |
+| `CAPTION_STALE_CHECK` (20.8) | Caption nach Stammdatenänderung erneut prüfen | hart | Freigabe-Flag `caption-stale-check` Default `false` |
 
-Diese Tabelle ersetzt die vier Gates aus 20.8 **nicht** und schließt die angekündigten Schritte
-aus Kapitel 17 **nicht** ab. Kapitel 20.8 formuliert ausdrücklich: `NOIZY_PUBLISH_ENABLED=false`
-bleibt bis zur gesamten Freigabe gesetzt.
+Die sechs konfigurativen Review-Freigaben (`post-order-selected`, `weekend-day-balance-reviewed`,
+`posting-plan-current`, `handles-reviewed`, `caption-stale-check`, `additional-workflow-defined`)
+müssen vor einer Aktivierung einzeln fachlich abgenommen und gesetzt werden. `ADDITIONAL_WORKFLOW_DEFINED`
+bleibt blockiert, solange die angekündigte zusätzliche Workflowstufe nicht spezifiziert ist.
 
 ---
 
@@ -96,19 +113,22 @@ blind vermischt werden.
 
 **Verbindlich erst nach echtem Meta-PoC festlegbar (offen):** welche Variante NoizyCologne
 tatsächlich autorisieren kann, welche Musik-Suchfunktionen verfügbar sind und welche Rechte
-Veröffentlichung erfordert. Diese ADR trifft dazu **keine** Entscheidung.
+Veröffentlichung erfordert. Der vorhandene Adapter nimmt ein bereits bereitgestelltes Token
+entgegen; er implementiert **keinen** OAuth-Flow. Diese ADR trifft dazu **keine** Entscheidung.
 
 ---
 
-## 5. Graph-API-Flow (SOLL / offen)
+## 5. Graph-API-Flow (IST implementiert, nicht gegen Meta nachgewiesen)
 
-Beabsichtigter Ablauf (Kapitel 8.3), **nicht** implementiert:
+Der Ablauf entspricht Kapitel 8.3 und ist im Code umgesetzt:
 
 1. Eligibility / Planversion / Live-Feed prüfen (siehe Abschnitt 3).
 2. Job exklusiv claimen; Status `CLAIMED`.
-3. JPEG über öffentlich abrufbare, zeitlich begrenzte HTTPS-URL bereitstellen.
+3. JPEG über öffentlich abrufbare, zeitlich begrenzte HTTPS-URL bereitstellen
+   (`noizy.instagram.media-public-base-url`; leer = kein Versand).
 4. Medien-Container mit Caption anlegen → `MediaContainerResult` (container_id).
-5. Container-Status abrufen, bis Meta die Veröffentlichung erlaubt → `ContainerStatus`.
+5. Container-Status abrufen, bis Meta die Veröffentlichung erlaubt → `ContainerStatus`
+   (begrenzt durch `noizy.instagram.gateway.max-container-polls`).
 6. `media_publish` exakt kontrolliert **einmal** ausführen → `PublishResult`.
 7. `media_id`/`permalink` speichern; Status `PUBLISHED`.
 8. Veröffentlichung dem Wochenend-Batch zuordnen; **keine Einzel-Push-Erzeugung**.
@@ -116,24 +136,26 @@ Beabsichtigter Ablauf (Kapitel 8.3), **nicht** implementiert:
 
 **Grenze (belegbar, Kapitel 8.3):** Der Graph-API-Container ist ein Publishing-Zwischenschritt,
 **kein** Instagram-App-Entwurf. Änderung eines freigegebenen Entwurfs nach Container-Erzeugung
-muss erneut geprüft werden (vgl. 23.3: offene unveränderliche Medienversion).
+muss erneut geprüft werden (vgl. 23.3: offene unveränderliche Medienversion). Es wurde **kein**
+echter Meta-Aufruf und kein Testpost ausgeführt.
 
 ---
 
-## 6. Retry, `UNKNOWN_REMOTE_RESULT` und Reconciliation (SOLL / offen)
+## 6. Retry, `UNKNOWN_REMOTE_RESULT` und Reconciliation (IST implementiert)
 
-- **SOLL:** Ein Timeout an der externen Grenze führt zu `UNKNOWN_REMOTE_RESULT`, niemals zu einem
-  blinden erneuten `media_publish` (Kapitel 5.2, 8.3). Ein Retry ohne Kenntnis des Remote-Zustands
-  erzeugt einen Doppelpost.
-- **IST (belegbar im Sketch):** `PublishCoordinator` ruft `publishContainer` genau einmal auf;
-  `GatewayTimeoutException` wird zu `PublishAttempt.unknownRemoteResult()` abgebildet. Der Test
-  `timeoutYieldsUnknownRemoteResultWithoutSecondPublishCall` prüft `publishCalls() == 1`.
-- **SOLL / offen (bewusst nicht implementiert):** Reconciliation über `fetchPublication` und
-  `recentMedia` (beide im Interface deklariert), um den tatsächlichen Remote-Zustand zu klären.
-  `PUBLISHED` darf erst nach bestätigtem Erfolg gesetzt werden; `UNKNOWN_REMOTE_RESULT` ist kein
-  Erfolg.
-- **SOLL / offen:** Ein manuell gelöschter Beitrag wird gesondert zu `REMOVED_EXTERNALLY`
-  reconciled (Kapitel 5.2).
+- Ein Timeout an der externen Grenze führt zu `UNKNOWN_REMOTE_RESULT`, niemals zu einem
+  blinden erneuten `media_publish` (Kapitel 5.2, 8.3). Ein Retry ohne Kenntnis des
+  Remote-Zustands erzeugt einen Doppelpost.
+- `PublishJobProcessor` ruft `publishContainer` höchstens einmal je Job/Versuch auf;
+  `GatewayTimeoutException` wird zu `PublishAttempt.unknownRemoteResult()` abgebildet.
+- `ReconciliationService` klärt den Zustand ausschließlich mit den lesenden Methoden
+  `fetchPublication` und `recentMedia`. Es wird nie ein Container erzeugt oder
+  `media_publish` aufgerufen; ein fehlender Befund bleibt ausdrücklich unbekannt.
+- `instagram_remote_publication` speichert beobachtete Media-IDs/Permalinks; die
+  `instagram_publish_job` trägt `needs_reconciliation`.
+- Ein manuell gelöschter Beitrag kann gesondert zu `REMOVED_EXTERNALLY` reconciled werden
+  (Kapitel 5.2). `PUBLISHED` darf erst nach bestätigtem Erfolg gesetzt werden;
+  `UNKNOWN_REMOTE_RESULT` ist kein Erfolg.
 
 ---
 
@@ -141,9 +163,8 @@ muss erneut geprüft werden (vgl. 23.3: offene unveränderliche Medienversion).
 
 - **IST (belegbar, Kapitel 5.2 und 8.4):** `AudioStatus = { NOT_APPLICABLE,
   MANUAL_AUDIO_PENDING, NOT_VERIFIABLE }`. `NOT_VERIFIABLE` darf **nicht** als
-  `COMPLETED`/`CONFIRMED` ausgegeben werden. Der Sketch liefert nach erfolgreichem Feed-Post
-  weiterhin `NOT_VERIFIABLE`; entsprechend prüft der Test
-  `publishedFeedPostNeverClaimsAudioSuccess`.
+  `COMPLETED`/`CONFIRMED` ausgegeben werden. Die Infrastruktur meldet nach einem
+  (nicht stattgefundenen) Feed-Post keinen Audio-Erfolg.
 - **SOLL (Kapitel 8.5):** PoC-Testprotokoll, ob ein API-gepostetes Foto auf iPhone/Android nachträglich
   mit Musik versehen werden kann. Abbruchkriterium: falls nicht möglich, manueller
   Notification-Publishing-Fallback. Ein veröffentlichter Beitrag darf nicht als „mit Musik fertig“
@@ -157,7 +178,8 @@ muss erneut geprüft werden (vgl. 23.3: offene unveränderliche Medienversion).
 
 ## 8. Batch- und Sammel-Push-Regeln (SOLL / offen)
 
-Kapitel 8.4 und 5.1 sind verbindlich, aber nicht implementiert:
+Kapitel 8.4 und 5.1 sind verbindlich; die Publishing-Infrastruktur lässt einen solchen Ablauf
+zu, er ist aber nicht fachlich freigegeben:
 
 - Ein Wochenende / Instagram-Account bildet **einen Batch** (`weekend_batch.friday_date`).
 - **Genau eine** automatische `AUDIO_DIGEST`-Benachrichtigung pro Batch und zuständiger Person –
@@ -171,47 +193,50 @@ Kapitel 8.4 und 5.1 sind verbindlich, aber nicht implementiert:
   Einmaligkeitsregel.
 - Die Zahl im Hinweis enthält nur **wirklich veröffentlichte** Posts; Fehler erscheinen in der
   optionalen Übersicht. Bei fehlendem technischen Audio-Nachweis niemals „24/24 Musik erledigt“.
-- Das Zielschema (Kapitel 8.4) ist ein Entwurf, **keine** ausgeführte Migration. Dieses Paket
-  erzeugt keine Tabelle.
 
 ---
 
-## 9. Tokens, Redirect-URI und Capabilities (SOLL / offen)
+## 9. Tokens, Redirect-URI und Capabilities (IST Grenze / SOLL offen)
 
-- **Tokens verschlüsselt speichern**, niemals in Frontend-Responses, nicht loggen (Kapitel 8.2,
-  10.3). Keine echten Access-Tokens in DTOs/Responses. Das Sketch-Modell `InstagramAccount`
-  enthält bewusst nur eine `id`.
-- **OAuth `state`** sicher und einmalig speichern (Ablaufdatum + Nutzer-/Session-Zuordnung),
-  CSRF-Schutz, minimal erforderliche Scopes (Kapitel 8.2, 10.3).
-- **Redirect-URI exakt** mit der Meta-Konfiguration übereinstimmen (Kapitel 8.2, 10.3,
-  16: z. B. `https://app.example.de/api/instagram/oauth/callback`). Keine Näherungs- oder
-  Platzhalter-URIs.
-- **Capabilities/Permissions-PoC als Voraussetzung (offen):** Erst mit echtem Konto testen,
-  welche Login-Variante autorisierbar ist, welche Rechte `media_publish` benötigt und ob die
-  optionale Audio-Suche verfügbar ist (Kapitel 4.2, R03, Modul 9). Bis dahin kein Account
-  verbinden, kein Token anlegen, kein Testpost auf einem produktiven Konto.
+- **IST:** Das Gateway nimmt einen bereits durch das Team bereitgestellten Access-Token aus
+  `INSTAGRAM_ACCESS_TOKEN` entgegen. Es wird **nicht** in der Datenbank gespeichert, nicht in
+  Frontend-Responses gegeben und nicht geloggt. `application.properties` und
+  `deploy/server/.env.example` enthalten nur leere Platzhalter; `deploy/server/compose.yaml`
+  reicht sie optional durch. Ohne Token bleibt die Fail-Closed-Bean aktiv.
+- **IST:** Es gibt **keinen** OAuth-Flow, keine Tokenvergabe, keinen Account-Austausch und keine
+  Redirect-URI-Implementierung.
+- **SOLL/offen:** Tokens verschlüsselt speichern, niemals in Frontend-Responses, OAuth-`state`
+  sicher und einmalig speichern, CSRF-Schutz, minimal erforderliche Scopes und eine exakt mit
+  der Meta-Konfiguration übereinstimmende Redirect-URI (Kapitel 8.2, 10.3, 16).
+- **SOLL/offen (Voraussetzung):** Erst mit echtem Konto testen, welche Login-Variante
+  autorisierbar ist, welche Rechte `media_publish` benötigt und ob die optionale Audio-Suche
+  verfügbar ist (Kapitel 4.2, R03, Modul 9). Bis dahin kein Account verbinden, kein Testpost
+  auf einem produktiven Konto.
 
 ---
 
-## 10. Go/No-Go-Kriterien (SOLL / offen)
+## 10. Go/No-Go-Kriterien (Aktivierung weiterhin NO-GO)
 
-Ein echtes Live-Publishing ist **nur** denkbar, wenn **alle** folgenden Punkte zutreffen. Aktuell
-trifft keiner davon zu; daher lautet die Entscheidung **NO-GO**.
+Die technische Infrastruktur ist implementiert. Ein echtes Live-Publishing ist **nur** denkbar,
+wenn **alle** folgenden Punkte zutreffen. Aktuell trifft die fachliche Freigabe nicht zu; daher
+lautet die Entscheidung weiterhin **NO-GO**.
 
 | Kriterium | Aktuell |
 |---|---|
-| Alle Pflicht-Gates aus Kapitel 17 (inkl. `ADDITIONAL_WORKFLOW_DEFINED`) spezifiziert, implementiert, getestet, abgenommen | offen / `BLOCKED` |
-| Zusätzliche Gates aus 20.8 (`VENUE_RESOLVED`, `LINEUP_UNAMBIGUOUS`, `HANDLE_REVIEWED`, `CAPTION_STALE_CHECK`) erfüllt | offen |
+| Infrastruktur (Migration, Gates, Idempotenz/Lease, Gateway-Adapter, Worker, Reconciliation, Tests) implementiert | **IST** |
+| Alle 12 Pflicht-Gates aus Kapitel 17/20.8 inklusive `ADDITIONAL_WORKFLOW_DEFINED` fachlich spezifiziert, abgenommen und die sechs Review-Freigaben gesetzt | offen / `BLOCKED` (alle Flags `false`) |
+| Zusätzliche angekündigte Workflowstufe vor dem Posting vollständig definiert und freigegeben | offen |
 | Meta-PoC mit echtem Konto: Login-Variante, Capabilities/Permissions, Foto-Publish, Retry ohne Doppelpost dokumentiert | offen |
 | Musik-PoC (8.5) und Story-/Mention-Ablauf (8.6) auf Android/iOS geprüft | offen |
-| Tokens verschlüsselt, nicht in Responses, Redirect-URI exakt, `state`/CSRF geprüft | offen |
-| Batch-/Outbox-Dedupe und Reconciliation implementiert und getestet | offen |
-| Vollständige QUICK-/CI-FULL-Prüfung für den exakt freigegebenen Commit | offen |
+| Access-Token bereitgestellt und geprüfte öffentliche HTTPS-Medien-URL konfiguriert (`INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_MEDIA_PUBLIC_BASE_URL`) | offen / leer |
+| CI FULL für den **exakt** zu aktivierenden Commit erfolgreich und Branch Protection für `main` durch einen Administrator aktiviert | offen |
 | `NOIZY_PUBLISH_ENABLED` bewusst und ausdrücklich auf `true` gesetzt (nicht versehentlich) | **false** |
 
-**Expliziter Vorbehalt:** Die Implementierung echter Publishing-Funktionalität erfolgt **ausschließlich
-nach separater, ausdrücklicher Freigabe der fachlichen Gates und des Meta-PoC**. Diese ADR und
-die beigefügte Skizze stellen keine solche Freigabe dar.
+**Expliziter Vorbehalt:** Die Aktivierung echter Publishing-Funktionalität erfolgt
+**ausschließlich nach separater, ausdrücklicher fachlicher Freigabe der sechs Review-Gates,
+der zusätzlichen Workflowdefinition und eines bestandenen Meta-PoC**. Diese ADR und der
+vorhandene Code stellen keine solche Freigabe dar. Es wird kein Live-Posting und keine
+Meta-Fähigkeit behauptet.
 
 ---
 
@@ -231,19 +256,20 @@ die beigefügte Skizze stellen keine solche Freigabe dar.
 
 ---
 
-## 12. Verifikation und Grenzen dieses Pakets
+## 12. Verifikation und Grenzen
 
-- **Gezielte Backend-Tests (IST, ausgeführt):** `InstagramPublishSketchTests` mit sechs Tests:
-  Flag `false` verweigert trotz formal freigegebenem Entwurf; fehlender/ungültiger Flag →
-  fail-closed; Mock liefert deterministische Container-/Publish-Ergebnisse; Timeout →
-  `UNKNOWN_REMOTE_RESULT` ohne zweiten Publish-Aufruf; veröffentlichter Feed-Post meldet keinen
-  Audio-Erfolg; Flag `true` mit offenem Workflow-Gate verweigert weiterhin. Kein Netzwerkzugriff,
-  keine Datenbank, keine echten Tokens.
+- **Gezielte Backend-Tests (IST, im Branch vorhanden):** Unit- und Integrationstests unter
+  `backend/src/test/java/de/noizycologne/backend/instagram/` und
+  `backend/src/test/java/de/noizycologne/backend/discovery/external/`. Sie prüfen unter anderem
+  Flag/Fail-Closed-Verhalten, Gate-Auswertung, Idempotenz und Lease des Job-Store,
+  `UNKNOWN_REMOTE_RESULT` ohne zweiten Publish-Aufruf, lesende Reconciliation sowie externe
+  ICS-/JSON-Quellen. Kein Netzwerkzugriff auf Meta, keine echten Konten, keine Tokens.
 - **Commit-Gate (IST):** Der verpflichtende Pre-Commit-Hook führt QUICK aus. FULL läuft
   ausschließlich in GitHub Actions und bleibt vor Merge/`main` und Deployment für den exakten
-  akzeptierten Commit verbindlich.
+  akzeptierten Commit verbindlich; die Branch Protection muss dafür aktiviert sein.
 - **Grenze:** Ein erfolgreicher CLI-Lauf ist kein Nachweis für die Live-IDE-Diagnosen; ein
   solcher Zugriff wird im Abschluss ausdrücklich benannt. Diese ADR behauptet **keinen**
   End-to-End-Test gegen Meta und **keine** Produktivfreigabe.
-- **Live-Publishing weiterhin deaktiviert.** `NOIZY_PUBLISH_ENABLED` bleibt `false`; es gibt
-  weiterhin keinen echten Meta-HTTP-Aufruf, keine Tokenvergabe und keine Account-Verbindung.
+- **Live-Publishing weiterhin deaktiviert.** `NOIZY_PUBLISH_ENABLED` bleibt `false`; die
+  Gateway-/Worker-Opt-ins und Review-Freigaben bleiben `false`, es gibt keine Tokenvergabe,
+  keine Account-Verbindung und keinen echten Meta-HTTP-Aufruf.

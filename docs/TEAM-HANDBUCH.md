@@ -2,7 +2,7 @@
 
 Stand: 06.11.2026. Diese Anleitung beschreibt die vorhandene Bedienung. Sie richtet sich an alle, die Partys pflegen, Quellen prüfen und Beiträge vorbereiten.
 
-**Das Wichtigste:** NoizyCologne speichert Termine und redaktionelle Entwürfe. Die Anwendung veröffentlicht derzeit keine Instagram-Beiträge und versendet keine Instagram-Nachrichten. Auch „Freigegeben“ bedeutet noch nicht „veröffentlicht“.
+**Das Wichtigste:** NoizyCologne speichert Termine und redaktionelle Entwürfe. Die Anwendung veröffentlicht derzeit keine Instagram-Beiträge und versendet keine Instagram-Nachrichten. Auch „Freigegeben“ bedeutet noch nicht „veröffentlicht“. Es ist zwar eine Publishing-Infrastruktur vorbereitet (Gates, Warteschlange mit Schutz gegen Doppelversand, Instagram-Anbindung und Abgleich), aber sie ist bewusst ausgeschaltet und bleibt bis zur ausdrücklichen fachlichen Freigabe und einem echten Meta-Test inaktiv.
 
 ## Schnellstart: Von der Party zum Beitragsentwurf
 
@@ -125,7 +125,7 @@ Optional unter **Musik / Songvorschläge** einen geprüften Song auswählen. Die
 
 Den gewünschten Status auswählen und **Entwurf anlegen** beziehungsweise **Entwurf speichern** wählen. Änderungen an Text, Genres, Mentions und Song sind erst damit dauerhaft gesichert. Eine Freigabe benötigt mindestens eine Caption, einen echten Flyer und geklärte Veranstaltungssperren.
 
-Die Karte **Pre-Publishing-Gates** enthält zusätzliche lokale Prüfhaken. Ihr Knopf **Freigabe technisch vorbereitet** beziehungsweise **Freigabe noch blockiert** ist noch nicht bedienbar. Die Kachelreihenfolge und diese Prüfhaken bleiben nur in der aktuellen Ansicht. Eine dauerhafte Veröffentlichungsplanung und automatisches Instagram-Publishing sind noch nicht vorhanden. Veröffentlichungen erfolgen getrennt nach dem vereinbarten Teamablauf.
+Die Karte **Pre-Publishing-Gates** enthält zusätzliche lokale Prüfhaken. Ihr Knopf **Freigabe technisch vorbereitet** beziehungsweise **Freigabe noch blockiert** ist noch nicht bedienbar. Die Kachelreihenfolge und diese Prüfhaken bleiben nur in der aktuellen Ansicht. Die vorbereiteten Publishing-Komponenten sind technisch vorhanden, aber nicht freigegeben und nicht eingeschaltet; es gibt weiterhin keine dauerhafte Veröffentlichungsplanung und kein automatisches Instagram-Publishing. Veröffentlichungen erfolgen getrennt nach dem vereinbarten Teamablauf.
 
 ## Persönliche Darstellung
 

@@ -6,6 +6,15 @@ kein Merge nach main, kein Deployment. Bestehende lokale Upload-Änderungen blei
 im ursprünglichen Worktree erhalten. Die Umsetzung nutzt vorhandene Dienste und
 Tabellen statt zusätzlicher Infrastruktur.
 
+**Ergänzung 27.11.2026:** Ergänzend zu den konfigurierten Zusatzquellen gibt es jetzt eine
+generische externe Kalenderquelle (`EXTERNAL_CALENDAR`, Migration V29) für öffentlich
+auslesbares `ICS` oder `JSON`. Sie ist konfigurativ freigeschaltet
+(`DISCOVERY_EXTERNAL_CALENDAR_ENABLED=false` als Default), bleibt ohne Venue-Zuordnung und
+durchläuft den bestehenden Sonderquellen-/Prüfpfad. Sie kann JavaScript-lastige Quellen wie
+MTC ergänzen, sofern das Team die Feed-Adresse selbst hinterlegt und freigibt. Es wird
+**keine** MTC-URL erfunden und **kein** Live-Erfolg behauptet: MTC bleibt `BROWSER_PARTIAL`
+mit null auswertbaren Veranstaltungen (siehe [BROWSER-CRAWLER.md](BROWSER-CRAWLER.md)).
+
 ## Phase 1 – Entwicklungsworkflow
 
 Der Ausgangsstand besitzt bereits QUICK-Hook, Feature-QUICK, PR-/main-FULL,
