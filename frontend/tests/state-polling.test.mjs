@@ -40,13 +40,13 @@ function loadSource(url) {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   function localRequire(specifier) {
-    if (specifier === 'next/image') return { default: ({ src, alt }) => h('img', { src, alt }) };
+    if (specifier === 'next/image') return { __esModule: true, default: ({ src, alt }) => h('img', { src, alt }) };
     if (specifier === 'next/navigation') return { useSearchParams: () => new URLSearchParams('') };
-    if (specifier === 'next/link') return { default: ({ href, children }) => h('a', { href }, children) };
+    if (specifier === 'next/link') return { __esModule: true, default: ({ href, children }) => h('a', { href }, children) };
     if (specifier === './useDayPreview') return { useDayPreview: () => ({ date: null, handlers: () => ({}), open() {}, close() {} }) };
-    if (specifier === './EntryEditor') return { default: () => null };
-    if (specifier === '../DashboardModal') return { default: ({ open, children }) => open ? h('div', null, children) : null };
-    if (specifier === '../DataCollection') return { default: props => h('div', null, props.items.map(item => h('p', { key: props.getName(item) }, props.getName(item)))) };
+    if (specifier === './EntryEditor') return { __esModule: true, default: () => null };
+    if (specifier === '../DashboardModal') return { __esModule: true, default: ({ open, children }) => open ? h('div', null, children) : null };
+    if (specifier === '../DataCollection') return { __esModule: true, default: props => h('div', null, props.items.map(item => h('p', { key: props.getName(item) }, props.getName(item)))) };
     if (specifier === '../workspaceActions') return { useWorkspaceAction: () => {} };
     if (specifier.startsWith('.')) {
       for (const extension of ['.tsx', '.ts']) {

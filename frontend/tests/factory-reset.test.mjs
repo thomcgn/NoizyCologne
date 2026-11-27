@@ -30,7 +30,7 @@ function compile(path, imported = {}) {
 
 const modal = compile('../src/app/dashboard/DashboardModal.tsx').default;
 const Panel = compile('../src/app/dashboard/settings/FactoryResetPanel.tsx', {
-  '../DashboardModal': { default: modal },
+  '../DashboardModal': { __esModule: true, default: modal },
 }).default;
 
 let root;

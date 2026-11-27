@@ -52,7 +52,7 @@ function loadSource(url) {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   function localRequire(specifier) {
-    if (specifier === "next/link") return {default: ({href, children, ...props}) => h("a", {href, ...props}, children)};
+    if (specifier === "next/link") return {__esModule: true, default: ({href, children, ...props}) => h("a", {href, ...props}, children)};
     if (specifier.endsWith('/CatalogProvider')) return { useCatalog: () => catalogue };
     if (specifier.startsWith('.')) {
       for (const extension of ['.tsx', '.ts']) {

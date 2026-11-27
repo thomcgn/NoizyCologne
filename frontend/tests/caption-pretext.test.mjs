@@ -34,8 +34,8 @@ function loadSource(url) {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   function localRequire(specifier) {
-    if (specifier === 'next/link') return { default: props => h('a', props) };
-    if (specifier === 'next/image') return { default: props => h('img', props) };
+    if (specifier === 'next/link') return { __esModule: true, default: props => h('a', props) };
+    if (specifier === 'next/image') return { __esModule: true, default: props => h('img', props) };
     if (specifier.endsWith('/CatalogProvider')) return { useCatalog: () => catalogue };
     if (specifier.startsWith('.')) {
       for (const extension of ['.tsx', '.ts']) {
