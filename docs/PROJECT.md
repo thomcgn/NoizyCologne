@@ -3682,15 +3682,20 @@ ausgeführt. PR-Merge-SHA und main-SHA sind getrennt zu behandeln. Smoke-Tests u
 Rollback bleiben erhalten; es gibt keinen zweiten parallelen FULL-Lauf in GHCR
 für bereits erfolgreich geprüftes main.
 
-**Abweichender Schutz-Nachweis:** Die versionierte Vorlage, der vorbereitete
-lesende Prüfer und das im Audit beschriebene aktive Ruleset (ID 26688192,
-`Full quality gate` erforderlich, aber `strict=false` und Review-Count 0)
-stimmen nicht überein; die Vorlage ist strenger. Der Prüfer liest klassische
-Protection und Rulesets, verändert aber nichts auf GitHub. Der aktuelle
-Live-Stand ist **nicht verifiziert** und muss lesend gegen einen geprüften
-Commit-SHA neu geprüft werden; daraus folgt kein Sicherheitsclaim. Ohne diesen
-Nachweis bleibt ein Merge ohne FULL technisch möglich. Siehe
-[QUALITY.md](QUALITY.md) für Aktivierung, Verantwortlichkeiten und Analysegrenzen,
+**Schutz-Nachweis (lesend geprüft am 27.11.2026):** `gh api
+repos/thomcgn/NoizyCologne/rulesets` und `.../rulesets/26688192` zeigen ein
+**aktives** Ruleset „NoizyCologne – protect main“ für `refs/heads/main` mit
+`required_status_checks` (`Full quality gate`, Integration 15368),
+`strict_required_status_checks_policy=false`, `pull_request` (Review-Count 0)
+sowie `deletion`- und `non_fast_forward`-Regeln. Die klassische Branch-Protection
+liefert dagegen 404 (`Branch not protected`); die versionierte Vorlage
+`.github/branch-protection-main.json` ist in mehreren Punkten strenger als der
+Live-Stand (u. a. `strict=true`, `enforce_admins`). Der Nachweis ist nur eine
+lesende Momentaufnahme, kein Sicherheitsclaim und kein Ersatz für den FULL-Erfolg
+des exakt akzeptierten Commits; bei `strict=false` und Review-Count 0 bleibt ein
+Merge ohne FULL technisch möglich. Änderungen am Schutz erfolgen nicht durch
+diesen Audit. Siehe [QUALITY.md](QUALITY.md) für Aktivierung,
+Verantwortlichkeiten und Analysegrenzen,
 [QUALITY-BENCHMARK.md](QUALITY-BENCHMARK.md) für Messungen und verbliebene Kosten.
 
 Die frühere Bereinigung von 44 Java-Warnungen und später 109 Conversion-/Null-

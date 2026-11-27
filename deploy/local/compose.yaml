@@ -1,0 +1,145 @@
+name: noizycologne-local
+
+# Lokaler Test-Stack: Images werden aus dem aktuellen Branch gebaut, alle Ports
+# sind ausschließlich auf Loopback gebunden. Caddy terminiert lokal HTTPS mit
+# selbstsigniertem Cert (tls internal), keine ACME, keine Produktionshostname,
+# keine Verbindung zur Produktion. Secrets stehen nur in deploy/local/.env.
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-noizycologne}
+      POSTGRES_USER: ${POSTGRES_USER:-noizy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [local]
+
+  api:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-noizycologne}
+      DB_USER: ${POSTGRES_USER:-noizy}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      MEDIA_ROOT: /app/uploads
+      API_TRUST_SECRET: ${API_TRUST_SECRET:?API_TRUST_SECRET is required}
+      API_TRUST_PREVIOUS_SECRET: ${API_TRUST_PREVIOUS_SECRET:-}
+      AUTH_SERVICE_SECRET: ${AUTH_SERVICE_SECRET:?AUTH_SERVICE_SECRET is required}
+      FACTORY_RESET_SECRET: ${FACTORY_RESET_SECRET:-}
+      NOIZY_PUBLIC_ORIGIN: ${NOIZY_PUBLIC_ORIGIN:-https://localhost}
+      # Publishing-Infrastruktur: auch lokal nur mit Opt-in. Ohne echten
+      # Meta-Token und ohne Review-Freigaben bleibt alles fail-closed.
+      NOIZY_PUBLISH_ENABLED: ${NOIZY_PUBLISH_ENABLED:-false}
+      INSTAGRAM_GATEWAY_ENABLED: ${INSTAGRAM_GATEWAY_ENABLED:-false}
+      INSTAGRAM_GATEWAY_BASE_URL: ${INSTAGRAM_GATEWAY_BASE_URL:-https://graph.facebook.com/v21.0}
+      INSTAGRAM_ACCESS_TOKEN: ${INSTAGRAM_ACCESS_TOKEN:-}
+      INSTAGRAM_GATEWAY_CONNECT_TIMEOUT_MS: ${INSTAGRAM_GATEWAY_CONNECT_TIMEOUT_MS:-3000}
+      INSTAGRAM_GATEWAY_READ_TIMEOUT_MS: ${INSTAGRAM_GATEWAY_READ_TIMEOUT_MS:-10000}
+      INSTAGRAM_GATEWAY_MAX_CONTAINER_POLLS: ${INSTAGRAM_GATEWAY_MAX_CONTAINER_POLLS:-10}
+      INSTAGRAM_MEDIA_PUBLIC_BASE_URL: ${INSTAGRAM_MEDIA_PUBLIC_BASE_URL:-}
+      INSTAGRAM_WORKER_ENABLED: ${INSTAGRAM_WORKER_ENABLED:-false}
+      INSTAGRAM_WORKER_INTERVAL_MS: ${INSTAGRAM_WORKER_INTERVAL_MS:-60000}
+      INSTAGRAM_WORKER_LEASE_MS: ${INSTAGRAM_WORKER_LEASE_MS:-300000}
+      INSTAGRAM_WORKER_BATCH_SIZE: ${INSTAGRAM_WORKER_BATCH_SIZE:-5}
+      INSTAGRAM_WORKER_POLL_DELAY_MS: ${INSTAGRAM_WORKER_POLL_DELAY_MS:-1000}
+      INSTAGRAM_WORKER_RECONCILIATION_LIMIT: ${INSTAGRAM_WORKER_RECONCILIATION_LIMIT:-25}
+      INSTAGRAM_GATE_POST_ORDER_SELECTED: ${INSTAGRAM_GATE_POST_ORDER_SELECTED:-false}
+      INSTAGRAM_GATE_WEEKEND_DAY_BALANCE_REVIEWED: ${INSTAGRAM_GATE_WEEKEND_DAY_BALANCE_REVIEWED:-false}
+      INSTAGRAM_GATE_POSTING_PLAN_CURRENT: ${INSTAGRAM_GATE_POSTING_PLAN_CURRENT:-false}
+      INSTAGRAM_GATE_HANDLES_REVIEWED: ${INSTAGRAM_GATE_HANDLES_REVIEWED:-false}
+      INSTAGRAM_GATE_CAPTION_STALE_CHECK: ${INSTAGRAM_GATE_CAPTION_STALE_CHECK:-false}
+      INSTAGRAM_GATE_ADDITIONAL_WORKFLOW_DEFINED: ${INSTAGRAM_GATE_ADDITIONAL_WORKFLOW_DEFINED:-false}
+      DISCOVERY_ENABLED: ${DISCOVERY_ENABLED:-true}
+      DISCOVERY_BROWSER_ENABLED: ${DISCOVERY_BROWSER_ENABLED:-false}
+      DISCOVERY_BROWSER_URL: ${DISCOVERY_BROWSER_URL:-http://browser-gateway:3128/render}
+      BROWSER_WORKER_TOKEN: ${BROWSER_WORKER_TOKEN:-}
+      DISCOVERY_EXTERNAL_CALENDAR_ENABLED: ${DISCOVERY_EXTERNAL_CALENDAR_ENABLED:-false}
+      DISCOVERY_CRON: ${DISCOVERY_CRON:-0 0 9 * * TUE}
+      DISCOVERY_ZONE: ${DISCOVERY_ZONE:-Europe/Berlin}
+      DISCOVERY_MAX_RESPONSE_BYTES: ${DISCOVERY_MAX_RESPONSE_BYTES:-2097152}
+      DISCOVERY_MONITOR_ENABLED: ${DISCOVERY_MONITOR_ENABLED:-true}
+      DISCOVERY_MONITOR_CRON: ${DISCOVERY_MONITOR_CRON:-0 0 9 * * *}
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - media_data:/app/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/actuator/health/readiness | grep -q 'UP'"]
+      interval: 10s
+      timeout: 5s
+      start_period: 40s
+      retries: 12
+    networks: [local]
+
+  frontend:
+    build:
+      context: ../../frontend
+    restart: unless-stopped
+    environment:
+      TEAM_USER: ${TEAM_USER:-local}
+      TEAM_PASSWORD_HASH: ${TEAM_PASSWORD_HASH:?TEAM_PASSWORD_HASH is required}
+      TEAM_SESSION_SECRET: ${TEAM_SESSION_SECRET:?TEAM_SESSION_SECRET is required}
+      AUTH_SERVICE_SECRET: ${AUTH_SERVICE_SECRET:?AUTH_SERVICE_SECRET is required}
+      NOIZY_PUBLIC_ORIGIN: ${NOIZY_PUBLIC_ORIGIN:-https://localhost}
+      NOIZY_INTERNAL_API_URL: http://api:8080
+      FACTORY_RESET_SECRET: ${FACTORY_RESET_SECRET:-}
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 12
+    networks: [local]
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      AUTH_SERVICE_SECRET: ${AUTH_SERVICE_SECRET:?AUTH_SERVICE_SECRET is required}
+      API_TRUST_SECRET: ${API_TRUST_SECRET:?API_TRUST_SECRET is required}
+    ports:
+      - "127.0.0.1:80:80"
+      - "127.0.0.1:443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks: [local]
+
+networks:
+  local:
+
+volumes:
+  postgres_data:
+  media_data:
+  caddy_data:
+  caddy_config:
