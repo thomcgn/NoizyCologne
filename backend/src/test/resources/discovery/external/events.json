@@ -1,0 +1,12 @@
+[
+  {
+    "uid": "mtc-2026-11-28@example.org",
+    "title": "After Midnight",
+    "start": "2026-11-27T23:30:00+01:00",
+    "end": "2026-11-28T02:00:00+01:00",
+    "location": { "name": "Blue Shell", "address": { "addressLocality": "Köln" } },
+    "description": "Indie, Emo Party",
+    "status": "CONFIRMED",
+    "url": "https://calendar.example.org/events/after-midnight"
+  }
+]

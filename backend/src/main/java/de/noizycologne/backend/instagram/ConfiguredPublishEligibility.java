@@ -18,7 +18,7 @@ import java.util.Map;
  */
 @Component
 public final class ConfiguredPublishEligibility implements PublishEligibilityPort {
-    static final List<String> REQUIRED_GATES = List.of(
+    public static final List<String> REQUIRED_GATES = List.of(
             "EVENT_DATA_VALIDATED",
             "MEDIA_VALIDATED",
             "CAPTION_APPROVED",

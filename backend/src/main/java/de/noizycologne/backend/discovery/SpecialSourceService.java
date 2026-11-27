@@ -21,7 +21,9 @@ public class SpecialSourceService {
         this.store=store;this.discovery=discovery;this.processor=processor;this.monitor=monitor;this.venues=venues;this.progress=progress;
     }
     public List<Map<String,Object>> list() {
-        return store.jdbc().queryForList("SELECT *,true AS special_source,'' AS venue_name FROM discovery_sources WHERE venue_id IS NULL AND deleted_at IS NULL ORDER BY name,url")
+        // External ICS/JSON feeds have a separate, config-gated fetch path; the
+        // website/browser crawler must never pick them up as HTML sources.
+        return store.jdbc().queryForList("SELECT *,true AS special_source,'' AS venue_name FROM discovery_sources WHERE venue_id IS NULL AND deleted_at IS NULL AND source_kind<>'EXTERNAL_CALENDAR' ORDER BY name,url")
             .stream().map(DiscoveryStore::forApi).toList();
     }
     private static String url(String value) {
@@ -62,6 +64,8 @@ public class SpecialSourceService {
         if (Boolean.TRUE.equals(store.jdbc().queryForObject("SELECT EXISTS(SELECT 1 FROM discovery_sources WHERE venue_id IS NULL AND url=? AND id<>?)",Boolean.class,address,id)))
             throw new ResponseStatusException(HttpStatus.CONFLICT,"Diese Sonderquelle ist bereits vorhanden");
         var old=rows.getFirst();
+        if ("EXTERNAL_CALENDAR".equals(old.get("source_kind")))
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Sonderquelle nicht gefunden");
         boolean changed=!address.equals(old.get("url")) || !item.equals(old.get("item_selector")) || !title.equals(old.get("title_selector")) || !date.equals(old.get("date_selector"));
         store.jdbc().update("UPDATE discovery_sources SET name=?,url=?,item_selector=?,title_selector=?,date_selector=?,approved=COALESCE(?,approved) WHERE id=?",name.trim(),address,item,title,date,approved,id);
         if (changed) store.jdbc().update("UPDATE discovery_sources SET status='NOT_CHECKED',quality='NOT_CHECKED',event_count=NULL,last_fetched_at=NULL,last_success_at=NULL,fetch_diagnostics='',scan_complete=false WHERE id=?",id);

@@ -1,13 +1,13 @@
 # NoizyCologne – Lastenheft, Pflichtenheft & Entwicklungs-/Lernhandbuch
 
-> **Version:** 1.9.3 · **Stand:** 6. November 2026 · **Status:** Persistente Team-Anwendung mit Redaktion, Party-Discovery und Änderungsprüfung; Instagram-Publishing nicht implementiert
+> **Version:** 1.9.4 · **Stand:** 27. November 2026 · **Status:** Persistente Team-Anwendung mit Redaktion, Party-Discovery und Änderungsprüfung; Instagram-Publishing-Infrastruktur implementiert und fail-closed, kein automatisches Posting
 > **Zielgruppe:** NoizyCologne-Team und Entwickler  
 > **Source of Truth:** Diese Version ersetzt v1.6 und frühere Projektdokumente fachlich. Für das tatsächlich implementierte Verhalten gilt zusätzlich der aktuelle Codezustand; nur dokumentierte Features sind noch nicht automatisch umgesetzt.  
 > **Wichtig:** Dieses Handbuch enthält Lastenheft, Pflichtenheft, technische Lern-/Agenten-Referenzen **und einen Ist-/Soll-Abgleich**. Die früheren Beispielskripte sind nicht automatisch identisch mit der aktuellen Codebasis. Die Entwicklung erfolgt auf Arch Linux; der Benutzer hat den lokalen Kalender-Prototyp erfolgreich getestet. Plattform-Funktionen werden vor Produktivstart im realen Meta-Konto verifiziert.  
 > **Verbindlicher Projektumfang (05.11.2026):** Ausschließlich Partys. Konzerte sind ausdrücklich unerwünscht und von Discovery sowie deren Kalenderübernahme ausgeschlossen. Frühere Konzertbezüge in diesem Handbuch gelten als überholte Beschreibung.
 > **Verbindlicher Vorbehalt:** Weitere fachliche Pflichtschritte **vor** dem Posting sind angekündigt und noch nicht beschrieben. Bis zu deren Freigabe bleibt das reguläre automatische Publishing **deaktiviert** (`NOIZY_PUBLISH_ENABLED=false`).
 
-**Für die tägliche Arbeit im Team:** Das [Team-Handbuch](TEAM-HANDBUCH.md) erklärt die tatsächlich vorhandenen Abläufe ohne technische Vorkenntnisse. Dieses Projektdokument bleibt die fachliche und technische Referenz mit ausdrücklich getrenntem Ist- und Soll-Zustand. Aktueller Bedienstand: Kapitel 23 bis 26; Qualitätsregeln: Kapitel 25 und [QUALITY.md](QUALITY.md). Das Publishing-Flag allein aktiviert keinen Versand: Ein Instagram-Publisher und seine Warteschlange sind im aktuellen Code nicht vorhanden.
+**Für die tägliche Arbeit im Team:** Das [Team-Handbuch](TEAM-HANDBUCH.md) erklärt die tatsächlich vorhandenen Abläufe ohne technische Vorkenntnisse. Dieses Projektdokument bleibt die fachliche und technische Referenz mit ausdrücklich getrenntem Ist- und Soll-Zustand. Aktueller Bedienstand: Kapitel 23 bis 26; Qualitätsregeln: Kapitel 25 und [QUALITY.md](QUALITY.md). Die Publishing-Infrastruktur (Gates, Jobtabelle mit Idempotenz/Lease, Gateway-Adapter, Worker, Reconciliation) ist inzwischen implementiert, aber mehrstufig fail-closed: `NOIZY_PUBLISH_ENABLED=false`, keine Gateway-/Worker-Opt-ins und keine Review-Freigaben. Es werden keine Beiträge automatisch gepostet; Grenzen und Freigabevoraussetzungen stehen in [ADR 0001](adr/0001-instagram-publishing-boundary.md).
 
 ---
 
@@ -690,6 +690,15 @@ Konventionen: JSON, RFC-7807-ähnliche Fehler (`application/problem+json`), Pagi
 ---
 
 # 8. Instagram-Publishing und Musik-Handoff
+
+> **Ist-Stand v1.9.4:** Die unten beschriebene Publishing-Infrastruktur ist inzwischen
+> implementiert: serverseitige Gate-Auswertung, Jobtabelle mit Idempotenz und Lease,
+> Graph-API-Adapter, opt-in Worker und lesende Reconciliation (Migration V28, [ADR 0001](adr/0001-instagram-publishing-boundary.md)).
+> Sie ist jedoch mehrstufig fail-closed und **nicht aktiviert**: `NOIZY_PUBLISH_ENABLED=false`,
+> keine Gateway-/Worker-Opt-ins, alle sechs Review-Freigaben `false`. Es gibt **kein**
+> automatisches Posting, keinen OAuth-Flow, keine Tokens und keinen bestandenen Meta-PoC.
+> Die Aussagen zu HTTP-Verhalten und Plattformfähigkeiten bleiben Soll-/Planungswerte,
+> solange der echte Meta-Test fehlt.
 
 ## 8.1 Realistische API-Grenzen
 
@@ -1996,7 +2005,7 @@ sudo docker compose --env-file .env -f infra/compose.prod.yml \
 
 # 17. Platzhalter für weitere Pflichtschritte **vor** dem Posting
 
-> **Noch nicht implementieren oder als erledigt markieren.** Die angekündigten Anforderungen kommen später. Die Architektur muss sie aufnehmen können. Reguläres Publish bleibt bis zur vollständigen fachlichen Freigabe **fail closed**.
+> **Stand v1.9.4:** Die Gate-Struktur ist inzwischen im Code umgesetzt (`ServerSideGateEvaluator`, `ConfiguredPublishEligibility` mit 12 Pflicht-Gates, `WorkflowGateApprovals`) und wird in der Publishing-Jobtabelle protokolliert. **Fachlich abgenommen ist sie nicht:** alle sechs konfigurativen Review-Freigaben bleiben `false`, `ADDITIONAL_WORKFLOW_DEFINED` bleibt `BLOCKED`, und `NOIZY_PUBLISH_ENABLED=false`. Die noch ausstehenden fachlichen Anforderungen dürfen nicht als erledigt markiert werden; reguläres Publish bleibt bis zur vollständigen Freigabe **fail closed**.
 
 ## 17.1 Schnittstelle für neue Workflow-Gates
 
@@ -2027,6 +2036,8 @@ public record GateResult(
 | `WEEKEND_DAY_BALANCE_REVIEWED` | Tagesmix geprüft; dokumentierter begründeter Hinweis möglich | Review |
 | `POSTING_PLAN_CURRENT` | Planversion + Live-Feed noch gültig | hart |
 | `ADDITIONAL_WORKFLOW_DEFINED` | **noch unbekannte weitere Vor-Publishing-Regeln** vollständig spezifiziert | aktuell **BLOCKED** |
+
+**Ergänzung v1.9.4:** Im Code kommen die vier Gates aus Kapitel 20.8 hinzu: `VENUE_RESOLVED`, `LINEUP_UNAMBIGUOUS`, `HANDLE_REVIEWED` und `CAPTION_STALE_CHECK`. Damit sind 12 Pflicht-Gates hinterlegt; die Auswertung erfolgt serverseitig aus Datenbankfakten, nicht aus HTTP-Parametern. Erfüllt oder fachlich freigegeben sind die Review-Gates weiterhin nicht (siehe Einleitung dieses Kapitels und [ADR 0001](adr/0001-instagram-publishing-boundary.md)).
 
 ## 17.3 Vorlage zur Aufnahme der nächsten Anforderungen
 
@@ -2120,6 +2131,7 @@ Bei jeder Ergänzung gleichzeitig **Kapitel 3 (Lastenheft), 4 (Pflichtenheft), 5
 
 | Version | Datum | Änderungen |
 |---|---|---|
+| v1.9.4 Publishing-Infrastruktur und externe Kalenderquelle | 27.11.2026 | Migration V28 (eigenes Schema `publishing`: Jobs mit Idempotenz/Lease, Gate-Ergebnisse, Versuche, Remote-Befunde; keine Tokens) und V29 (`EXTERNAL_CALENDAR` mit `ICS`/`JSON`, ohne erfundene MTC-URL). Serverseitige Gate-Auswertung, idempotenter Job-Store, Graph-API-Adapter mit Fail-Closed-Bean, opt-in Worker und ausschließlich lesende Reconciliation inklusive Tests. Alles bleibt mehrstufig fail-closed (`NOIZY_PUBLISH_ENABLED=false`, Review-Freigaben `false`); kein Live-Posting und kein Meta-PoC. Aktivierung weiterhin NO-GO, siehe [ADR 0001](adr/0001-instagram-publishing-boundary.md). MTC-Live-Extraktion unverändert `BROWSER_PARTIAL`/0 Events. |
 | v1.9.3 Partyreihen-Standardwerte und Discovery-Fortschritt | 06.11.2026 | Nullable Standard-Startzeit und ganzzahliger Eintritt 0–30 €, Pflichtzeit für neue Reihen, Snapshot-Übernahme nur für neue Kalendertermine; relative Beginnangaben bleiben ohne erfundene Uhrzeit. Persistierter Quellen-/Location-Fortschritt mit Fehlerzählung und bestehendem Polling; Arbeitsnachweis: [PARTY-DEFAULTS-DISCOVERY-PROGRESS.md](PARTY-DEFAULTS-DISCOVERY-PROGRESS.md). |
 | v1.9.3 Location-Matching und Kalenderflyer | 06.11.2026 | Eindeutig bestätigte Location-Zuordnungen aus Sonderquellen verwenden den bestehenden Discovery-Import mit unabhängiger ausdrücklicher Quellenfreigabe; Kalenderdetails zeigen Event-Flyer vor Dauerflyer statt Veranstaltungsnotizen. Keine neue Medienverwaltung oder Migration. Arbeitsnachweis: [DISCOVERY-LOCATION-FLYER.md](DISCOVERY-LOCATION-FLYER.md). |
 | v1.9.3 Geografischer Sonderquellen-Filter | 06.11.2026 | Nur nachgewiesene Kölner Veranstaltungsorte gelangen in den normalen Discovery-Prozess. Eigener Standortbereich, bestätigte Ortsidentitäten/Aliase, bewusste Bestands-Neubewertung ohne Datenverlust, generische kanonische URLs ohne `_rsc`. Migration V18 und Prüfbelege: [DISCOVERY-GEOGRAPHY.md](DISCOVERY-GEOGRAPHY.md). |
@@ -3116,7 +3128,7 @@ Ein Coding-Agent darf erklären, Tests erzeugen und Code vorschlagen; **die Lern
 
 ---
 
-# 23. Aktueller Produktstand, Flyer-Hierarchie und Instagram-Redaktion (aktualisiert 05.11.2026)
+# 23. Aktueller Produktstand, Flyer-Hierarchie und Instagram-Redaktion (aktualisiert 27.11.2026)
 
 > **Normativ:** Dieses Kapitel präzisiert und überstimmt ältere Annahmen aus Kapiteln 3, 4, 7, 13, 16, 20 und 21, soweit sie der manuellen MVP-Pflege oder der getrennten Redaktion widersprechen. **Gespeicherte Stammdaten, Kalendertermine und Redaktionsentwürfe bleiben nach dem Neuladen erhalten. „Gespeichert“ oder „Freigegeben“ bedeutet weiterhin nicht „auf Instagram veröffentlicht“.**
 
@@ -3131,17 +3143,19 @@ Ein Coding-Agent darf erklären, Tests erzeugen und Code vorschlagen; **die Lern
 | Kalender | Eintrag erstellen, als farbige Party im Monatsraster sehen, mehrere Events am Tag, Location-Sperre, Bearbeiten/Löschen, DJ-Mentions in Event-Editor | Kein veröffentlichtes Instagram-Ereignis |
 | Webauftritt | Öffentliche Landingpage und geschützte Team-Oberfläche mit Login | Keine öffentlich freigegebene REST-Fach-API |
 | Backend/Deployment | Spring Boot, PostgreSQL, Flyway und persistente CRUD-Anbindung der Stammdaten, Kalenderdaten und Medien | Meta-Publishing bleibt deaktiviert |
+| Publishing-Infrastruktur (neu v1.9.4) | Migration V28 mit eigenem Schema und Jobtabelle (Idempotenz, Lease, Status, Versuche, Remote-Befunde), serverseitige Gate-Auswertung, Graph-API-Adapter mit Fail-Closed-Bean, opt-in Worker und ausschließlich lesende Reconciliation; gezielte Unit-/Integrationstests | Kein Live-Posting, kein Meta-PoC, kein OAuth-Flow; `NOIZY_PUBLISH_ENABLED=false`, Gateway-/Worker-Opt-ins und alle sechs Review-Freigaben `false`. Aktivierung NO-GO, siehe [ADR 0001](adr/0001-instagram-publishing-boundary.md) |
 | Flyer/Redaktion | Dauerflyer, Event-Flyer, Instagram-nahe Vorschau und persistente Redaktionsentwürfe | Kein Meta-Publishing; Freigabe ist technisch lokal/serverseitig gespeichert, aber nicht an Instagram gekoppelt |
 | Genres/Musik | Aktive Genres und Aliasse verwalten, lokale Flyer-Genre-Vorschläge prüfen, verifizierte Musik manuell zu Entwürfen zuordnen | Keine automatische Songrecherche, kein automatisches Instagram-Audio |
 | Discovery/Änderungen | Begrenzte offizielle Quellensuche, gespeicherte Vorschläge, manuelle Rückfragen, täglicher Änderungscheck und zentraler Absageentwurf | Keine automatischen DMs oder Absageveröffentlichungen; Quellenbefunde benötigen die vorgesehene Prüfung |
+| Externe Kalenderquellen (neu v1.9.4) | Generische, ausdrücklich freigegebene ICS-/JSON-Quelle (`EXTERNAL_CALENDAR`, Migration V29) als ergänzender Fallback für JavaScript-lastige Quellen; Feature-Flag `DISCOVERY_EXTERNAL_CALENDAR_ENABLED=false` | Keine MTC-Feed-URL erfunden, kein Live-Erfolg behauptet; MTC bleibt `BROWSER_PARTIAL` mit 0 auswertbaren Events |
 
-**Qualifizierung des Status:** Diese Bestandsaufnahme wurde am 05.11.2026 mit dem aktuellen Code und den lokalen Backend-/Frontend-Regressionen abgeglichen. Sie ist **kein** behaupteter End-to-End-Test gegen einen produktiven Server oder Instagram. Ein einzelner TypeScript-Check ersetzt weder Integrationstests noch die vollständige Prüfroutine.
+**Qualifizierung des Status:** Diese Bestandsaufnahme wurde am 05.11.2026 mit dem aktuellen Code und den lokalen Backend-/Frontend-Regressionen abgeglichen; die v1.9.4-Zeilen wurden am 27.11.2026 gegen den Codezustand geprüft. Sie ist **kein** behaupteter End-to-End-Test gegen einen produktiven Server oder Instagram. Ein einzelner TypeScript-Check ersetzt weder Integrationstests noch die vollständige Prüfroutine.
 
 ## 23.2 Fachliche Entitäten sauber unterscheiden
 
 1. **Partyreihe (Stammdaten):** Ein Format wie „Rock Til You Drop“ oder „Misery“, mit Name, Instagram-Handle, eigener Kalenderfarbe, optionalem Turnus, DJs/Residents und Veranstaltern sowie optionalem **Dauerflyer**. Eine Partyreihe existiert auch ohne Kalendereintrag.
 2. **Kalendereintrag:** Ein konkreter Termin für eine Partyreihe/Location oder eine **Location-Sperre** (z. B. geschlossen, Betriebsferien, Privatveranstaltung). Mehrere Events können am selben Datum existieren. Erzeugt weder Medien noch automatisch einen Instagram-Post.
-3. **Redaktioneller Instagram-Beitragsentwurf:** Gehört zu einer konkreten Veranstaltung, enthält Beitragstext, Hashtags, Mentions, gewählte Bildquelle, Bildansicht und später Freigabestatus. Er ist **kein echter Instagram-App-Entwurf** und wird erst über den freigegebenen Publisher zum tatsächlichen Feed-Post.
+3. **Redaktioneller Instagram-Beitragsentwurf:** Gehört zu einer konkreten Veranstaltung, enthält Beitragstext, Hashtags, Mentions, gewählte Bildquelle, Bildansicht und später Freigabestatus. Er ist **kein echter Instagram-App-Entwurf**. Die vorbereitete Publishing-Infrastruktur ist fail-closed und nicht freigegeben; aus einem freigegebenen Entwurf wird derzeit **kein** tatsächlicher Feed-Post.
 4. **Media Asset:** Originalbild mit Herkunft, Referenz, Berechtigungen/Metadaten, etwaiger Bildvariante und Nutzungsrecht. Dient als Dauerflyer oder Event-Flyer, ohne redundante/zerstörerische Kopien in der Partyreihe.
 5. **Akteur:** DJ, Veranstalter, Person oder Kollektiv; mögliche Zugehörigkeiten und Mentions sind **nicht** gleichbedeutend mit einer bestätigten Veranstaltungsteilnahme.
 
@@ -3297,7 +3311,7 @@ Locations (`Venue`), Partyreihen (`PartySeries`), Kalendertermine (`CalendarEntr
 
 Die APIs sind wie die bestehenden Stammdaten auf `local` und `staging` beschränkt. Im bestehenden Hosting schützt Caddys `forward_auth` sämtliche `/api/v1/*`-Routen mit der Team-Session. Das Backend besitzt weiterhin keinen eigenen Team-Login und darf nicht öffentlich am Proxy vorbei erreichbar gemacht werden. Lokal gilt derselbe vorhandene Entwicklungszugriff wie für Kalender und Portfolio.
 
-**Discovery erzeugt ausschließlich Kalendereinträge und Prüfdatensätze.** Sie erzeugt keine Medien, lädt keine Bilder herunter, legt keinen Redaktionsentwurf an und ruft keine Instagram-Publishing-Funktion auf. Die bestehenden Flyer-, Genre-, Musik- und redaktionellen Freigabeschritte bleiben eigenständige Vorgänge. `NOIZY_PUBLISH_ENABLED=false` gilt weiterhin.
+**Discovery erzeugt ausschließlich Kalendereinträge und Prüfdatensätze.** Sie erzeugt keine Medien, lädt keine Bilder herunter, legt keinen Redaktionsentwurf an und ruft keine Instagram-Publishing-Funktion auf. Die bestehenden Flyer-, Genre-, Musik- und redaktionellen Freigabeschritte bleiben eigenständige Vorgänge. `NOIZY_PUBLISH_ENABLED=false` gilt weiterhin. Ergänzend v1.9.4 kann eine ausdrücklich freigegebene externe ICS-/JSON-Kalenderquelle (`EXTERNAL_CALENDAR`, Migration V29) JavaScript-lastige Quellen ergänzen; das Feature ist konfigurativ deaktiviert (`DISCOVERY_EXTERNAL_CALENDAR_ENABLED=false`), und es wird keine MTC-Feed-URL erfunden oder ein Live-Erfolg behauptet.
 
 ## 24.2 Eine neue Location hinzufügen
 
@@ -3447,6 +3461,8 @@ Eine Homepage mit gefundenen Programmverweisen erhält `SOURCE_LINKS_FOUND` stat
 Die aktuellen MTC-Unterseiten liefern in den untersuchten HTTP-Antworten leere `HtmlComponent`-Elemente und keine auslesbaren Veranstaltungslisten. Das öffentlich eingebettete `wix-warmup-data`-JSON benennt diese Komponenten. Der Parser liest ausschließlich diese inert vorliegenden Metadaten und prüft, ob die bezeichnete Komponente tatsächlich leer im aktuellen DOM steht; eine globale Liste installierter Apps reicht als Diagnose nicht aus. Ergebnis ist `JAVASCRIPT_REQUIRED`, auch wenn der restliche Seitentext durch Navigation, Kontakt und Footer länger als die frühere 250-Zeichen-Heuristik ist. Vorhandene echte Eventdaten behalten Vorrang.
 
 Die Korrektur macht die MTC-Navigation nachvollziehbar, verspricht aber keine MTC-Eventextraktion aus browserseitig erzeugten Einbettungen. Es wird weder fremdes JavaScript ausgeführt noch ein geblockter Abruf umgangen. Für solche Quellen ist weiterhin eine zusätzlich hinterlegte öffentlich auslesbare Kalender-/Eventquelle erforderlich; eine externe Quelle bleibt als extern gekennzeichnet und benötigt eine ausdrückliche Automatikfreigabe. Die frühere synthetische JSON-LD-Fixture namens `mtc.html` belegt lediglich JSON-LD-Unterstützung und ist ausdrücklich keine aktuelle MTC-Kompatibilitätsbestätigung.
+
+**Ergänzung v1.9.4:** Für genau diesen Fall gibt es jetzt eine generische, konfigurativ freigeschaltete externe Kalenderquelle (`EXTERNAL_CALENDAR`, Migration V29) mit `ICS` oder `JSON`. Sie bleibt ohne Venue-Zuordnung, wird nur bei aktivem Flag `DISCOVERY_EXTERNAL_CALENDAR_ENABLED` und ausdrücklicher Freigabe der Zeile geprüft und durchläuft den bestehenden Sonderquellen-/Prüfpfad. Es wird **keine** MTC-Feed-URL erfunden und **kein** Live-Erfolg behauptet: MTC bleibt unverändert `BROWSER_PARTIAL` mit 0 auswertbaren Events. Details in [MULTI-SOURCE-DISCOVERY.md](MULTI-SOURCE-DISCOVERY.md) und [BROWSER-CRAWLER.md](BROWSER-CRAWLER.md).
 
 Neue lokale Regressionen decken den MTC-Menüweg mit anderen Host-/Pfadnamen, Unterseiten nach mehr als 40 sonstigen Links, `aria-label`, Programmpriorität vor Eventdetails, leere aktuelle Komponenten gegenüber unbeteiligten Metadaten sowie Domain-/Tiefenbegrenzung ab.
 
@@ -3849,6 +3865,12 @@ Die schrittweise Erweiterung basiert auf Kapitel 27 und verwendet vorhandene
 Quellen-/Kandidaten-/Monitoring-Tabellen. Arbeitsnachweis mit Phasen, tatsächlich
 ausgeführten Prüfungen und verbleibenden Risiken:
 [MULTI-SOURCE-DISCOVERY.md](MULTI-SOURCE-DISCOVERY.md).
+
+Ergänzend v1.9.4 steht eine generische externe ICS-/JSON-Kalenderquelle (`EXTERNAL_CALENDAR`,
+Migration V29) als konfigurativ freigeschalteter Fallback für JavaScript-lastige Quellen zur
+Verfügung. Das Flag `DISCOVERY_EXTERNAL_CALENDAR_ENABLED` ist standardmäßig `false`; eine
+MTC-Feed-URL wird nicht erfunden und kein Live-Erfolg behauptet. Die MTC-Live-Extraktion bleibt
+`BROWSER_PARTIAL` mit 0 Events.
 
 QUICK führt ausgewählte Unit-Tests und strikte Compiler-/Nullanalysen aus;
 Datenbanktests werden ausdrücklich STANDARD/FULL zugewiesen. Der normale Hook

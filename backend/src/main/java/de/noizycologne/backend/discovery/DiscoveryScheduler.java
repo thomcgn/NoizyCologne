@@ -1,5 +1,7 @@
 package de.noizycologne.backend.discovery;
 
+import de.noizycologne.backend.discovery.external.ExternalCalendarSourceService;
+import de.noizycologne.backend.discovery.external.ExternalCalendarSourceService.ExternalSource;
 import org.jspecify.annotations.NonNull;
 import de.noizycologne.backend.venue.*;
 import de.noizycologne.backend.party.*;
@@ -19,6 +21,7 @@ public class DiscoveryScheduler {
     private final DiscoveryStore store;
     private final EventChangeMonitor monitor;
     private final SpecialSourceService specialSources;
+    private final ExternalCalendarSourceService externalCalendars;
     private final VenueRepository venues;
     private final PartySeriesRepository parties;
     private final DiscoveryGenreFilter genres;
@@ -31,11 +34,13 @@ public class DiscoveryScheduler {
     private final ExecutorService worker = Executors.newSingleThreadExecutor(r -> { var t = new Thread(r,"venue-discovery"); t.setDaemon(true); return t; });
     @Value("${noizy.discovery.enabled:true}") private boolean enabled;
     @Value("${noizy.discovery.monitor.enabled:true}") private boolean monitorEnabled;
+    @Value("${noizy.discovery.external-calendar.enabled:false}") private boolean externalCalendarEnabled;
     public DiscoveryScheduler(DiscoveryStore store, VenueRepository venues, PartySeriesRepository parties,
             DiscoveryGenreFilter genres, VenueSourceDiscoveryService discovery, EventCandidateProcessor processor,
-            DiscoveryWorkLock workLock, DiscoveryResetService resets,EventChangeMonitor monitor,SpecialSourceService specialSources,DiscoveryProgress progress) {
+            DiscoveryWorkLock workLock, DiscoveryResetService resets,EventChangeMonitor monitor,SpecialSourceService specialSources,
+            ExternalCalendarSourceService externalCalendars,DiscoveryProgress progress) {
         this.store=store; this.venues=venues; this.parties=parties; this.genres=genres;
-        this.discovery=discovery; this.processor=processor; this.workLock=workLock; this.resets=resets;this.monitor=monitor;this.specialSources=specialSources;this.progress=progress;
+        this.discovery=discovery; this.processor=processor; this.workLock=workLock; this.resets=resets;this.monitor=monitor;this.specialSources=specialSources;this.externalCalendars=externalCalendars;this.progress=progress;
     }
     @jakarta.annotation.PreDestroy void close() { worker.shutdownNow(); }
     @Scheduled(cron="${noizy.discovery.cron:0 0 9 * * TUE}", zone="${noizy.discovery.zone:Europe/Berlin}")
@@ -111,9 +116,16 @@ public class DiscoveryScheduler {
                     store.jdbc().update("INSERT INTO discovery_runs(id,status) VALUES (?,'RUNNING')",id);
                     // Freeze the actual units before any fetch; pages/events are not separate units.
                     var plannedSources=specialSources.list().stream().filter(source -> Boolean.TRUE.equals(source.get("enabled"))).toList();
+                    // Approved external calendars are a config-gated fallback; website/browser
+                    // sources keep their existing list and scan behavior unchanged.
+                    List<@NonNull ExternalSource> plannedExternal=externalCalendarEnabled ? externalCalendars.list() : List.of();
                     var plannedVenues=venues.findAll().stream().filter(venue -> venue.isDiscoveryEnabled() && relevant(venue,changesOnly)).toList();
-                    if (request==null) progress.begin(id,plannedSources.size()+plannedVenues.size());
+                    if (request==null) progress.begin(id,plannedSources.size()+plannedExternal.size()+plannedVenues.size());
                     var special=specialSources.scan(id,plannedSources,request==null);specialChecked=special.checked();failed+=special.failed();
+                    if (externalCalendarEnabled && !plannedExternal.isEmpty()) {
+                        var external=externalCalendars.scan(id,plannedExternal,request==null);
+                        specialChecked+=external.checked();failed+=external.failed();
+                    }
                     for (var venue:plannedVenues) {
                         DiscoveryProgress.checkInterrupted();
                         if (request==null) progress.current(id,"LOCATIONS",venue.getName());
