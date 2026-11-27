@@ -21,12 +21,12 @@ function load(url){
  const loaded={exports:{}};
  const code=ts.transpileModule(readFileSync(url,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
  const localRequire=specifier=>{
-  if(specifier==='next/image')return {default:({src,alt,width,height,className,style})=>h('img',{src,alt,width,height,className,style})};
+  if(specifier==='next/image')return {__esModule: true, default:({src,alt,width,height,className,style})=>h('img',{src,alt,width,height,className,style})};
   if(specifier==='next/navigation')return {useSearchParams:()=>new URLSearchParams(query)};
   if(specifier.endsWith('/CatalogProvider'))return {useCatalog:()=>catalog,toDateKey:date=>`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`};
-  if(specifier.endsWith('/EntryEditor'))return {default:()=>null};
+  if(specifier.endsWith('/EntryEditor'))return {__esModule: true, default:()=>null};
   if(specifier.endsWith('/workspaceActions'))return {useWorkspaceAction:()=>{}};
-  if(specifier.endsWith('/DataCollection'))return {default:props=>h('div',null,h('input',{type:'search',value:props.query,onChange:()=>{},onInput:event=>props.onQueryChange(event.currentTarget.value)}),props.toolbar,props.items.map(item=>h('p',{key:item.id},props.getName(item))))};
+  if(specifier.endsWith('/DataCollection'))return {__esModule: true, default:props=>h('div',null,h('input',{type:'search',value:props.query,onChange:()=>{},onInput:event=>props.onQueryChange(event.currentTarget.value)}),props.toolbar,props.items.map(item=>h('p',{key:item.id},props.getName(item))))};
   if(specifier.startsWith('.')){const path=new URL(specifier+'.ts',url);return load(existsSync(path)?path:new URL(specifier+'.tsx',url));}
   return require(specifier);
  };
