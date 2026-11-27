@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
+import java.util.Objects;
 
 /**
  * Das Produktiv-Gateway entsteht nur bei explizitem Opt-in <em>und</em> vorhandenem
@@ -21,7 +22,6 @@ public class InstagramGatewayConfiguration {
     @Bean
     @ConditionalOnProperty(name = "noizy.instagram.gateway.enabled", havingValue = "true")
     InstagramGateway graphApiInstagramGateway(
-            RestClient.Builder builder,
             @Value("${noizy.instagram.gateway.base-url:https://graph.facebook.com/v21.0}") String baseUrl,
             @Value("${noizy.instagram.access-token:${INSTAGRAM_ACCESS_TOKEN:}}") @Nullable String accessToken,
             @Value("${noizy.instagram.gateway.connect-timeout-ms:3000}") long connectTimeoutMs,
@@ -29,7 +29,10 @@ public class InstagramGatewayConfiguration {
         if (accessToken == null || accessToken.isBlank()) {
             return new FailClosedInstagramGateway("kein Access-Token konfiguriert");
         }
-        return new GraphApiInstagramGateway(builder, baseUrl, accessToken,
+        String token = Objects.requireNonNull(accessToken, "accessToken");
+        // Spring Boot 4 stellt hier keinen RestClient.Builder-Bean bereit. Der
+        // Builder wird daher lokal erzeugt; das Gateway bleibt weiterhin opt-in.
+        return new GraphApiInstagramGateway(RestClient.builder(), baseUrl, token,
                 Duration.ofMillis(Math.max(1, connectTimeoutMs)),
                 Duration.ofMillis(Math.max(1, readTimeoutMs)));
     }

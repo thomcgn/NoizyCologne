@@ -1,0 +1,31 @@
+# NUR LOKAL: selbstsigniertes Zertifikat via tls internal, keine ACME,
+# keine Produktionshostname und kein ACME-Email. Keine Secrets in dieser Datei;
+# die Werte kommen aus deploy/local/.env in den Caddy-Container.
+
+localhost {
+	tls internal
+	encode zstd gzip
+
+	# Same boundary as deploy/server/Caddyfile: protected /api/v1/* requests
+	# are authenticated by the Next.js session check before reaching the API.
+	@api path /api/v1/*
+	handle @api {
+		forward_auth frontend:3000 {
+			uri /api/auth/verify
+			header_up X-Noizy-Auth-Key {$AUTH_SERVICE_SECRET}
+			header_up X-Noizy-Client-IP {remote_host}
+		}
+		reverse_proxy api:8080 {
+			header_up X-Noizy-Api-Key {$API_TRUST_SECRET}
+			header_up X-Noizy-Proxy-Host localhost
+			header_up X-Noizy-Proxy-Proto https
+		}
+	}
+
+	handle {
+		reverse_proxy frontend:3000 {
+			header_up X-Noizy-Auth-Key {$AUTH_SERVICE_SECRET}
+			header_up X-Noizy-Client-IP {remote_host}
+		}
+	}
+}
